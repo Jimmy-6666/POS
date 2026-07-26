@@ -24,7 +24,7 @@ The original acceptance contract remains `REQUIREMENTS_V1.0.md`.
 ## Verification baseline — 2026-07-26
 
 - Command: `.venv\Scripts\python.exe -m unittest discover -s tests -v`
-- Result: 60 run, 60 passed.
+- Result: 61 run, 61 passed.
 - The suite includes two project-context contract tests.
 - Online tests cover account isolation/rate limiting/CSRF, catalogue/cart,
   idempotent orders, reservations, staff transitions, reconciliation, payment,

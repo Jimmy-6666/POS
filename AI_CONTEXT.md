@@ -41,7 +41,7 @@ must not be treated as production-ready without barcode and price approval.
 
 ## Current health
 
-On 2026-07-26, `python -m unittest discover -s tests -v` ran 60 tests and all
+On 2026-07-26, `python -m unittest discover -s tests -v` ran 61 tests and all
 passed, including customer contact UI, delivery payment-method confirmation,
 receipt-only print-agent behavior, stock-sheet print-preview isolation, and the
 online ordering lifecycle. Staff can add or reduce order items before picking;
