@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}ใบนับสต็อก Manual{% endblock %}{% block content %}
+<div class="page-heading no-print"><div><h1>ใบนับสต็อกสินค้า</h1><p>พิมพ์สำหรับจดจำนวน แล้วนำกลับมาสแกนเพิ่มการนับในระบบ</p></div><button class="primary-button" onclick="window.print()">พิมพ์ใบนับ</button></div>
+<form method="get" class="filter-row no-print"><label>หมวดสินค้า<select name="category_id"><option value="">ทุกหมวด</option>{% for c in categories %}<option value="{{c.id}}" {% if selected_category==c.id %}selected{% endif %}>{{c.name_th}}</option>{% endfor %}</select></label><button class="small-button">แสดง</button></form>
+<section class="manual-sheet-print">
+<header class="manual-print-head"><h1>แสนงาม มินิมาร์ท — ใบนับสต็อก</h1><p>วันที่ ____________ ผู้ตรวจ ____________________ หมวด {{categories|selectattr('id','equalto',selected_category)|map(attribute='name_th')|first or 'ทั้งหมด'}}</p></header>
+<table class="manual-count-table"><thead><tr><th>ลำดับ</th><th>สินค้า</th><th>บาร์โค้ด</th><th>จำนวนนับ</th></tr></thead><tbody>{% for p in products %}{% if loop.changed(p.category_name) %}<tr class="manual-category-row"><th colspan="4">หมวดหมู่: {{p.category_name}}</th></tr>{% endif %}<tr><td>{{loop.index}}</td><td>{{p.name_th}}</td><td class="barcode-cell"><svg class="print-barcode" data-value="{{p.barcode}}"></svg></td><td class="count-blank"></td></tr>{% endfor %}</tbody></table>
+</section>
+<script src="{{url_for('static',filename='vendor/JsBarcode.code128.min.js',v=1)}}"></script><script src="{{url_for('static',filename='js/manual-barcodes.js',v=2)}}"></script>
+{% endblock %}

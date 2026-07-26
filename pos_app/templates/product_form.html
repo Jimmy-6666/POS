@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ 'แก้ไขสินค้า' if product else 'เพิ่มสินค้า' }}{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>{{ 'แก้ไขสินค้า' if product else 'เพิ่มสินค้า' }}</h1><p>ช่องที่มี * จำเป็นต้องกรอก</p></div><div class="actions">{% if not product %}<a class="primary-button" href="{{url_for('products.prices')}}">ตั้งราคาขาย</a>{% endif %}<a class="secondary-button" href="{{ url_for('products.index') }}">กลับ</a></div></div>
+<form method="post" enctype="multipart/form-data" class="form-card">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="form-grid">
+<label>บาร์โค้ด *<input name="barcode" required value="{{ product.barcode if product else '' }}" autofocus></label>
+<label>SKU<input name="sku" value="{{ product.sku or '' if product else '' }}"></label>
+<label>ชื่อสินค้า (ไทย) *<input name="name_th" required value="{{ product.name_th if product else '' }}"></label>
+<label>ชื่อภาษาอังกฤษ<input name="name_en" value="{{ product.name_en or '' if product else '' }}"></label>
+<label>หมวดสินค้า *<select name="category_id" required>{% for row in categories %}<option value="{{ row.id }}" {% if product and row.id==product.category_id %}selected{% endif %}>{{ row.name_th }}</option>{% endfor %}</select></label>
+<label>หน่วย *<select name="unit_id" required>{% for row in units %}<option value="{{ row.id }}" {% if product and row.id==product.unit_id %}selected{% endif %}>{{ row.name_th }}</option>{% endfor %}</select></label>
+<label>ต้นทุน (บาท)<input name="cost" type="number" min="0" step="0.01" value="{{ '%.2f'|format(product.cost_satang/100) if product else '0.00' }}"></label>
+{% if product %}<label>ราคาขาย (บาท) *<input name="price" type="number" min="0" step="0.01" value="{{'%.2f'|format(product.price_satang/100)}}" required></label>{% endif %}
+{% if not product %}<label>สต็อกเริ่มต้น<input name="stock_quantity" type="number" min="0" step="0.001" value="0"></label>{% else %}<label>สต็อกปัจจุบัน<input value="{{ product.stock_quantity }}" disabled><small>แก้จำนวนผ่านงานสต็อกเพื่อเก็บประวัติ</small></label>{% endif %}
+<label>สต็อกขั้นต่ำ<input name="minimum_stock" type="number" min="0" step="0.001" value="{{ product.minimum_stock if product else 0 }}"></label>
+<label>รูปสินค้า<input name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></label></div>
+<div class="check-row"><label><input type="checkbox" name="is_active" {% if not product or product.is_active %}checked{% endif %}> เปิดใช้งาน</label><label><input type="checkbox" name="is_favorite" {% if product and product.is_favorite %}checked{% endif %}> สินค้าโปรด</label><label><input type="checkbox" name="allow_decimal_quantity" {% if product and product.allow_decimal_quantity %}checked{% endif %}> อนุญาตจำนวนทศนิยม</label><label><input type="checkbox" name="is_online_available" {% if not product or product.is_online_available %}checked{% endif %}> เปิดขายออนไลน์</label></div>
+<div class="form-grid"><label>ลำดับแสดงออนไลน์<input name="online_sort_order" type="number" value="{{product.online_sort_order if product else 0}}"></label><label>จำนวนสูงสุดต่อออเดอร์ (ว่าง = ไม่กำหนด)<input name="online_max_quantity" type="number" min="0.001" step="0.001" value="{{product.online_max_quantity or '' if product else ''}}"></label></div>
+<button class="primary-button" type="submit">บันทึกสินค้า</button></form>
+{% endblock %}

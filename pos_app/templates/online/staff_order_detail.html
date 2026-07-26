@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}{{order.order_number}}{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{url_for('static',filename='css/online-uat.css',v=6)}}">{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>{{order.order_number}}</h1>
+    <p>{{order.location_name_snapshot}} {{order.room_reference or ''}} · {{order.contact_phone or order.phone_normalized}} · {{order.contact_name or order.display_name or ''}}</p>
+  </div>
+  <a class="primary-button" href="{{url_for('online_staff.index')}}">กลับรายการ</a>
+</div>
+{% set steps={'submitted':1,'accepted':2,'preparing':3,'reconciling':4,'ready':5,'delivering':6,'completed':7} %}
+<div class="staff-order-progress">
+  <progress max="7" value="{{steps.get(order.status,0)}}"></progress>
+  <div><span>รับออเดอร์</span><span>จัดสินค้า</span><span>ตรวจสินค้า</span><span>จัดส่ง</span><span>สำเร็จ</span></div>
+</div>
+
+{% if order.status=='submitted' %}
+<dialog id="acceptOrderDialog" class="held-dialog">
+  <form method="post" action="{{url_for('online_staff.accept',order_id=order.id)}}">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <button class="dialog-close" type="button" onclick="this.closest('dialog').close()">×</button>
+    <h2>เลือกผู้ดำเนินการออเดอร์</h2>
+    <label>ผู้รับผิดชอบ
+      <select name="staff_id" required>
+        <option value="">— เลือกพนักงาน —</option>
+        {% for staff in staff_rows %}<option value="{{staff.id}}">{{staff.display_name}}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="primary-button">ยืนยันรับออเดอร์</button>
+  </form>
+</dialog>
+{% endif %}
+
+{% if order.status=='accepted' %}
+<dialog id="addOrderItemDialog" class="held-dialog add-order-item-dialog">
+  <form method="post" action="{{url_for('online_staff.add_item',order_id=order.id)}}">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <button class="dialog-close" type="button" onclick="this.closest('dialog').close()">×</button>
+    <h2>เพิ่มสินค้าให้ออเดอร์ลูกค้า</h2>
+    <p class="muted">ระบบใช้ราคาขายปัจจุบันและปรับยอดจองสต๊อกให้ทันที</p>
+    <label>สินค้า
+      <select name="product_id" required>
+        <option value="">— เลือกสินค้า —</option>
+        {% for product in product_rows %}
+        <option value="{{product.id}}">{{product.name_th}} · {{product.barcode or 'ไม่มีบาร์โค้ด'}} · {{'%.2f'|format(product.price_satang/100)}} บาท · คงเหลือ {{product.stock_quantity}}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>จำนวน<input name="quantity" type="number" min="0.001" step="0.001" value="1" required></label>
+    <label>ข้อความแจ้งลูกค้า
+      <textarea name="reason" required>ลูกค้าขอเพิ่มสินค้า กรุณายืนยันรายการและยอดราคาใหม่</textarea>
+    </label>
+    <button class="primary-button">เพิ่มเข้ารายการลูกค้า</button>
+  </form>
+</dialog>
+{% endif %}
+
+{% if order_price_changed %}
+<section class="price-confirm-warning" role="alert">
+  <strong>ยอดราคาเปลี่ยนจากที่ลูกค้ายืนยัน</strong>
+  <span>ยอดสินค้าที่ยืนยันเดิม {{'%.2f'|format(confirmed_subtotal/100)}} บาท → ยอดสินค้าปัจจุบัน {{'%.2f'|format(order.subtotal_satang/100)}} บาท กรุณาแจ้งลูกค้าเพื่อยืนยันราคาใหม่ก่อนจัดส่ง</span>
+</section>
+{% endif %}
+
+<div class="two-columns staff-order-layout">
+  <section class="form-card staff-glass-cart">
+    <div class="staff-cart-heading">
+      <h2>สรุปรายการสินค้า</h2>
+      {% if order.status=='accepted' %}
+      <button class="primary-button add-order-item-button" type="button" onclick="document.querySelector('#addOrderItemDialog').showModal()">+ เพิ่มสินค้าให้ลูกค้า</button>
+      {% endif %}
+    </div>
+    <div class="staff-glass-list">
+      {% for item in items if not item.is_removed %}
+      <article class="staff-order-item staff-glass-item">
+        {% if item.image_path %}
+        <img src="{{url_for('pos.product_image',filename=item.image_path)}}" alt="{{item.product_name_snapshot}}">
+        {% else %}
+        <div class="staff-product-placeholder" aria-hidden="true">สินค้า</div>
+        {% endif %}
+        <div class="staff-item-copy">
+          <strong>{{item.product_name_snapshot}}</strong>
+          <span>{{'%.2f'|format(item.unit_price_satang/100)}} บาท / ชิ้น</span>
+          {% if item.customer_confirmed_unit_price_satang is none %}
+          <small class="staff-added-badge">พนักงานเพิ่มภายหลัง</small>
+          {% elif item.current_price_satang != item.customer_confirmed_unit_price_satang %}
+          <small class="item-price-warning">ราคาที่ลูกค้ายืนยัน {{'%.2f'|format(item.customer_confirmed_unit_price_satang/100)}} บาท · ราคาปัจจุบัน {{'%.2f'|format(item.current_price_satang/100)}} บาท</small>
+          {% endif %}
+        </div>
+        {% if order.status=='accepted' %}
+        <form class="inline-quantity-edit" method="post" action="{{url_for('online_staff.adjust_item',order_id=order.id,item_id=item.id)}}">
+          <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+          <input type="hidden" name="reason" value="แก้ไขรายการตามคำขอลูกค้า กรุณายืนยันรายการและยอดราคาใหม่">
+          <input aria-label="จำนวน {{item.product_name_snapshot}}" name="quantity" type="number" min="0" step="{{'0.001' if item.allow_decimal_quantity else '1'}}" value="{{item.ordered_quantity}}" required>
+          <button class="primary-button">บันทึก</button>
+        </form>
+        {% else %}
+        <b class="staff-item-quantity">× {{item.ordered_quantity}} ชิ้น</b>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+    {% if order.status=='preparing' %}
+    <form method="post" action="{{url_for('online_staff.save_preparation',order_id=order.id)}}">
+      <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+      {% for item in items if not item.is_removed %}<input type="hidden" name="prepared_{{item.id}}" value="{{item.ordered_quantity}}">{% endfor %}
+      <button class="primary-button" name="complete" value="1">จัดครบแล้ว ไปตรวจสินค้าก่อนส่ง</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <section class="staff-order-side">
+    <div class="form-card">
+      <h2>ยอดและการชำระเงิน</h2>
+      <p>สินค้า {{'%.2f'|format(order.subtotal_satang/100)}} + ค่าส่ง {{'%.2f'|format(order.delivery_fee_satang/100)}} = <strong>{{'%.2f'|format(order.total_satang/100)}} บาท</strong></p>
+      <p>{{'เงินสดเมื่อส่งสินค้า' if order.payment_method_code=='cash' else 'โอนเงินเมื่อส่งสินค้า'}}</p>
+    </div>
+    <div class="form-card">
+      <h2>ขั้นตอนถัดไป</h2>
+      {% if order.status=='submitted' %}<button class="primary-button" type="button" onclick="document.querySelector('#acceptOrderDialog').showModal()">รับออเดอร์</button>{% endif %}
+      {% if order.status=='accepted' %}
+      <form method="post" action="{{url_for('online_staff.start_preparation',order_id=order.id)}}">
+        <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+        <button class="primary-button">เริ่มจัดสินค้า</button>
+      </form>
+      {% endif %}
+      {% if order.status=='reconciling' %}<a class="primary-button" href="{{url_for('online_staff.reconcile',order_id=order.id)}}">เปิดหน้าตรวจสินค้า</a>{% elif order.status=='ready' %}
+      <form method="post" action="{{url_for('online_staff.reopen_items',order_id=order.id)}}">
+        <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+        <button class="primary-button" type="submit">แก้ไขสินค้า</button>
+      </form>
+      {% endif %}
+    </div>
+    {% if order.status not in ('completed','customer_cancelled','staff_cancelled','rejected','expired') %}
+    <div class="form-card delivery-side-card">
+      <h2>จัดส่ง</h2>
+      {% if order.status=='ready' %}
+      <form method="post" action="{{url_for('online_staff.start_delivery',order_id=order.id)}}">
+        <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+        <label>ผู้จัดส่ง
+          <select name="staff_id" required>
+            <option value="">— เลือกผู้จัดส่ง —</option>
+            {% for staff in staff_rows %}<option value="{{staff.id}}" {% if order.assigned_staff_id==staff.id %}selected{% endif %}>{{staff.display_name}}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="primary-button">บันทึกและออกจัดส่ง</button>
+      </form>
+      {% else %}
+      <label>ผู้รับผิดชอบออเดอร์
+        <select disabled>
+          {% for staff in staff_rows %}<option {% if order.assigned_staff_id==staff.id %}selected{% endif %}>{{staff.display_name}}</option>{% endfor %}
+        </select>
+      </label>
+      <p class="muted">เลือกหรือเปลี่ยนผู้จัดส่งได้เมื่อผ่านการตรวจสินค้าแล้ว</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+{% if order.status=='delivering' %}
+<section class="form-card delivery-confirm-card">
+  <h2>ยืนยันการส่งมอบและปิดออเดอร์</h2>
+  <form id="deliveryCompleteForm" method="post" action="{{url_for('online_staff.complete_delivery',order_id=order.id)}}">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <label>ผลการส่งมอบ<select name="delivery_result" required><option value="delivered">ส่งถึงลูกค้า</option><option value="reception">ฝากที่แผนกต้อนรับ</option><option value="customer_pickup">ลูกค้ารับที่ร้าน</option></select></label>
+    <fieldset class="payment-method-confirm">
+      <legend>ช่องทางการชำระเงินจริงหน้างาน</legend>
+      <label><input type="radio" name="payment_method" value="cash" {% if order.payment_method_code=='cash' %}checked{% endif %}> เงินสด</label>
+      <label><input type="radio" name="payment_method" value="transfer" {% if order.payment_method_code=='transfer' %}checked{% endif %}> สแกน / โอนเงิน</label>
+    </fieldset>
+    <label id="deliveryCashField">เงินสดที่รับ (บาท)<input id="deliveryCashReceived" name="cash_received" type="number" min="{{order.total_satang/100}}" step=".01"></label>
+    <label class="confirm-payment-check"><input type="checkbox" name="payment_method_confirmed" value="1" required> ยืนยันว่าตรวจสอบช่องทางชำระเงินกับลูกค้าแล้ว</label>
+    <label>หมายเหตุการส่ง<input name="delivery_note"></label>
+    <button class="primary-button">ยืนยันส่งสำเร็จ</button>
+  </form>
+</section>
+<script>
+(()=>{const form=document.querySelector("#deliveryCompleteForm"),field=document.querySelector("#deliveryCashField"),input=document.querySelector("#deliveryCashReceived");function sync(){const cash=form.querySelector("[name=payment_method]:checked")?.value==="cash";field.hidden=!cash;input.required=cash;if(!cash)input.value=""}form.querySelectorAll("[name=payment_method]").forEach(r=>r.addEventListener("change",sync));sync()})()
+</script>
+{% endif %}
+
+{% if print_status=='queued' %}
+<section class="form-card"><h2>ตรวจสินค้าครบแล้ว</h2><p>ส่งใบสรุปออเดอร์ไปยังเครื่องพิมพ์แล้ว</p></section>
+{% elif print_status=='manual' %}
+<section class="form-card"><h2>ตรวจสินค้าครบแล้ว</h2><p>ไม่พบตัวช่วยพิมพ์อัตโนมัติ กรุณาเปิดใบสรุปเพื่อพิมพ์</p><a class="primary-button" href="{{url_for('online_staff.order_receipt',order_id=order.id)}}" target="_blank" rel="noopener">เปิดใบสรุปเพื่อพิมพ์</a></section>
+{% endif %}
+
+<form class="form-card staff-notes-card" method="post" action="{{url_for('online_staff.notes',order_id=order.id)}}">
+  <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+  <h2>หมายเหตุ</h2>
+  <div class="staff-note-fields">
+    <label>ภายในร้าน<textarea name="internal_note">{{order.internal_note or ''}}</textarea></label>
+    <label>ลูกค้ามองเห็น<textarea name="customer_visible_note">{{order.customer_visible_note or ''}}</textarea></label>
+  </div>
+  <button class="primary-button">บันทึกหมายเหตุ</button>
+</form>
+
+<section class="form-card">
+  <h2>ประวัติ</h2>
+  {% for event in history %}<p><strong>{{event.previous_status or '-'}} → {{event.new_status}}</strong> {{event.created_at|thai_datetime}} · {{event.display_name or event.actor_type}}<br>{{event.reason or ''}}</p>{% endfor %}
+</section>
+{% endblock %}

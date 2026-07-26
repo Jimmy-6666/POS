@@ -1,0 +1,12 @@
+{% extends "online/base.html" %}{% from "online/_icons.html" import line, phone as phone_icon %}{% block title %}เข้าใช้บริการ{% endblock %}{% block content %}
+<section class="auth-card"><h1>เข้าใช้บริการสั่งสินค้า</h1>
+<form method="post"><input type="hidden" name="csrf_token" value="{{public_csrf}}">
+<label>เบอร์มือถือ<input name="phone" inputmode="tel" autocomplete="tel" value="{{phone or ''}}" {% if phone %}readonly{% endif %} required></label>
+{% if phone %}
+{% if not customer_exists %}<label>ชื่อผู้สั่ง<input name="display_name" required></label><p class="muted">ยังไม่พบบัญชี ระบบจะสร้างบัญชีให้โดยอัตโนมัติ</p>{% endif %}
+<label>PIN 4 หลัก<input id="loginPin" data-pin-length="4" name="pin" type="password" inputmode="none" maxlength="4" readonly required></label>
+<div class="login-numpad">{% for n in [1,2,3,4,5,6,7,8,9] %}<button type="button" data-pin-key="{{n}}">{{n}}</button>{% endfor %}<button type="button" data-pin-action="clear">ล้าง</button><button type="button" data-pin-key="0">0</button><button type="button" data-pin-action="backspace">⌫</button></div>
+<button class="primary" name="action" value="{{'login' if customer_exists else 'create'}}">{{'เข้าสู่ระบบ' if customer_exists else 'สร้างบัญชีและเข้าใช้'}}</button>
+{% else %}<button class="primary" name="action" value="lookup">ดำเนินการต่อ</button>{% endif %}
+</form><div class="customer-contact-card"><p>หากจำ PIN ไม่ได้ กรุณาติดต่อ</p><div class="contact-actions"><a class="contact-action" href="https://line.me/R/ti/p/{{customer_contact.line|urlencode}}" target="_blank" rel="noopener">{{line()}}<span><small>LINE</small><strong>{{customer_contact.line}}</strong></span></a><a class="contact-action" href="tel:{{customer_contact.phone|replace('-','')|replace(' ','')}}">{{phone_icon()}}<span><small>โทรศัพท์</small><strong>{{customer_contact.phone}}</strong></span></a></div></div></section>
+<script src="{{url_for('static',filename='js/login.js',v=2)}}"></script>{% endblock %}

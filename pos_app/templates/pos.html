@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% block title %}ขายสินค้า{% endblock %}{% block shell_class %}pos-shell{% endblock %}
+{% block content %}
+<div id="posApp" data-csrf="{{csrf_token}}" class="pos-layout-v2">
+  <section class="catalog-v2" aria-label="เลือกสินค้า">
+    <header class="register-head"><div><span class="eyebrow">จุดขายสินค้า</span><h1>ขายสินค้า</h1></div><div class="register-shortcuts"><a class="text-button" href="{{url_for('online_staff.index')}}">☰ จัดการออเดอร์ออนไลน์</a><button id="heldButton" class="text-button" type="button">▤ บิลที่พักไว้</button></div></header>
+    <div class="lookup-bar"><span aria-hidden="true">⌕</span><label class="sr-only" for="productLookup">ค้นหาหรือสแกนสินค้า</label><input id="productLookup" autocomplete="off" placeholder="สแกนบาร์โค้ด หรือค้นหาชื่อสินค้า / SKU" autofocus><button id="clearLookup" type="button" aria-label="ล้างช่องค้นหา">×</button><button id="addLookupButton" class="primary-button" type="button">เพิ่ม</button></div>
+    <div class="category-rail" id="categoryBoxes" aria-label="หมวดสินค้า"><button class="category-chip active" data-category="">ทั้งหมด</button>{% for row in categories %}<button class="category-chip" data-category="{{row.id}}">{{row.name_th}}</button>{% endfor %}</div>
+    <div class="catalog-status"><div id="posMessage" class="pos-message" role="status" aria-live="polite"></div><span id="resultCount"></span></div>
+    <div id="productGrid" class="product-grid-v2" aria-live="polite"></div>
+  </section>
+  <aside class="cart-v2" id="cartPanel" aria-label="ตะกร้าสินค้า">
+    <header class="cart-head"><div><h2>รายการขาย</h2><span id="cartCount">0 รายการ</span></div><button id="closeMobileCart" type="button" aria-label="ปิดตะกร้า">×</button></header>
+    <div id="cartItems" class="cart-items-v2"><p class="empty">ยังไม่มีสินค้า</p></div>
+    <input id="billDiscount" type="hidden" value="0">
+    <details class="order-options"><summary>หมายเหตุเพิ่มเติม <span>⌄</span></summary><div><label>หมายเหตุลูกค้า<textarea id="customerNote" rows="2"></textarea></label></div></details>
+    <footer class="cart-footer"><div class="cart-total-v2"><span>ยอดชำระ</span><strong id="cartTotal">0 บาท</strong></div><div class="cart-actions-v2"><button id="holdButton" class="secondary-button" type="button">พักบิล</button><button id="payButton" class="primary-button" type="button" disabled>ชำระเงิน <span>→</span></button></div></footer>
+  </aside>
+</div>
+<div id="cartBackdrop" class="cart-backdrop"></div>
+<button id="mobileCartBar" class="mobile-cart-bar" type="button"><span><b id="mobileCartCount">0</b> รายการ</span><strong id="mobileCartTotal">0 บาท</strong><em>ดูตะกร้า →</em></button>
+
+<dialog id="paymentDialog" class="payment-dialog payment-v2" aria-labelledby="paymentTitle"><form method="dialog"><button class="dialog-close" value="cancel" aria-label="ปิด">×</button></form><header><span class="eyebrow">ขั้นตอนสุดท้าย</span><h2 id="paymentTitle">รับชำระเงิน</h2></header>
+  <div class="payment-tabs" role="tablist" aria-label="วิธีชำระเงิน"><button id="cashTab" role="tab" aria-selected="true" aria-controls="cashPanel" data-method="cash" class="active">เงินสด</button><button id="scanTab" role="tab" aria-selected="false" aria-controls="confirmationPanel" data-method="scan">สแกนจ่าย</button><button id="billingTab" role="tab" aria-selected="false" aria-controls="billingPanel" data-method="billing">วางบิล</button></div>
+  <div class="payment-columns">
+    <section class="payment-summary"><div class="due-block"><span id="paymentItemCount" class="payment-item-count">จำนวนสินค้า 0 ชิ้น</span><span>ยอดที่ต้องชำระ</span><strong id="amountDue">0 บาท</strong></div><div class="large-change"><span>เงินทอน</span><strong id="changeAmount">0 บาท</strong><div id="changeBreakdown" class="change-breakdown"></div></div></section>
+    <section class="payment-entry">
+      <div id="cashPanel" role="tabpanel" aria-labelledby="cashTab"><label>รับเงินจากลูกค้า<input id="receivedInput" class="received-large" type="number" inputmode="numeric" min="0" step="1" value="0"></label><div id="paymentError" class="field-error" role="alert"></div><button id="exactButton" class="exact-button" type="button">ชำระพอดี</button><h3>ธนบัตร</h3><div class="denominations">{% for n in [20,50,100,500,1000] %}<button type="button" data-denom="{{n}}">{{'{:,}'.format(n)}}</button>{% endfor %}</div><h3>เหรียญ</h3><div class="denominations">{% for n in [1,2,5,10] %}<button type="button" data-denom="{{n}}">{{n}}</button>{% endfor %}<button id="clearReceivedButton" class="denom-clear" type="button" aria-label="ล้างจำนวนเงินที่รับ">⌫</button></div></div>
+      <div id="confirmationPanel" role="tabpanel" aria-labelledby="scanTab" hidden><div class="scan-confirm"><span>ยอดสแกนจ่าย</span><strong id="scanAmount">0 บาท</strong><p>ตรวจสอบยอดเงินในแอปธนาคารให้ตรงกับยอดด้านบน แล้วกดยืนยันเมื่อได้รับเงินแล้ว</p></div></div>
+      <div id="billingPanel" role="tabpanel" aria-labelledby="billingTab" hidden><div class="billing-heading"><span>บันทึกยอดวางบิล</span><strong id="billingAmount">0 บาท</strong></div><label>ลูกค้าที่ได้รับสิทธิ์วางบิล<select id="billingCustomer"><option value="">-- เลือกลูกค้า --</option>{% for customer in billing_customers %}<option value="{{customer.id}}">{{customer.name}}</option>{% endfor %}</select></label><label>หมายเหตุ<input id="billingNote"></label></div>
+      <button id="completeSaleButton" class="primary-button complete-payment" type="button">ยืนยันรับเงินและจบการขาย</button>
+    </section>
+  </div>
+</dialog>
+
+<dialog id="saleSuccessDialog" class="success-dialog success-v2" aria-labelledby="successTitle"><div class="success-mark">✓</div><span id="printStatus" class="eyebrow">บันทึกการขายแล้ว</span><h2 id="successTitle">ชำระเงินสำเร็จ</h2><strong id="successReceipt"></strong><div id="successItems" class="success-items"></div><div class="success-review"><span>ยอดรวม</span><strong id="successTotal"></strong><span>เงินทอน</span><strong id="successChange"></strong></div><div class="success-actions"><a id="manualReceiptLink" class="secondary-button" target="_blank" rel="noopener" hidden>เปิดใบเสร็จเพื่อพิมพ์</a><button id="closeSuccessButton" class="primary-button" type="button">ขายรายการถัดไป</button></div></dialog>
+<dialog id="heldDialog" class="held-dialog"><form method="dialog"><button class="dialog-close" value="cancel">×</button></form><h2>บิลที่พักไว้</h2><div id="heldList"></div></dialog>
+<script src="{{url_for('static',filename='js/pos.js',v=25)}}"></script>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ store_name }} — Dashboard{% endblock %}
+{% block content %}
+<header class="dashboard-head">
+  <div><span class="eyebrow">ภาพรวมวันนี้</span><h1>สวัสดี {{ current_staff.display_name }}</h1><p>{{ store_name }} พร้อมใช้งาน</p></div>
+  <a class="primary-button dashboard-sell" href="{{url_for('pos.index')}}">เริ่มขายสินค้า <span>→</span></a>
+</header>
+<section class="kpi-grid" aria-label="สรุปยอดวันนี้">
+  <article><span>ยอดขายวันนี้</span><strong>{{'{:,}'.format((today.sales/100)|round|int)}} <small>บาท</small></strong><a href="{{url_for('pos.sales_history')}}">ดูรายการขาย</a></article>
+  <article><span>จำนวนบิล</span><strong>{{today.bills}} <small>บิล</small></strong><span class="kpi-note">เฉลี่ย {{'{:,}'.format(((today.sales/100)/today.bills)|round|int) if today.bills else 0}} บาท/บิล</span></article>
+  <article><span>กำไรขั้นต้น</span><strong>{{'{:,}'.format((today.profit/100)|round|int)}} <small>บาท</small></strong><a href="{{url_for('reporting.reports')}}">ดูรายงาน</a></article>
+  <article class="{% if low_count %}needs-attention{% endif %}"><span>สินค้าใกล้หมด</span><strong>{{low_count}} <small>รายการ</small></strong><a href="{{url_for('products.index',view='low')}}">ตรวจสอบสินค้า</a></article>
+</section>
+<div class="dashboard-grid">
+  <section class="surface chart-card"><div class="section-title"><div><h2>ยอดขาย 7 วันล่าสุด</h2><p>แนวโน้มยอดขายรายวัน</p></div><a href="{{url_for('reporting.reports',period='monthly')}}">รายงานรายเดือน</a></div><div class="seven-day-chart">{% for day in seven_days %}<div class="day-bar"><strong>{{(day.value/100)|round|int}}</strong><i style="height:{{(day.value/max_sales*100)|round|int}}%"></i><small>{{day.label}}</small></div>{% endfor %}</div></section>
+  <aside class="surface quick-card"><div class="section-title"><div><h2>งานด่วน</h2><p>ทางลัดสำหรับงานประจำ</p></div></div><div class="quick-list"><a href="{{url_for('pos.index')}}"><i>▣</i><span><strong>ขายสินค้า</strong><small>สแกนและรับชำระเงิน</small></span><b>→</b></a><a href="{{url_for('stock_count.index')}}"><i>⌁</i><span><strong>นับสต็อก</strong><small>เข้าร่วมรอบนับที่เปิดอยู่</small></span><b>→</b></a>{% if current_staff.role_code in ('admin','manager') %}<a href="{{url_for('inventory.receive')}}"><i>↓</i><span><strong>รับสินค้าเข้า</strong><small>บันทึกต้นทุนสินค้าแต่ละล็อต</small></span><b>→</b></a><a href="{{url_for('products.prices')}}"><i>฿</i><span><strong>ควบคุมราคาขาย</strong><small>ตรวจสอบและปรับราคา</small></span><b>→</b></a>{% endif %}</div></aside>
+</div>
+<section class="month-strip"><div><span>ยอดขายเดือนนี้</span><strong>{{'{:,}'.format((month.sales/100)|round|int)}} บาท</strong></div><div><span>จำนวนบิลเดือนนี้</span><strong>{{month.bills}} บิล</strong></div><div><span>กำไรเดือนนี้</span><strong>{{'{:,}'.format((month.profit/100)|round|int)}} บาท</strong></div></section>
+{% endblock %}

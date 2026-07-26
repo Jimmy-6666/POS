@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b3d2a">
+  <title>{% block title %}ระบบ POS{% endblock %}</title>
+  <link rel="stylesheet" href="{{url_for('static',filename='css/app.css',v=15)}}">
+  <link rel="stylesheet" href="{{url_for('static',filename='css/v2.css',v=10)}}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="{% if current_staff %}has-sidebar{% endif %}" data-endpoint="{{request.endpoint or ''}}">
+<a class="skip-link" href="#mainContent">ข้ามไปยังเนื้อหา</a>
+{% if current_staff %}
+<aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
+  <div class="sidebar-head">
+    <a class="sidebar-brand" href="{{url_for('main.index')}}"><span>สง</span><strong>แสนงาม<br>มินิมาร์ท</strong></a>
+    <button id="sidebarToggle" type="button" aria-label="ย่อหรือขยายเมนู" aria-expanded="true">☰</button>
+  </div>
+  <nav class="sidebar-nav">
+    <span class="nav-group">ออเดอร์ออนไลน์</span>
+    <a href="{{url_for('online_staff.index')}}" {% if request.blueprint=='online_staff' %}class="active" aria-current="page"{% endif %}><i>◉</i><span class="nav-label">จัดการออเดอร์ <b id="onlineOrderBadge" class="nav-badge" aria-label="ออเดอร์ใหม่" hidden>0</b></span></a>
+    {% if current_staff.role_code in ('admin','manager') %}<a href="{{url_for('online_admin.settings')}}" {% if request.endpoint=='online_admin.settings' %}class="active"{% endif %}><i>⚙</i><span>ตั้งค่าออนไลน์</span></a><a href="{{url_for('online_admin.customers')}}" {% if request.endpoint=='online_admin.customers' %}class="active"{% endif %}><i>◌</i><span>ลูกค้าออนไลน์</span></a>{% endif %}
+    <span class="nav-group">ขายหน้าร้าน</span>
+    <a href="{{url_for('pos.index')}}" {% if request.endpoint=='pos.index' %}class="active" aria-current="page"{% endif %}><i>▣</i><span>ขายสินค้า</span></a>
+    <a href="{{url_for('pos.sales_history')}}" {% if request.endpoint in ('pos.sales_history','pos.void_sale') %}class="active" aria-current="page"{% endif %}><i>▤</i><span>ประวัติการขาย</span></a>
+    <a href="{{url_for('reporting.reconciliations')}}" {% if request.endpoint=='reporting.reconciliations' %}class="active" aria-current="page"{% endif %}><i>✓</i><span>ปิดยอดประจำวัน</span></a>
+    <span class="nav-group">นับสต็อก</span>
+    <a href="{{url_for('stock_count.index')}}" {% if request.blueprint=='stock_count' and request.endpoint!='stock_count.manual_sheet' %}class="active" aria-current="page"{% endif %}><i>⌁</i><span>รอบนับสต็อก</span></a>
+    <a href="{{url_for('stock_count.manual_sheet')}}" {% if request.endpoint=='stock_count.manual_sheet' %}class="active" aria-current="page"{% endif %}><i>▧</i><span>ใบนับ Manual</span></a>
+    {% if current_staff.role_code in ('admin','manager') %}
+    <span class="nav-group">สินค้าและคลัง</span>
+    <a href="{{url_for('products.index')}}" {% if request.endpoint in ('products.index','products.create','products.edit') %}class="active" aria-current="page"{% endif %}><i>□</i><span>สินค้าทั้งหมด</span></a>
+    <a href="{{url_for('products.prices')}}" {% if request.endpoint in ('products.prices','products.confirm_prices') %}class="active" aria-current="page"{% endif %}><i>฿</i><span>ควบคุมราคาขาย</span></a>
+    <a href="{{url_for('inventory.receive')}}" {% if request.endpoint=='inventory.receive' %}class="active" aria-current="page"{% endif %}><i>↓</i><span>รับสินค้าเข้า</span></a>
+    <a href="{{url_for('inventory.adjust')}}" {% if request.endpoint=='inventory.adjust' %}class="active" aria-current="page"{% endif %}><i>±</i><span>ปรับสต็อก</span></a>
+    <a href="{{url_for('inventory.ledger')}}" {% if request.endpoint=='inventory.ledger' %}class="active" aria-current="page"{% endif %}><i>≡</i><span>ประวัติสต็อก</span></a>
+    <span class="nav-group">วิเคราะห์</span>
+    <a href="{{url_for('main.index')}}" {% if request.endpoint=='main.index' %}class="active" aria-current="page"{% endif %}><i>⌂</i><span>Dashboard</span></a>
+    <a href="{{url_for('reporting.reports')}}" {% if request.endpoint=='reporting.reports' %}class="active" aria-current="page"{% endif %}><i>↗</i><span>รายงาน</span></a>
+    {% if current_staff.role_code=='admin' %}<a href="{{url_for('reporting.billing_report')}}" {% if request.endpoint in ('reporting.billing_report','reporting.receive_billing_payment') %}class="active" aria-current="page"{% endif %}><i>฿</i><span>จัดการยอดวางบิล</span></a>{% endif %}
+    {% endif %}
+    {% if current_staff.role_code=='admin' %}
+    <span class="nav-group">ผู้ดูแลระบบ</span>
+    <a href="{{url_for('admin.staff')}}" {% if request.endpoint=='admin.staff' %}class="active" aria-current="page"{% endif %}><i>♙</i><span>พนักงาน</span></a>
+    <a href="{{url_for('admin.settings')}}" {% if request.endpoint=='admin.settings' %}class="active" aria-current="page"{% endif %}><i>⚙</i><span>ตั้งค่า</span></a>
+    <a href="{{url_for('admin.audit_logs')}}" {% if request.endpoint=='admin.audit_logs' %}class="active" aria-current="page"{% endif %}><i>◷</i><span>Audit Log</span></a>
+    <a href="{{url_for('admin.backups')}}" {% if request.endpoint=='admin.backups' %}class="active" aria-current="page"{% endif %}><i>⇩</i><span>สำรองข้อมูล</span></a>
+    {% endif %}
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-user"><strong>{{current_staff.display_name}}</strong><small>{{current_staff.role_name}}</small><a href="{{url_for('auth.change_pin')}}">เปลี่ยน PIN</a></div>
+    <form class="sidebar-logout" method="post" action="{{url_for('auth.logout')}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button type="submit"><i>↪</i><span>ออกจากระบบ</span></button></form>
+  </div>
+</aside>
+<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R2.1</span></header>
+<div id="sidebarOverlay" class="sidebar-overlay"></div>
+{% endif %}
+<main id="mainContent" class="shell {% block shell_class %}{% endblock %}">
+  {% for category,message in get_flashed_messages(with_categories=true) %}<div class="flash flash-{{category}}" role="alert">{{message}}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+{% if current_staff %}
+<dialog id="receiptPopup" class="receipt-popup-dialog" aria-label="ตัวอย่างใบเสร็จ"><button id="closeReceiptPopup" class="dialog-close" type="button" aria-label="ปิด">×</button><iframe id="receiptPopupFrame" title="ใบเสร็จ"></iframe></dialog>
+<nav class="mobile-bottom-nav" aria-label="เมนูด่วน">
+  <a href="{{url_for('pos.index')}}" {% if request.endpoint=='pos.index' %}class="active" aria-current="page"{% endif %}><i>▣</i><span>ขาย</span></a>
+  <a href="{{url_for('pos.sales_history')}}" {% if request.endpoint=='pos.sales_history' %}class="active" aria-current="page"{% endif %}><i>▤</i><span>บิล</span></a>
+  <a href="{{url_for('stock_count.index')}}" {% if request.blueprint=='stock_count' %}class="active" aria-current="page"{% endif %}><i>⌁</i><span>นับสต็อก</span></a>
+  <a href="{{url_for('main.index')}}" {% if request.endpoint=='main.index' %}class="active" aria-current="page"{% endif %}><i>⌂</i><span>หน้าหลัก</span></a>
+</nav>
+<script src="{{url_for('static',filename='js/sidebar.js',v=2)}}"></script>
+<script src="{{url_for('static',filename='js/receipt-popup.js',v=1)}}"></script>
+<script src="{{url_for('static',filename='js/online-order-alerts.js',v=1)}}"></script>
+{% endif %}
+</body>
+</html>

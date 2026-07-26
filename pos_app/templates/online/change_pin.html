@@ -1,0 +1,3 @@
+{% extends "online/base.html" %}{% block title %}เปลี่ยน PIN{% endblock %}{% block content %}
+<section class="auth-card"><h1>ตั้ง PIN ใหม่</h1><form method="post"><input type="hidden" name="csrf_token" value="{{g.customer_session.csrf_token}}">{% if not g.customer.must_change_pin %}<label>PIN ปัจจุบัน<input name="current_pin" type="password" inputmode="numeric" required></label>{% endif %}<label>PIN ใหม่<input name="new_pin" type="password" inputmode="numeric" minlength="4" maxlength="6" required></label><label>ยืนยัน PIN ใหม่<input name="pin_confirm" type="password" inputmode="numeric" required></label><button class="primary">บันทึก PIN</button></form></section>
+{% endblock %}

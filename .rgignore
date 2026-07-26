@@ -1,0 +1,15 @@
+# Generated and environment data: exclude from routine AI/code searches.
+.venv/
+__pycache__/
+runtime/
+uat_runtime/
+data/
+backups/
+uploads/
+imports/
+outputs/
+work/
+*.pyc
+*.db
+*.db-shm
+*.db-wal

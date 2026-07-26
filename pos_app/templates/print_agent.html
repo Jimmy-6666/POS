@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8"><title>Receipt Print Agent</title></head>
+<body>
+<p id="status">พร้อมพิมพ์ใบเสร็จ</p>
+<iframe id="printFrame" title="เอกสารที่กำลังพิมพ์" style="width:100%;height:100vh;border:0"></iframe>
+<script>
+(() => {
+  const token = {{token|tojson}};
+  const frame = document.querySelector('#printFrame');
+  const status = document.querySelector('#status');
+  let activeJob = null;
+  let fallbackTimer = null;
+
+  async function acknowledge() {
+    if (!activeJob) return;
+    const jobId = activeJob;
+    activeJob = null;
+    clearTimeout(fallbackTimer);
+    await fetch(`/print-agent/ack/${encodeURIComponent(jobId)}?token=${encodeURIComponent(token)}`, {method: 'POST'});
+    frame.removeAttribute('src');
+    status.textContent = 'พร้อมพิมพ์ใบเสร็จ';
+    setTimeout(poll, 350);
+  }
+
+  async function poll() {
+    if (activeJob) return;
+    try {
+      const response = await fetch(`/print-agent/next?token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+      const data = await response.json();
+      if (!data.job) return setTimeout(poll, 800);
+      activeJob = data.job.id;
+      status.textContent = 'กำลังพิมพ์เอกสาร';
+      frame.src = `${data.job.render_url}?token=${encodeURIComponent(token)}`;
+      fallbackTimer = setTimeout(acknowledge, 15000);
+    } catch (_) {
+      setTimeout(poll, 1500);
+    }
+  }
+
+  addEventListener('message', (event) => {
+    if (event.origin === location.origin && event.data?.type === 'print-complete' && event.data.jobId === activeJob) {
+      acknowledge();
+    }
+  });
+  poll();
+})();
+</script>
+</body>
+</html>

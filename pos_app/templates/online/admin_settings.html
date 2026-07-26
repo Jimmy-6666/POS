@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}ตั้งค่าออเดอร์ออนไลน์{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><h1>ตั้งค่าออเดอร์ออนไลน์</h1><p>เลือกจัดการทีละหมวด เพื่อค้นหาและแก้ไขได้ง่าย</p></div>
+</div>
+
+<nav class="online-settings-nav" aria-label="หมวดการตั้งค่าออนไลน์">
+  <a href="{{url_for('online_admin.settings',section='schedule')}}" {% if section=='schedule' %}aria-current="page"{% endif %}>1. เวลาเปิด-ปิดร้าน</a>
+  <a href="{{url_for('online_admin.settings',section='payment')}}" {% if section=='payment' %}aria-current="page"{% endif %}>2. บัญชีรับโอนเงิน</a>
+  <a href="{{url_for('online_admin.settings',section='locations')}}" {% if section=='locations' %}aria-current="page"{% endif %}>3. สถานที่จัดส่ง</a>
+</nav>
+
+{% if section == 'schedule' %}
+<form method="post" class="form-card online-settings-section">
+  <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+  <div class="section-heading"><div><h2>ตั้งค่าเวลาเปิด-ปิดร้าน</h2><p>กำหนดช่วงเวลารับออเดอร์และข้อจำกัดของออเดอร์ออนไลน์</p></div></div>
+  <div class="form-grid">
+    <label class="compact-check"><input type="checkbox" name="online_ordering_enabled" {% if settings.online_ordering_enabled=='1' %}checked{% endif %}> <span>เปิดรับออเดอร์ออนไลน์</span></label>
+    <label>ข้อความเมื่อปิดร้าน<input name="online_closed_message" value="{{settings.online_closed_message}}"></label>
+    <label>เวลาเริ่มรับออเดอร์<input name="online_ordering_start" type="time" value="{{settings.online_ordering_start}}"></label>
+    <label>เวลาปิดรับออเดอร์<input name="online_ordering_end" type="time" value="{{settings.online_ordering_end}}"></label>
+    <label>ยอดขั้นต่ำ (บาท)<input name="online_minimum_order" type="number" min="0" step=".01" value="{{'%.2f'|format(settings.online_minimum_order_satang|int/100)}}"></label>
+    <label>จำนวนสินค้ารวมสูงสุด<input name="online_max_order_quantity" type="number" min="1" value="{{settings.online_max_order_quantity}}"></label>
+    <label>หมดอายุภายใน (นาที)<input name="online_order_expiry_minutes" type="number" min="5" value="{{settings.online_order_expiry_minutes}}"></label>
+    <label>ข้อความช่องทางติดต่อเพิ่มเติม<input name="online_contact" value="{{settings.online_contact}}"></label>
+    <label>LINE ID<input name="online_contact_line" value="{{settings.online_contact_line or '@114rbvoi'}}" placeholder="@114rbvoi"></label>
+    <label>เบอร์มือถือร้าน<input name="online_contact_phone" value="{{settings.online_contact_phone or '09X-XXX-XXXX'}}" inputmode="tel"></label>
+    <label class="compact-check"><input type="checkbox" name="online_auto_expiry" {% if settings.online_auto_expiry=='1' %}checked{% endif %}> <span>ตรวจออเดอร์หมดอายุอัตโนมัติ</span></label>
+  </div>
+  <button class="primary-button">บันทึกเวลาเปิด-ปิดร้าน</button>
+</form>
+{% elif section == 'payment' %}
+<section class="form-card online-settings-section">
+  <div class="section-heading"><div><h2>บัญชีที่ลูกค้าใช้โอนเงิน</h2><p>สลับบัญชีได้จากรายการที่บันทึกไว้ โดยไม่ต้องคีย์ข้อมูลซ้ำ</p></div></div>
+  <form method="post" action="{{url_for('online_admin.select_bank_account')}}">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <div class="form-grid">
+      <label class="compact-check"><input type="checkbox" name="online_transfer_enabled" {% if settings.online_transfer_enabled=='1' %}checked{% endif %}> <span>เปิดรับชำระด้วยการโอนเงิน</span></label>
+      <label>เลือกบัญชีที่ให้ลูกค้าใช้
+        <select name="account_id">
+          <option value="">-- ยังไม่เลือกบัญชี --</option>
+          {% for account in accounts if account.is_active %}
+          <option value="{{account.id}}" {% if settings.online_bank_account_id|int==account.id %}selected{% endif %}>{{account.label}} · {{account.bank_name}} · {{account.account_number}}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <button class="primary-button">บันทึกบัญชีที่ใช้งาน</button>
+  </form>
+</section>
+
+<section class="form-card online-settings-section">
+  <div class="section-heading"><div><h2>เพิ่มบัญชีรับโอน</h2><p>บัญชีเดิมจะยังอยู่ในรายการเพื่อเลือกกลับมาใช้ภายหลัง</p></div></div>
+  <form method="post" enctype="multipart/form-data" action="{{url_for('online_admin.add_bank_account')}}">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <div class="form-grid">
+      <label>ชื่อเรียกบัญชี *<input name="label" required placeholder="เช่น บัญชีหลัก / บัญชีสำรอง"></label>
+      <label>ธนาคาร *<input name="bank_name" required></label>
+      <label>ชื่อบัญชี *<input name="account_name" required></label>
+      <label>เลขบัญชี *<input name="account_number" required inputmode="numeric"></label>
+      <label>คำแนะนำการโอน<input name="instructions"></label>
+      <label>รูป QR ในเครื่อง<input type="file" name="qr" accept="image/jpeg,image/png,image/webp"></label>
+    </div>
+    <button class="primary-button">เพิ่มบัญชี</button>
+  </form>
+</section>
+
+{% if accounts %}
+<section class="form-card online-settings-section">
+  <h2>บัญชีที่บันทึกไว้</h2>
+  <div class="saved-account-list">
+    {% for account in accounts %}
+    <article>
+      <strong>{{account.label}}</strong>
+      <span>{{account.bank_name}} · {{account.account_name}}</span>
+      <span>{{account.account_number}}</span>
+      {% if settings.online_bank_account_id|int==account.id %}<b>กำลังใช้งาน</b>{% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% else %}
+<section class="form-card online-settings-section">
+  <div class="section-heading"><div><h2>เพิ่มสถานที่จัดส่ง</h2><p>กำหนดค่าจัดส่ง ยอดขั้นต่ำ และข้อมูลห้องของแต่ละพื้นที่</p></div></div>
+  <form method="post" action="{{url_for('online_admin.save_location')}}">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <div class="form-grid">
+      <label>ชื่อสถานที่ *<input name="name" required></label>
+      <label>ลำดับ<input name="sort_order" type="number" value="0"></label>
+      <label>ค่าส่ง (บาท)<input name="delivery_fee" type="number" min="0" step=".01" value="0"></label>
+      <label>ยอดขั้นต่ำ (บาท)<input name="minimum_order" type="number" min="0" step=".01" value="0"></label>
+      <label class="compact-check"><input type="checkbox" name="is_active" checked> <span>เปิดใช้งาน</span></label>
+      <label class="compact-check"><input type="checkbox" name="is_available" checked> <span>พร้อมจัดส่ง</span></label>
+      <label class="compact-check"><input type="checkbox" name="room_required" checked> <span>ต้องกรอกห้อง / จุดรับ</span></label>
+      <label>เวลาโดยประมาณ<input name="estimated_note"></label>
+      <label>คำแนะนำ<input name="instructions"></label>
+    </div>
+    <button class="primary-button">เพิ่มสถานที่</button>
+  </form>
+</section>
+
+{% for row in locations %}
+<details class="form-card online-settings-section">
+  <summary><strong>{{row.name}}</strong> · ค่าส่ง {{'%.2f'|format(row.delivery_fee_satang/100)}} บาท · ลำดับ {{row.sort_order}}</summary>
+  <form method="post" action="{{url_for('online_admin.save_location')}}">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <input type="hidden" name="location_id" value="{{row.id}}">
+    <div class="form-grid">
+      <label>ชื่อ<input name="name" value="{{row.name}}" required></label>
+      <label>ลำดับ<input name="sort_order" type="number" value="{{row.sort_order}}"></label>
+      <label>ค่าส่ง<input name="delivery_fee" type="number" min="0" step=".01" value="{{'%.2f'|format(row.delivery_fee_satang/100)}}"></label>
+      <label>ยอดขั้นต่ำ<input name="minimum_order" type="number" min="0" step=".01" value="{{'%.2f'|format(row.minimum_order_satang/100)}}"></label>
+      <label class="compact-check"><input type="checkbox" name="is_active" {% if row.is_active %}checked{% endif %}> <span>เปิดใช้งาน</span></label>
+      <label class="compact-check"><input type="checkbox" name="is_available" {% if row.is_available %}checked{% endif %}> <span>พร้อมจัดส่ง</span></label>
+      <label class="compact-check"><input type="checkbox" name="room_required" {% if row.room_required %}checked{% endif %}> <span>ต้องกรอกห้อง / จุดรับ</span></label>
+      <label>เวลาโดยประมาณ<input name="estimated_note" value="{{row.estimated_note or ''}}"></label>
+      <label>คำแนะนำ<input name="instructions" value="{{row.instructions or ''}}"></label>
+    </div>
+    <button class="primary-button">บันทึกสถานที่</button>
+  </form>
+</details>
+{% else %}
+<div class="empty form-card">ยังไม่มีสถานที่จัดส่ง</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

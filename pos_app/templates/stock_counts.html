@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}นับสต็อก{% endblock %}{% block content %}
+<div class="page-heading"><div><h1>รอบนับสต็อก</h1><p>หลายคนสามารถเข้าร่วม Blind count พร้อมกัน แล้วผู้จัดการตรวจ Summary ก่อนปรับยอด</p></div></div>
+{% if can_manage %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input name="name" placeholder="ชื่อรอบ เช่น นับสิ้นเดือน" required><button class="primary-button">สร้างรอบนับ</button></form>{% else %}<div class="notice"><strong>เลือกรอบที่กำลังนับเพื่อเข้าร่วม</strong><span>Cashier เพิ่มและยกเลิกรายการนับของตัวเองได้</span></div>{% endif %}
+<div class="menu-grid">{% for s in sessions %}<a class="menu-card" href="{{url_for('stock_count.session',session_id=s.id)}}"><span class="menu-icon">{{s.attempt_count}}</span><strong>{{s.name}}</strong><small>{{'กำลังนับ' if s.status=='open' else 'ปรับสต็อกแล้ว' if s.applied else 'รอตรวจ Summary'}} · {{s.display_name}}</small></a>{% endfor %}</div>
+{% endblock %}

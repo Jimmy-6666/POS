@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}เปลี่ยนรหัส PIN{% endblock %}
+{% block shell_class %}auth-shell{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <h1>เปลี่ยนรหัส PIN</h1>
+  {% if current_staff.must_change_pin %}<div class="notice warning">เพื่อความปลอดภัย กรุณาเปลี่ยน PIN เริ่มต้นก่อนใช้งาน</div>{% endif %}
+  <form method="post" class="form-stack" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>PIN ปัจจุบัน<input name="current_pin" type="password" inputmode="numeric" maxlength="6" required autofocus></label>
+    <label>PIN ใหม่ 4 หรือ 6 หลัก<input name="new_pin" type="password" inputmode="numeric" pattern="(?:[0-9]{4}|[0-9]{6})" maxlength="6" required></label>
+    <label>ยืนยัน PIN ใหม่<input name="confirm_pin" type="password" inputmode="numeric" pattern="(?:[0-9]{4}|[0-9]{6})" maxlength="6" required></label>
+    <button class="primary-button" type="submit">บันทึกรหัส PIN ใหม่</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}Void ใบเสร็จ{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>Void ใบเสร็จ</h1><p>{{sale.receipt_number}} · {{sale.display_name}} · {{sale.created_at|thai_datetime}}</p></div><a class="secondary-button" href="{{url_for('pos.sales_history')}}">กลับประวัติการขาย</a></div>
+{% if error %}<div class="flash flash-error">{{error}}</div>{% endif %}
+<form method="post" class="form-card void-form"><input type="hidden" name="csrf_token" value="{{csrf_token}}">
+ <label>รูปแบบการ Void<select name="void_type" id="voidType"><option value="partial">เลือกรายการย่อย</option><option value="full">Void ทั้งบิล</option></select></label>
+ <div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>จำนวนขาย</th><th>Void แล้ว</th><th>จำนวนที่ต้องการ Void</th></tr></thead><tbody>{% for item in items %}<tr><td>{{item.product_name}}</td><td>{{item.quantity}}</td><td>{{item.voided_quantity}}</td><td><input class="void-quantity" name="quantity_{{item.id}}" type="number" min="0" max="{{item.remaining_quantity}}" step="1" value="0" {% if item.remaining_quantity<=0 %}disabled{% endif %}></td></tr>{% endfor %}</tbody></table></div>
+ <label>เหตุผลการ Void<textarea name="reason" rows="3" required placeholder="ระบุเหตุผลเพื่อบันทึกใน Audit Log"></textarea></label>
+ <button class="primary-button finalize-button" type="submit" onclick="return confirm('ยืนยันการ Void และคืนสินค้าเข้าสต็อก?')">ยืนยัน Void และคืนสต็อก</button>
+</form>
+{% if history %}<section class="form-card"><h2>ประวัติ Void</h2>{% for row in history %}<p><strong>{{row.created_at|thai_datetime}}</strong> · {{row.display_name}} · {{'ทั้งบิล' if row.void_type=='full' else 'บางรายการ'}} — {{row.reason}}</p>{% endfor %}</section>{% endif %}
+<script>document.querySelector('#voidType').addEventListener('change',e=>document.querySelectorAll('.void-quantity').forEach(input=>{input.disabled=e.target.value==='full'||Number(input.max)<=0}))</script>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}เข้าสู่ระบบ POS{% endblock %}
+{% block shell_class %}auth-shell{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <span class="eyebrow dark">ระบบขายหน้าร้าน</span>
+  <h1>เข้าสู่ระบบ</h1>
+  <p class="muted">เลือกชื่อพนักงานและกรอกรหัส PIN</p>
+  <form method="post" class="form-stack" autocomplete="off">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <label>พนักงาน
+      <select name="staff_id" required autofocus>
+        <option value="">— เลือกพนักงาน —</option>
+        {% for staff in staff_list %}<option value="{{ staff.id }}">{{ staff.display_name }} ({{ staff.role_name }})</option>{% endfor %}
+      </select>
+    </label>
+    <label>รหัส PIN
+      <input id="loginPin" name="pin" type="password" inputmode="numeric" pattern="(?:[0-9]{4}|[0-9]{6})" maxlength="6" required>
+    </label>
+    <div class="login-numpad" aria-label="แป้นตัวเลขสำหรับกรอกรหัส PIN">
+      {% for number in range(1,10) %}<button type="button" data-pin-key="{{number}}">{{number}}</button>{% endfor %}
+      <button type="button" class="pin-clear" data-pin-action="clear" aria-label="ล้างรหัส PIN">ล้าง</button>
+      <button type="button" data-pin-key="0">0</button>
+      <button type="button" class="pin-backspace" data-pin-action="backspace" aria-label="ลบตัวเลขล่าสุด">⌫</button>
+    </div>
+    <button class="primary-button login-submit" type="submit">เข้าสู่ระบบ</button>
+  </form>
+</section>
+<script src="{{url_for('static',filename='js/login.js',v=1)}}"></script>
+{% endblock %}

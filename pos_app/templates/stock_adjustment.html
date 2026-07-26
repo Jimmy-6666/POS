@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}ปรับสต็อก{% endblock %}{% block content %}
+<div class="page-heading"><div><h1>ปรับสต็อก</h1><p>ทุกครั้งจะบันทึกลงประวัติถาวร</p></div><a class="secondary-button" href="{{ url_for('inventory.ledger') }}">ประวัติสต็อก</a></div>
+<form method="get" class="product-lookup-filter">
+  <label class="product-lookup-field">ค้นหา / สแกนบาร์โค้ด<input name="q" value="{{query}}" placeholder="สแกนบาร์โค้ด หรือค้นหาชื่อสินค้า / SKU" autocomplete="off" {% if not exact_barcode_id %}autofocus{% endif %}></label>
+  <button class="primary-button">ค้นหา</button>
+  {% if query %}<a class="secondary-button" href="{{url_for('inventory.adjust')}}">ล้าง</a>{% endif %}
+</form>
+<p class="lookup-help">สแกนด้วยเครื่อง USB/Bluetooth แล้วกรอกจำนวนที่ต้องการปรับได้ทันที</p>
+<form method="post" class="form-card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="form-grid"><label>สินค้า<select name="product_id" required><option value="">— เลือกสินค้า —</option>{% for p in products %}<option value="{{p.id}}" {% if p.id==exact_barcode_id %}selected{% endif %}>{{p.name_th}} · {{p.barcode}} · คงเหลือ {{p.stock_quantity}}</option>{% endfor %}</select></label><label>ประเภท<select name="adjustment_type"><option value="increase">เพิ่มสต็อก</option><option value="decrease">ลดสต็อก</option><option value="set">กำหนดเป็นจำนวนจริง</option></select></label><label>จำนวน<input name="quantity" type="number" min="0" step="0.001" required {% if exact_barcode_id %}autofocus{% endif %}></label><label>เหตุผล<select name="reason_id" required>{% for r in reasons %}<option value="{{r.id}}">{{r.name_th}}</option>{% endfor %}</select></label><label>หมายเหตุ<input name="note"></label></div><button class="primary-button">ยืนยันปรับสต็อก</button></form>{% endblock %}

@@ -1,0 +1,111 @@
+import io
+import tempfile
+import unittest
+from pathlib import Path
+
+from pos_app import create_app
+from pos_app.database import get_db
+from tests.online_helpers import register_customer
+
+
+class OnlinePhase3Tests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.app = create_app({"TESTING": True, "DATABASE": str(Path(self.folder.name) / "online.db"), "PROJECT_ROOT": self.folder.name})
+        with self.app.app_context():
+            db = get_db()
+            category = db.execute("SELECT id FROM categories LIMIT 1").fetchone()[0]
+            unit = db.execute("SELECT id FROM units LIMIT 1").fetchone()[0]
+            db.execute("UPDATE settings SET value='1' WHERE key='online_ordering_enabled'")
+            db.execute("UPDATE settings SET value='1' WHERE key='online_transfer_enabled'")
+            db.execute("""INSERT INTO products(barcode,name_th,category_id,unit_id,price_satang,stock_quantity,is_online_available)
+                          VALUES('111','สินค้าออนไลน์',?,?,2500,5,1)""", (category, unit))
+            db.execute("""INSERT INTO delivery_locations(name,delivery_fee_satang,minimum_order_satang,room_required)
+                          VALUES('รีสอร์ต',1000,0,1)""")
+            db.commit()
+        self.client = self.app.test_client()
+        register_customer(self.client)
+        with self.app.app_context():
+            self.csrf = get_db().execute("SELECT csrf_token FROM customer_sessions").fetchone()[0]
+
+    def tearDown(self):
+        self.folder.cleanup()
+
+    def payload(self, **changes):
+        data = {"items": [{"product_id": 1, "quantity": 2}], "delivery_location_id": 1,
+                "room_reference": "A101", "payment_method": "cash", "idempotency_key": "order-key-123456"}
+        data.update(changes)
+        return data
+
+    def submit(self, **changes):
+        return self.client.post("/order/api/orders", json=self.payload(**changes), headers={"X-CSRF-Token": self.csrf})
+
+    def test_order_creation_reserves_stock_and_uses_server_totals(self):
+        response = self.submit(total_satang=1)
+        self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            db = get_db()
+            order = db.execute("SELECT * FROM online_orders").fetchone()
+            self.assertEqual(order["subtotal_satang"], 5000)
+            self.assertEqual(order["total_satang"], 6000)
+            self.assertEqual(db.execute("SELECT quantity FROM stock_reservations").fetchone()[0], 2)
+            self.assertEqual(db.execute("SELECT stock_quantity FROM products WHERE id=1").fetchone()[0], 5)
+
+    def test_duplicate_submit_returns_same_order(self):
+        first = self.submit().get_json()
+        second = self.submit().get_json()
+        self.assertEqual(first["public_id"], second["public_id"])
+        self.assertTrue(second["duplicate"])
+        with self.app.app_context():
+            self.assertEqual(get_db().execute("SELECT COUNT(*) FROM online_orders").fetchone()[0], 1)
+
+    def test_competing_order_and_customer_cancel_release(self):
+        public_id = self.submit(items=[{"product_id": 1, "quantity": 5}]).get_json()["public_id"]
+        other = self.app.test_client()
+        register_customer(other, "0899999999")
+        with self.app.app_context():
+            other_csrf = get_db().execute("SELECT csrf_token FROM customer_sessions ORDER BY id DESC LIMIT 1").fetchone()[0]
+        blocked = other.post("/order/api/orders", json=self.payload(idempotency_key="other-order-12345", room_reference="B2"),
+                             headers={"X-CSRF-Token": other_csrf})
+        self.assertEqual(blocked.status_code, 400)
+        cancel = self.client.post(f"/order/orders/{public_id}/cancel", data={"csrf_token": self.csrf, "reason": "เปลี่ยนใจ"})
+        self.assertEqual(cancel.status_code, 302)
+        with self.app.app_context():
+            self.assertEqual(get_db().execute("SELECT status FROM stock_reservations").fetchone()[0], "released")
+
+    def test_order_ownership_and_slip_validation(self):
+        public_id = self.submit(payment_method="transfer").get_json()["public_id"]
+        invalid = self.client.post(f"/order/orders/{public_id}/slips", data={
+            "csrf_token": self.csrf, "slip": (io.BytesIO(b"not-image"), "bad.exe")
+        }, content_type="multipart/form-data", follow_redirects=True)
+        self.assertIn("JPG", invalid.get_data(as_text=True))
+        other = self.app.test_client()
+        register_customer(other, "0899999999")
+        self.assertEqual(other.get(f"/order/orders/{public_id}").status_code, 404)
+
+    def test_customer_order_hides_bank_details_and_uses_contact_icons(self):
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE settings SET value='123-SECRET-456' WHERE key='online_bank_account_number'")
+            db.commit()
+        public_id = self.submit(payment_method="transfer").get_json()["public_id"]
+        page = self.client.get(f"/order/orders/{public_id}").get_data(as_text=True)
+        self.assertIn("โอนเงินเมื่อส่งสินค้า", page)
+        self.assertNotIn("123-SECRET-456", page)
+        self.assertNotIn("คัดลอกเลขบัญชี", page)
+        self.assertIn("line-logo", page)
+        self.assertIn("phone-logo", page)
+
+    def test_repeat_uses_current_price(self):
+        public_id = self.submit().get_json()["public_id"]
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE products SET price_satang=3000 WHERE id=1")
+            db.commit()
+        result = self.client.get(f"/order/orders/{public_id}/repeat").get_json()
+        self.assertEqual(result["items"][0]["price_satang"], 3000)
+        self.assertTrue(result["notices"])
+
+
+if __name__ == "__main__":
+    unittest.main()
