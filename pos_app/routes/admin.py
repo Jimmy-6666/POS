@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash
 
 from ..auth import permission_required, valid_csrf
 from ..database import get_db
+from ..services.backup import BackupError, create_local_backup, list_verified_backups
 from ..services.money import baht_to_satang
 
 
@@ -107,6 +108,16 @@ def audit_logs():
 @permission_required("backup.manage")
 def backups():
     paths=current_app.config["RUNTIME_PATHS"];folder=paths.backups
+    if request.method=="POST" and not valid_csrf(request.form.get("csrf_token")):
+        return ("คำขอไม่ถูกต้อง",400)
+    if request.method=="POST" and valid_csrf(request.form.get("csrf_token")):
+        try:
+            artifact=create_local_backup(paths,current_app.config["RUNTIME_CONFIG"],retention=int(current_app.config.get("POS_BACKUP_RETENTION",7)))
+        except (BackupError,OSError,ValueError) as exc:
+            flash(f"สร้างไฟล์สำรองไม่สำเร็จ: {exc}","error")
+        else:
+            db=get_db();db.execute("INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,created_at) VALUES(?,'create_backup','backup',?,CURRENT_TIMESTAMP)",(g.staff["id"],artifact.path.name));db.commit();flash("สร้างไฟล์สำรองและตรวจสอบความถูกต้องแล้ว","success")
+        return redirect(url_for("admin.backups"))
     if request.method=="POST":
         if not valid_csrf(request.form.get("csrf_token")):return ("คำขอไม่ถูกต้อง",400)
         stamp=datetime.now().strftime("%Y%m%d-%H%M%S");archive=folder/f"pos-backup-{stamp}.zip"
@@ -119,7 +130,7 @@ def backups():
                     if path.is_file():z.write(path,path.relative_to(root))
         db=get_db();db.execute("INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,created_at) VALUES(?,'create_backup','backup',?,CURRENT_TIMESTAMP)",(g.staff["id"],archive.name));db.commit();flash("สร้างไฟล์สำรองแล้ว","success")
         return redirect(url_for("admin.backups"))
-    files=sorted(folder.glob("pos-backup-*.zip"),reverse=True)
+    files=[Path(item["archive"]) for item in list_verified_backups(folder)]
     return render_template("backups.html",files=files)
 
 

@@ -19,7 +19,7 @@ The original acceptance contract remains `REQUIREMENTS_V1.0.md`.
 | Release 2 responsive visual refresh | Implemented | version 2.1 plus manual UI review |
 | Release 2.1 Windows desktop/fullscreen launcher | Implemented | version 2.1 |
 | Customer online ordering, delivery and reconciliation | Implemented; cart-first checkout, searchable customer administration, repeat purchases, staff item additions/quantity edits with confirmed-price warnings, assigned acceptance, direct reconciliation and checked-order printing included | online phases 1-6 |
-| Production runtime and installer | Sprint 1 implemented; later maintenance deferred | runtime tests |
+| Production runtime, backup, and recovery | Sprint 1/2 implemented; updates/support deferred | runtime and maintenance tests |
 | Makro catalog enrichment and UAT import tooling | UAT only; production approval incomplete | manifest and `verify-uat.mjs` |
 
 ## Verification baseline — 2026-07-26
@@ -57,6 +57,7 @@ The compact context set is current as of the date above. Older documents remain
 valuable detailed history but contain version-oriented wording (for example,
 `README.md` still leads with 1.0) and must not be treated as the sole current
 status source.
+
 
 ## Online ordering operating model
 

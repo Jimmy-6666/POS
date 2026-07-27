@@ -71,8 +71,11 @@ No new product scope should be invented. Follow the user's next feature
 priority. If catalog deployment is selected, first complete owner approval of
 selling prices and real barcodes and make the import input path portable.
 
-Sprint 1 production foundation is implemented: canonical runtime paths,
-startup validation, migration history, deterministic dependency locking, and
-Windows lifecycle scripts. The production startup task uses Task Scheduler and
-the firewall rule is limited to Private/LocalSubnet. VPS backup, disaster
-recovery, update automation, and remote support remain deferred.
+Sprint 1 production foundation and Sprint 2 backup/recovery foundation are
+implemented: canonical runtime paths, startup validation, migration history,
+deterministic dependency locking, verified SQLite online backups, incremental
+allow-listed file sync with delayed quarantine, SFTP transport, recovery-drill
+scripts, and Windows lifecycle tasks. The production and backup tasks use Task
+Scheduler; the firewall rule remains limited to Private/LocalSubnet. Signed
+updates, admin maintenance dashboard, and remote support remain deferred to
+Sprint 3.

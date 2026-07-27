@@ -58,6 +58,7 @@ def create_app(test_config=None):
         POS_BIND_HOST=runtime_config.host,
         POS_PORT=runtime_config.port,
         POS_APP_VERSION=runtime_config.app_version,
+        POS_BACKUP_RETENTION=int(os.environ.get("POS_BACKUP_RETENTION", "7")),
         SESSION_TIMEOUT_MINUTES=30,
         MAX_CONTENT_LENGTH=8 * 1024 * 1024,
         CUSTOMER_SESSION_DAYS=14,

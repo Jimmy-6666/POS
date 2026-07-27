@@ -45,7 +45,10 @@ function Get-ProductionContext {
         Python = Join-Path $resolvedInstallRoot ".venv\Scripts\python.exe"
         LockFile = Join-Path $resolvedInstallRoot "requirements.lock.txt"
         StartScript = Join-Path $resolvedInstallRoot "start-production.ps1"
+        BackupScript = Join-Path $resolvedInstallRoot "backup-production.ps1"
         TaskName = "SaengngamPOS-Production"
+        BackupTaskName = "SaengngamPOS-Backup"
+        BackupTime = if ($env:POS_BACKUP_TIME) { $env:POS_BACKUP_TIME } else { "02:00" }
         FirewallName = "Saengngam POS Production TCP $Port"
         ReportDirectory = Join-Path $resolvedRuntimeRoot "support"
     }
@@ -130,6 +133,24 @@ function Register-ProductionStartup {
 function Remove-ProductionStartup {
     param($Context)
     Unregister-ScheduledTask -TaskName $Context.TaskName -Confirm:$false -ErrorAction SilentlyContinue
+}
+
+function Register-ProductionBackupTask {
+    param($Context)
+    if (-not (Test-Path -LiteralPath $Context.BackupScript)) {
+        throw "Backup runner was not found: $($Context.BackupScript)"
+    }
+    $runAt = [DateTime]::ParseExact($Context.BackupTime, "HH:mm", [Globalization.CultureInfo]::InvariantCulture)
+    $argument = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -InstallRoot "{1}" -RuntimeRoot "{2}" -Port {3}' -f $Context.BackupScript, $Context.InstallRoot, $Context.RuntimeRoot, $Context.Port
+    $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument $argument -WorkingDirectory $Context.InstallRoot
+    $trigger = New-ScheduledTaskTrigger -Daily -At $runAt
+    $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 15) -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::FromHours(2))
+    Register-ScheduledTask -TaskName $Context.BackupTaskName -Action $action -Trigger $trigger -Settings $settings -User "SYSTEM" -RunLevel Highest -Force | Out-Null
+}
+
+function Remove-ProductionBackupTask {
+    param($Context)
+    Unregister-ScheduledTask -TaskName $Context.BackupTaskName -Confirm:$false -ErrorAction SilentlyContinue
 }
 
 function Set-ProductionFirewall {

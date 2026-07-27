@@ -29,6 +29,8 @@ Release 2.1 server. Batch files select the port and runtime root.
 | Shared UI | `pos_app/templates/base.html`, `static/css/app.css`, `static/css/v2.css`, `static/js/sidebar.js` |
 | Receipt UI | `receipt.html`, `static/css/receipt.css`, `receipt-popup.js` |
 | Windows launch/display | `pos_desktop.py`, `pos_app/launcher.py`, `pos_app/display_state.py`, `start-*.bat`, `install-*.bat` |
+| Production backup/recovery | `pos_app/services/backup.py`, `pos_app/services/file_sync.py`, `pos_app/services/remote_backup.py`, `pos_app/backup_cli.py`, `backup-production.ps1`, `scripts/*recovery*.ps1` |
+| VPS provisioning | `deploy/vps/*.sh` |
 | UAT fixtures | `seed_uat.py`, `start-uat.bat`, `install-uat.bat`, `uat_runtime/` (generated) |
 | Makro catalog preparation | `work/makro-pos-import/*.mjs`, `imports/makro-products/` inputs/artifacts, `outputs/` review workbooks |
 | Automated verification | `tests/test_phase1.py`, `test_phase2.py`, `test_phase3_5.py`, `test_phase6_10.py`, `test_inventory.py`, `test_billing.py`, `test_version_2_1.py` |
@@ -64,3 +66,8 @@ See `MODULE_DEPENDENCIES.md` for cross-module impact.
 
 Production lifecycle files are kept at the repository root for operator use.
 They use production-common.ps1 and never modify start-uat.bat.
+
+The backup service is independent of Flask requests. It uses the SQLite online
+backup API, publishes only verified archives, and never restores over the
+active runtime. File sync is allow-listed and records its inventory under
+`runtime/config/file-sync-inventory.json`.

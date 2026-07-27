@@ -149,5 +149,24 @@
   installation, verification, repair, start, stop, restart, and uninstall.
 - Added idempotent Task Scheduler startup and a Private/LocalSubnet-only
   production firewall rule.
-- VPS backup, disaster recovery, update rollback, admin maintenance, and remote
-  support remain deferred to later sprints.
+
+## Sprint 2 backup, VPS sync, and disaster recovery
+
+- Added an independent local backup service using SQLite's online backup API,
+  staged ZIP publication, integrity/foreign-key checks, manifests, SHA-256
+  checksums, sanitized recovery metadata, locking, and verified retention.
+- Preserved the legacy `data/pos.db` archive member while making
+  `database/pos.db` the canonical backup location.
+- Replaced the working admin backup path with the verified backup service while
+  retaining the existing permission and CSRF boundary.
+- Added incremental allow-listed product-file sync with hash change detection,
+  persistent inventory, delayed deletion, remote quarantine, retry/backoff,
+  and backup-id linkage.
+- Added restricted outbound OpenSSH SFTP transport with temporary remote names,
+  atomic rename, completion markers, and optional download checksum
+  verification. No VPS password or private key is stored in the repository.
+- Added Windows backup/sync runners, a daily `SaengngamPOS-Backup` scheduled
+  task, VPS provisioning/retention scripts, and non-destructive recovery-drill
+  scripts.
+- Added Sprint 2 maintenance and recovery tests. Signed update, administrator
+  maintenance dashboard, and remote-support workflow remain Sprint 3 scope.

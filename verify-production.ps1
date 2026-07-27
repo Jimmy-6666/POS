@@ -18,6 +18,8 @@ try {
     if (-not $report.ok) { throw "Runtime validation failed." }
     $task = Get-ScheduledTask -TaskName $context.TaskName -ErrorAction SilentlyContinue
     if (-not $task) { throw "Automatic startup task is missing." }
+    $backupTask = Get-ScheduledTask -TaskName $context.BackupTaskName -ErrorAction SilentlyContinue
+    if (-not $backupTask) { throw "Automatic backup task is missing." }
     if (-not (Test-ProductionFirewall $context)) { throw "Private-LAN firewall rule is missing or unsafe." }
     if (-not (Test-ProductionHealth $context -Attempts 3)) { throw "Health endpoint is not ready." }
     Write-Output "Production verification passed."

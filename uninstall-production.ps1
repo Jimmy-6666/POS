@@ -11,6 +11,7 @@ try {
     Assert-Administrator
     $context = Get-ProductionContext $InstallRoot $RuntimeRoot $Port
     Remove-ProductionStartup $context
+    Remove-ProductionBackupTask $context
     Remove-ProductionFirewall $context
     if (-not $KeepEnvironment) {
         $venv = Join-Path $context.InstallRoot ".venv"

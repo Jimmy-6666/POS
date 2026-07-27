@@ -14,6 +14,7 @@ try {
     Ensure-VirtualEnvironment $context $systemPython
     Initialize-ProductionApplication $context
     Register-ProductionStartup $context
+    Register-ProductionBackupTask $context
     Set-ProductionFirewall $context
     Write-Output "Production repair completed. Database and secret key were preserved."
     exit 0

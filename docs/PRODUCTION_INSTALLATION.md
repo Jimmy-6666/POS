@@ -1,8 +1,9 @@
 # Production Installation
 
-Sprint 1 provides a Windows production lifecycle around the existing Flask,
-Waitress, and SQLite application. It does not provide VPS backup, update
-rollback, or remote support; those remain deferred.
+The Windows production lifecycle now includes the Sprint 2 backup runner. It
+keeps the existing Flask, Waitress, and SQLite application offline-first while
+adding verified local snapshots, optional outbound SFTP sync, and a daily
+Task Scheduler job.
 
 ## Requirements
 
@@ -40,9 +41,23 @@ installer uses the existing installation root and does not relocate it.
     .\stop-production.ps1
     .\restart-production.ps1
 
-The automatic startup task is SaengngamPOS-Production. It runs the production
-launcher at Windows startup as SYSTEM and requests up to three restarts after
-failure. It never uses the UAT launcher.
+The automatic startup task is SaengngamPOS-Production. The automatic backup
+task is SaengngamPOS-Backup and defaults to 02:00 Asia/Bangkok (override the
+`POS_BACKUP_TIME` environment variable before installation). Both tasks run as
+SYSTEM; the backup task does not stop the POS and sales continue if a VPS is
+offline.
+
+For a manual local backup:
+
+    .\backup-production.ps1
+
+For a manual backup plus VPS upload and incremental file sync:
+
+    .\backup-production.ps1
+
+The backup task requires `POS_VPS_*` settings only when remote sync is wanted.
+Without them, local backup remains available and the POS itself remains
+operational offline.
 
 ## Network behavior
 
@@ -61,4 +76,3 @@ environment:
     .\.venv-lock\Scripts\python.exe -m pip freeze | Set-Content requirements.lock.txt
 
 Review the generated file and run python -m pip check before accepting it.
-

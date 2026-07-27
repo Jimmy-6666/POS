@@ -14,6 +14,7 @@ try {
     Ensure-VirtualEnvironment $context $systemPython
     Initialize-ProductionApplication $context
     Register-ProductionStartup $context
+    Register-ProductionBackupTask $context
     Set-ProductionFirewall $context
     $startArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $context.StartScript, "-InstallRoot", $context.InstallRoot, "-RuntimeRoot", $context.RuntimeRoot, "-Port", $context.Port)
     Start-Process -FilePath "PowerShell.exe" -ArgumentList $startArgs -WorkingDirectory $context.InstallRoot
