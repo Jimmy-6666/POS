@@ -48,3 +48,23 @@ authentication context (`current_staff`, `csrf_token`) and shared shell/assets.
   runtime data.
 
 Use the full suite when changing any high-impact module.
+
+Production lifecycle work depends on runtime_paths.py, migrations.py, the
+locked dependency file, and the PowerShell scripts. It affects database
+startup, runtime data preservation, Task Scheduler, and firewall scope.
+
+Sprint 2 maintenance flow:
+
+`backup-production.ps1` → `pos_app.backup_cli` → `services/backup.py` → SQLite
+online backup + manifest/checksum verification → local retention → optional
+`services/remote_backup.py` SFTP upload → `services/file_sync.py` incremental
+inventory/quarantine. Recovery scripts consume only verified archives and
+restore into a separate runtime target.
+
+Sprint 3 maintenance flow:
+
+`routes/maintenance.py` depends on the existing staff session, CSRF and audit
+tables, then queues fixed jobs in `services/maintenance_jobs.py`. Jobs call the
+verified backup/VPS services, `services/update_agent.py`, or the sanitized
+`services/support.py` bundle/request handlers. `launcher.py` selects only a
+validated release directory below `runtime/releases`.

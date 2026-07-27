@@ -46,6 +46,7 @@
     <a href="{{url_for('admin.settings')}}" {% if request.endpoint=='admin.settings' %}class="active" aria-current="page"{% endif %}><i>⚙</i><span>ตั้งค่า</span></a>
     <a href="{{url_for('admin.audit_logs')}}" {% if request.endpoint=='admin.audit_logs' %}class="active" aria-current="page"{% endif %}><i>◷</i><span>Audit Log</span></a>
     <a href="{{url_for('admin.backups')}}" {% if request.endpoint=='admin.backups' %}class="active" aria-current="page"{% endif %}><i>⇩</i><span>สำรองข้อมูล</span></a>
+    <a href="{{url_for('maintenance.dashboard')}}" {% if request.blueprint=='maintenance' %}class="active" aria-current="page"{% endif %}><i>⚙</i><span>การบำรุงรักษาระบบ</span></a>
     {% endif %}
   </nav>
   <div class="sidebar-footer">

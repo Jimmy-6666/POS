@@ -36,8 +36,7 @@ def save_bank_qr(file):
     if len(content) > 2 * 1024 * 1024 or not valid_magic:
         raise ValueError("รูป QR ไม่ถูกต้องหรือมีขนาดเกิน 2 MB")
     filename = f"bank-qr-{secrets.token_hex(10)}{ext}"
-    folder = Path(current_app.config["PROJECT_ROOT"]) / "uploads" / "online-payments"
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = current_app.config["RUNTIME_PATHS"].online_payment_evidence
     (folder / filename).write_bytes(content)
     return filename
 

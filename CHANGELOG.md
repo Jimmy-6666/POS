@@ -1,5 +1,17 @@
 # Version 2.1 — Development
 
+## Sprint 3 — Update agent, maintenance, and remote support
+
+- Added HMAC/SHA-256 release manifest and package verification, isolated staging,
+  versioned release activation, automatic failure rollback, and schema-aware
+  manual rollback.
+- Added a durable allow-listed maintenance job queue and Thai admin dashboard for
+  backup, VPS sync/test, update, support bundle, restart, and job status.
+- Added sanitized support bundles and signed, expiring, replay-resistant remote
+  requests with local administrator approval. No remote shell or arbitrary command
+  execution is exposed.
+- Added focused Sprint 3 regression tests and operational release/support docs.
+
 ## Online operations update
 
 - Split the configurable customer-order store name onto one line per word in
@@ -135,3 +147,38 @@
 
 - Existing roles, permissions, inventory logic, stock counts, receipt printing, voids, reports, and SQLite architecture are retained.
 - Release 2 uses its own runtime data copy, so testing it will not change the original app database.
+
+## Sprint 1 production foundation
+
+- Added canonical runtime-path resolution for database, secret, uploads,
+  backups, logs, support, staging, releases, browser profiles, and config.
+- Added machine-readable startup validation for path containment, directories,
+  secret preservation, disk space, write access, host/port, SQLite integrity,
+  and foreign keys.
+- Added backward-compatible schema_migrations history with a version 19
+  legacy bridge and deterministic failure handling for future migrations.
+- Added exact dependency lock file and Windows production lifecycle scripts for
+  installation, verification, repair, start, stop, restart, and uninstall.
+- Added idempotent Task Scheduler startup and a Private/LocalSubnet-only
+  production firewall rule.
+
+## Sprint 2 backup, VPS sync, and disaster recovery
+
+- Added an independent local backup service using SQLite's online backup API,
+  staged ZIP publication, integrity/foreign-key checks, manifests, SHA-256
+  checksums, sanitized recovery metadata, locking, and verified retention.
+- Preserved the legacy `data/pos.db` archive member while making
+  `database/pos.db` the canonical backup location.
+- Replaced the working admin backup path with the verified backup service while
+  retaining the existing permission and CSRF boundary.
+- Added incremental allow-listed product-file sync with hash change detection,
+  persistent inventory, delayed deletion, remote quarantine, retry/backoff,
+  and backup-id linkage.
+- Added restricted outbound OpenSSH SFTP transport with temporary remote names,
+  atomic rename, completion markers, and optional download checksum
+  verification. No VPS password or private key is stored in the repository.
+- Added Windows backup/sync runners, a daily `SaengngamPOS-Backup` scheduled
+  task, VPS provisioning/retention scripts, and non-destructive recovery-drill
+  scripts.
+- Added Sprint 2 maintenance and recovery tests. Signed update, administrator
+  maintenance dashboard, and remote-support workflow remain Sprint 3 scope.

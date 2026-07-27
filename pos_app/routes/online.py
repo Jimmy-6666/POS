@@ -326,7 +326,7 @@ def customer_product_image(filename):
     ).fetchone()
     if not allowed:
         return ("ไม่พบรูปสินค้า", 404)
-    return send_from_directory(Path(current_app.config["PROJECT_ROOT"]) / "uploads" / "products", filename)
+    return send_from_directory(current_app.config["RUNTIME_PATHS"].product_images, filename)
 
 
 @bp.get("/bank-qr")
@@ -334,7 +334,7 @@ def bank_qr():
     filename = online_settings().get("online_bank_qr_path")
     if not filename:
         return ("ไม่พบรูป QR", 404)
-    return send_from_directory(Path(current_app.config["PROJECT_ROOT"]) / "uploads" / "online-payments", filename)
+    return send_from_directory(current_app.config["RUNTIME_PATHS"].online_payment_evidence, filename)
 
 
 @bp.get("/api/products")
@@ -513,7 +513,7 @@ def upload_slip(public_id):
     try:
         ext, content_type = sniff_image(content)
         filename = f"slip-{secrets.token_hex(16)}{ext}"
-        path = Path(current_app.config["PROJECT_ROOT"]) / "uploads" / "online-payments" / filename
+        path = current_app.config["RUNTIME_PATHS"].online_payment_evidence / filename
         path.write_bytes(content)
         db = get_db()
         now = iso_time(utc_now())
@@ -575,7 +575,7 @@ def view_own_slip(public_id, payment_id):
     ).fetchone()
     if not payment:
         return ("ไม่พบไฟล์", 404)
-    return send_from_directory(Path(current_app.config["PROJECT_ROOT"]) / "uploads" / "online-payments", payment["slip_path"])
+    return send_from_directory(current_app.config["RUNTIME_PATHS"].online_payment_evidence, payment["slip_path"])
 
 
 @bp.post("/orders/<public_id>/cancel")

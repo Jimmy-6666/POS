@@ -13,11 +13,14 @@ from pathlib import Path
 from ctypes import wintypes
 from tkinter import messagebox
 
+from pos_app.runtime_paths import RuntimePaths
+
 
 ROOT = Path(__file__).resolve().parent
-RUNTIME = Path(os.environ.get("POS_RUNTIME_ROOT", ROOT / "runtime")).resolve()
-STATE_FILE = RUNTIME / "display_state.json"
-LOG_FILE = RUNTIME / "launcher.log"
+RUNTIME_PATHS = RuntimePaths.from_root(os.environ.get("POS_RUNTIME_ROOT", ROOT / "runtime"))
+RUNTIME = RUNTIME_PATHS.root
+STATE_FILE = RUNTIME_PATHS.display_state
+LOG_FILE = RUNTIME_PATHS.launcher_log
 PORT = int(os.environ.get("POS_PORT", "8002"))
 URL = f"http://127.0.0.1:{PORT}"
 LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 2.1")
@@ -162,7 +165,7 @@ class PosDesktop:
             ctypes.windll.user32.SetForegroundWindow(self.browser_hwnd)
             return
         self.known_chrome_windows = set(self.chrome_windows())
-        profile = RUNTIME / "browser-profile"
+        profile = RUNTIME_PATHS.browser_profile
         self.configure_browser_profile(profile)
         self.browser_process = subprocess.Popen(main_browser_args(self.browser_exe, profile), creationflags=CREATE_NO_WINDOW)
         self.status.config(text="เปิดหน้าร้านแล้ว — กรุณา Login")
@@ -212,7 +215,7 @@ class PosDesktop:
         ):
             return
         known_windows = set(self.chrome_windows())
-        profile = RUNTIME / "print-browser-profile"
+        profile = RUNTIME_PATHS.print_browser_profile
         self.configure_browser_profile(profile)
         self.print_browser_process = subprocess.Popen(
             print_browser_args(self.browser_exe, profile, self.print_agent_token),

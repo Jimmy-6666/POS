@@ -11,6 +11,16 @@ __pycache__/
 *.sqlite
 *.sqlite3
 *.secret
+*.key
+*.pem
+*.ppk
+*.pub
+*.zip
+*.7z
+*.tar.gz
+*.bak
+*.part
+*.tmp
 data/
 runtime/
 uat_runtime/

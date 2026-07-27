@@ -3,10 +3,14 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from flask import current_app, has_app_context
+
 
 def signal_display(mode):
     """Notify the optional Windows launcher without affecting normal web operation."""
     state_file = os.environ.get("POS_DISPLAY_STATE_FILE")
+    if not state_file and has_app_context():
+        state_file = str(current_app.config["RUNTIME_PATHS"].display_state)
     if not state_file or mode not in {"normal", "fullscreen"}:
         return
     path = Path(state_file)

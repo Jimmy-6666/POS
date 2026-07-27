@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash
 
 from ..auth import permission_required, valid_csrf
 from ..database import get_db
+from ..services.backup import BackupError, create_local_backup, list_verified_backups
 from ..services.money import baht_to_satang
 
 
@@ -106,7 +107,17 @@ def audit_logs():
 @bp.route("/backups",methods=("GET","POST"))
 @permission_required("backup.manage")
 def backups():
-    root=Path(current_app.config["PROJECT_ROOT"]);folder=root/"backups"
+    paths=current_app.config["RUNTIME_PATHS"];folder=paths.backups
+    if request.method=="POST" and not valid_csrf(request.form.get("csrf_token")):
+        return ("คำขอไม่ถูกต้อง",400)
+    if request.method=="POST" and valid_csrf(request.form.get("csrf_token")):
+        try:
+            artifact=create_local_backup(paths,current_app.config["RUNTIME_CONFIG"],retention=int(current_app.config.get("POS_BACKUP_RETENTION",7)))
+        except (BackupError,OSError,ValueError) as exc:
+            flash(f"สร้างไฟล์สำรองไม่สำเร็จ: {exc}","error")
+        else:
+            db=get_db();db.execute("INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,created_at) VALUES(?,'create_backup','backup',?,CURRENT_TIMESTAMP)",(g.staff["id"],artifact.path.name));db.commit();flash("สร้างไฟล์สำรองและตรวจสอบความถูกต้องแล้ว","success")
+        return redirect(url_for("admin.backups"))
     if request.method=="POST":
         if not valid_csrf(request.form.get("csrf_token")):return ("คำขอไม่ถูกต้อง",400)
         stamp=datetime.now().strftime("%Y%m%d-%H%M%S");archive=folder/f"pos-backup-{stamp}.zip"
@@ -114,16 +125,16 @@ def backups():
             db_copy=Path(temp)/"pos.db";target=sqlite3.connect(db_copy);get_db().backup(target);target.close()
             with zipfile.ZipFile(archive,"w",zipfile.ZIP_DEFLATED) as z:
                 z.write(db_copy,"data/pos.db")
-                uploads=root/"uploads"
+                uploads=paths.uploads
                 for path in uploads.rglob("*"):
                     if path.is_file():z.write(path,path.relative_to(root))
         db=get_db();db.execute("INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,created_at) VALUES(?,'create_backup','backup',?,CURRENT_TIMESTAMP)",(g.staff["id"],archive.name));db.commit();flash("สร้างไฟล์สำรองแล้ว","success")
         return redirect(url_for("admin.backups"))
-    files=sorted(folder.glob("pos-backup-*.zip"),reverse=True)
+    files=[Path(item["archive"]) for item in list_verified_backups(folder)]
     return render_template("backups.html",files=files)
 
 
 @bp.get("/backups/<path:filename>")
 @permission_required("backup.manage")
 def download_backup(filename):
-    return send_from_directory(Path(current_app.config["PROJECT_ROOT"])/"backups",filename,as_attachment=True)
+    return send_from_directory(current_app.config["RUNTIME_PATHS"].backups,filename,as_attachment=True)

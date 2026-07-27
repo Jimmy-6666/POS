@@ -1,8 +1,16 @@
 # Database Overview
 
+## Migration history
+
+The existing additive startup migrations remain in pos_app/database.py.
+Sprint 1 adds the schema_migrations table and records the existing schema
+version 19 as legacy-ad-hoc-migrations. Future migrations use
+pos_app/migrations.py and record version, name, checksum, application version,
+UTC timestamp, and success state. A failed migration prevents startup.
+
 SQLite is the single local source of truth. `pos_app/schema.sql` defines new
 databases; `pos_app/database.py` initializes seed data and applies idempotent,
-data-preserving startup migrations. Current seeded `schema_version` is 18.
+data-preserving startup migrations. Current seeded `schema_version` is 19.
 
 ## Domains and tables
 

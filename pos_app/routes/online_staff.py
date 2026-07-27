@@ -232,7 +232,7 @@ def staff_slip(order_id, payment_id):
     ).fetchone()
     if not payment:
         return ("ไม่พบสลิป", 404)
-    return send_from_directory(Path(current_app.config["PROJECT_ROOT"]) / "uploads" / "online-payments", payment["slip_path"])
+    return send_from_directory(current_app.config["RUNTIME_PATHS"].online_payment_evidence, payment["slip_path"])
 
 
 @bp.post("/<int:order_id>/items/<int:item_id>")

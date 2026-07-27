@@ -4,6 +4,8 @@ from pathlib import Path
 from flask import current_app, g
 from werkzeug.security import generate_password_hash
 
+from .migrations import MIGRATIONS, apply_migrations, bootstrap_legacy_history
+
 
 CATEGORIES = [
     "เครื่องดื่ม", "ขนมขบเคี้ยว", "บะหมี่กึ่งสำเร็จรูป", "อาหารแห้ง",
@@ -256,6 +258,16 @@ def initialize_database():
         )
     db.execute(
         "UPDATE settings SET value = '19', updated_at = CURRENT_TIMESTAMP WHERE key = 'schema_version'"
+    )
+    bootstrap_legacy_history(
+        db,
+        legacy_version=19,
+        application_version=current_app.config.get("POS_APP_VERSION", "2.1"),
+    )
+    apply_migrations(
+        db,
+        MIGRATIONS,
+        application_version=current_app.config.get("POS_APP_VERSION", "2.1"),
     )
     db.commit()
 
