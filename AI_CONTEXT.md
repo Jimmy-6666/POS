@@ -41,8 +41,9 @@ must not be treated as production-ready without barcode and price approval.
 
 ## Current health
 
-On 2026-07-27, `python -m unittest discover -s tests -v` ran 69 tests and all
-passed, including customer contact UI, delivery payment-method confirmation,
+On 2026-07-27, `python -m unittest discover -s tests -v` ran 81 tests and all
+passed, including Sprint 3 update, maintenance, and support security coverage,
+customer contact UI, delivery payment-method confirmation,
 receipt-only print-agent behavior, stock-sheet print-preview isolation, and the
 online ordering lifecycle. Staff can add or reduce order items before picking;
 price/total changes retain the customer's confirmed price snapshot and show a
@@ -71,11 +72,11 @@ No new product scope should be invented. Follow the user's next feature
 priority. If catalog deployment is selected, first complete owner approval of
 selling prices and real barcodes and make the import input path portable.
 
-Sprint 1 production foundation and Sprint 2 backup/recovery foundation are
-implemented: canonical runtime paths, startup validation, migration history,
-deterministic dependency locking, verified SQLite online backups, incremental
-allow-listed file sync with delayed quarantine, SFTP transport, recovery-drill
-scripts, and Windows lifecycle tasks. The production and backup tasks use Task
-Scheduler; the firewall rule remains limited to Private/LocalSubnet. Signed
-updates, admin maintenance dashboard, and remote support remain deferred to
-Sprint 3.
+Sprint 1 production foundation, Sprint 2 backup/recovery foundation, and Sprint
+3 maintenance foundation are implemented: canonical runtime paths, startup
+validation, migration history, deterministic dependency locking, verified
+SQLite online backups, incremental allow-listed file sync with delayed
+quarantine, SFTP transport, recovery-drill scripts, Windows lifecycle tasks,
+HMAC/SHA-256 verified staged releases with rollback, a durable admin job queue,
+sanitized support bundles, and signed allow-listed remote requests. The POS
+remains offline-first; update/VPS/support failures do not block sales.

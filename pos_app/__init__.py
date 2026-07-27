@@ -19,6 +19,7 @@ from .routes.online import bp as online_bp
 from .routes.online_admin import bp as online_admin_bp
 from .routes.online_staff import bp as online_staff_bp
 from .routes.print_agent import bp as print_agent_bp
+from .routes.maintenance import bp as maintenance_bp
 from .services.print_jobs import init_app as init_print_jobs
 from .runtime_paths import RuntimePathError, RuntimePaths, load_runtime_config, validate_runtime
 
@@ -63,6 +64,7 @@ def create_app(test_config=None):
         MAX_CONTENT_LENGTH=8 * 1024 * 1024,
         CUSTOMER_SESSION_DAYS=14,
         PRINT_AGENT_TOKEN=os.environ.get("POS_PRINT_AGENT_TOKEN", ""),
+        POS_STARTED_AT=datetime.now(timezone.utc).isoformat(),
     )
     if test_config:
         app.config.update(test_config)
@@ -90,6 +92,7 @@ def create_app(test_config=None):
     app.register_blueprint(online_admin_bp)
     app.register_blueprint(online_staff_bp)
     app.register_blueprint(print_agent_bp)
+    app.register_blueprint(maintenance_bp)
 
     @app.context_processor
     def auth_context():

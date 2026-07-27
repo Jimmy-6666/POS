@@ -1,5 +1,17 @@
 # Version 2.1 — Development
 
+## Sprint 3 — Update agent, maintenance, and remote support
+
+- Added HMAC/SHA-256 release manifest and package verification, isolated staging,
+  versioned release activation, automatic failure rollback, and schema-aware
+  manual rollback.
+- Added a durable allow-listed maintenance job queue and Thai admin dashboard for
+  backup, VPS sync/test, update, support bundle, restart, and job status.
+- Added sanitized support bundles and signed, expiring, replay-resistant remote
+  requests with local administrator approval. No remote shell or arbitrary command
+  execution is exposed.
+- Added focused Sprint 3 regression tests and operational release/support docs.
+
 ## Online operations update
 
 - Split the configurable customer-order store name onto one line per word in

@@ -17,6 +17,27 @@ RUNTIME_CONFIG = load_runtime_config(PROJECT_ROOT)
 PORT = RUNTIME_CONFIG.port
 
 
+def active_release_command():
+    """Return a trusted versioned release command, if one is active."""
+    if os.environ.get("POS_ACTIVE_RELEASE_CHILD") == "1":
+        return None
+    active_file = RUNTIME_CONFIG.paths.releases / "active-release.json"
+    try:
+        import json
+        data = json.loads(active_file.read_text(encoding="utf-8"))
+        version = str(data.get("version", ""))
+        release = (RUNTIME_CONFIG.paths.releases / version).resolve()
+        release.relative_to(RUNTIME_CONFIG.paths.releases.resolve())
+        if not version or not (release / "pos_app" / "launcher.py").is_file():
+            return None
+        environment = os.environ.copy()
+        environment["POS_ACTIVE_RELEASE_CHILD"] = "1"
+        environment["PYTHONPATH"] = os.pathsep.join((str(release), environment.get("PYTHONPATH", "")))
+        return environment, release
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+
+
 def listener_pids():
     result = subprocess.run(
         ["netstat", "-ano", "-p", "tcp"], capture_output=True, text=True, check=False
@@ -72,6 +93,11 @@ def stop_old_instances():
 
 
 def main():
+    active = active_release_command()
+    if active:
+        environment, release = active
+        os.chdir(release)
+        os.execve(sys.executable, [sys.executable, "-m", "pos_app.launcher"], environment)
     try:
         stop_old_instances()
     except RuntimeError as exc:

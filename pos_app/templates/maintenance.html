@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}การบำรุงรักษาระบบ{% endblock %}
+{% block content %}
+<section class="page-head"><div><p class="eyebrow">ผู้ดูแลระบบ</p><h1>การบำรุงรักษาระบบ</h1><p class="muted">งานสำรองข้อมูล อัปเดต และขอรับการช่วยเหลือจะทำงานเบื้องหลัง</p></div></section>
+<section class="stats-grid">
+  <article class="stat-card"><span>เวอร์ชันโปรแกรม</span><strong>{{metrics.application_version}}</strong></article>
+  <article class="stat-card"><span>Schema</span><strong>{{metrics.schema_version}}</strong></article>
+  <article class="stat-card"><span>ฐานข้อมูล</span><strong>{{(metrics.database_size / 1024 / 1024)|round(2)}} MB</strong></article>
+  <article class="stat-card"><span>พื้นที่ว่าง</span><strong>{{(metrics.free_disk / 1024 / 1024 / 1024)|round(2)}} GB</strong></article>
+  <article class="stat-card"><span>รูปสินค้า</span><strong>{{metrics.image_count}} รูป</strong><small>{{(metrics.image_size / 1024 / 1024)|round(2)}} MB</small></article>
+</section>
+<section class="card"><h2>การทำงานที่ปลอดภัย</h2><div class="button-row">
+  {% for endpoint,label in [("maintenance.backup","สำรองข้อมูลในเครื่อง"),("maintenance.sync","สำรองและซิงก์ VPS"),("maintenance.vps_test","ทดสอบ VPS"),("maintenance.support_bundle","สร้างชุดข้อมูลช่วยเหลือ"),("maintenance.restart","รีสตาร์ตบริการ")] %}
+  <form method="post" action="{{url_for(endpoint)}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button type="submit">{{label}}</button></form>
+  {% endfor %}
+</div><p class="muted">การรีสตาร์ตและการเปลี่ยนรุ่นต้องยืนยัน PIN ผู้ดูแลระบบอีกครั้ง</p></section>
+<section class="card"><h2>ยืนยันตัวตนสำหรับงานเสี่ยงสูง</h2><form method="post" action="{{url_for('maintenance.reauth')}}" class="inline-form"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><label>PIN ผู้ดูแล <input type="password" name="pin" inputmode="numeric" maxlength="6" required></label><button type="submit">ยืนยัน PIN</button></form></section>
+<section class="card"><h2>งานล่าสุด</h2>{% if jobs %}<div class="table-wrap"><table><thead><tr><th>ประเภท</th><th>สถานะ</th><th>เวลา</th><th>ผลลัพธ์</th></tr></thead><tbody>{% for job in jobs %}<tr><td>{{job.type}}</td><td>{{job.status}}</td><td>{{job.created_at|thai_datetime}}</td><td>{% if job.error %}{{job.error}}{% elif job.result %}เสร็จสิ้น{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">ยังไม่มีงานบำรุงรักษา</p>{% endif %}</section>
+<section class="card"><h2>คำขอช่วยเหลือจากระยะไกล</h2>{% if remote_requests %}<div class="table-wrap"><table><thead><tr><th>การดำเนินการ</th><th>หมดอายุ</th><th></th></tr></thead><tbody>{% for item in remote_requests %}<tr><td>{{item.action}}</td><td>{{item.expires_at}}</td><td><form method="post" action="{{url_for('maintenance.approve_remote_request',request_id=item.request_id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button type="submit">ตรวจสอบและอนุมัติ</button></form></td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">ไม่มีคำขอที่รอการอนุมัติ</p>{% endif %}</section>
+<section class="card"><h2>อัปเดตโปรแกรมและย้อนกลับ</h2><div class="button-row">
+  {% for endpoint,label in [("maintenance.update_check","ตรวจสอบรุ่นใหม่"),("maintenance.update_download","ดาวน์โหลดรุ่นใหม่"),("maintenance.update_install","ติดตั้งรุ่นที่ดาวน์โหลด"),("maintenance.update_rollback","ย้อนกลับรุ่นก่อนหน้า")] %}
+  <form method="post" action="{{url_for(endpoint)}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button type="submit">{{label}}</button></form>
+  {% endfor %}
+</div><p class="muted">แหล่งดาวน์โหลดและกุญแจตรวจสอบต้องกำหนดไว้ใน production configuration เท่านั้น</p></section>
+<p class="muted">Runtime: {{metrics.runtime_root}}</p>
+{% endblock %}

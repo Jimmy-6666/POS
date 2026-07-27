@@ -30,6 +30,7 @@ Release 2.1 server. Batch files select the port and runtime root.
 | Receipt UI | `receipt.html`, `static/css/receipt.css`, `receipt-popup.js` |
 | Windows launch/display | `pos_desktop.py`, `pos_app/launcher.py`, `pos_app/display_state.py`, `start-*.bat`, `install-*.bat` |
 | Production backup/recovery | `pos_app/services/backup.py`, `pos_app/services/file_sync.py`, `pos_app/services/remote_backup.py`, `pos_app/backup_cli.py`, `backup-production.ps1`, `scripts/*recovery*.ps1` |
+| Update, maintenance jobs, and remote support | `pos_app/services/update_agent.py`, `pos_app/services/maintenance_jobs.py`, `pos_app/services/support.py`, `pos_app/update_cli.py`, `pos_app/routes/maintenance.py`, `pos_app/templates/maintenance.html` |
 | VPS provisioning | `deploy/vps/*.sh` |
 | UAT fixtures | `seed_uat.py`, `start-uat.bat`, `install-uat.bat`, `uat_runtime/` (generated) |
 | Makro catalog preparation | `work/makro-pos-import/*.mjs`, `imports/makro-products/` inputs/artifacts, `outputs/` review workbooks |
@@ -71,3 +72,11 @@ The backup service is independent of Flask requests. It uses the SQLite online
 backup API, publishes only verified archives, and never restores over the
 active runtime. File sync is allow-listed and records its inventory under
 `runtime/config/file-sync-inventory.json`.
+
+Sprint 3 maintenance flow:
+
+`maintenance.html` -> admin/CSRF/re-auth checks -> durable JSON job queue ->
+allow-listed backup, sync, update, rollback, support, or restart handler. Release
+packages are verified before `runtime/staging/updates/`, activated under
+`runtime/releases/`, and selected by `active-release.json`. Remote support uses
+signed request JSON and never exposes a shell.
