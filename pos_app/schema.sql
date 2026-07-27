@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    checksum TEXT,
+    application_version TEXT NOT NULL,
+    applied_at TEXT NOT NULL,
+    success INTEGER NOT NULL DEFAULT 1 CHECK(success IN (0,1))
+);
 
 CREATE TABLE IF NOT EXISTS roles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
