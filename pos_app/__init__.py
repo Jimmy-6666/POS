@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,6 +23,18 @@ from .routes.print_agent import bp as print_agent_bp
 from .routes.maintenance import bp as maintenance_bp
 from .services.print_jobs import init_app as init_print_jobs
 from .runtime_paths import RuntimePathError, RuntimePaths, load_runtime_config, validate_runtime
+
+
+def _effective_app_version(runtime_config):
+    """Use the validated active release version when one is selected."""
+    active_file = runtime_config.paths.releases / "active-release.json"
+    try:
+        active = json.loads(active_file.read_text(encoding="utf-8"))
+        version = str(active.get("version", ""))
+        manifest = json.loads((runtime_config.paths.releases / version / "manifest.json").read_text(encoding="utf-8"))
+        return str(manifest.get("application_version") or runtime_config.app_version)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return runtime_config.app_version
 
 
 def create_app(test_config=None):
@@ -50,6 +63,7 @@ def create_app(test_config=None):
     runtime_paths.create_directories()
     runtime_paths.ensure_secret_key()
     app = Flask(__name__, instance_relative_config=False)
+    effective_app_version = _effective_app_version(runtime_config)
     app.config.from_mapping(
         DATABASE=str(runtime_paths.database),
         PROJECT_ROOT=str(runtime_paths.root),
@@ -58,7 +72,7 @@ def create_app(test_config=None):
         SECRET_KEY=runtime_paths.secret_key.read_text(encoding="ascii").strip(),
         POS_BIND_HOST=runtime_config.host,
         POS_PORT=runtime_config.port,
-        POS_APP_VERSION=runtime_config.app_version,
+        POS_APP_VERSION=effective_app_version,
         POS_BACKUP_RETENTION=int(os.environ.get("POS_BACKUP_RETENTION", "7")),
         SESSION_TIMEOUT_MINUTES=30,
         MAX_CONTENT_LENGTH=8 * 1024 * 1024,
