@@ -48,3 +48,7 @@ authentication context (`current_staff`, `csrf_token`) and shared shell/assets.
   runtime data.
 
 Use the full suite when changing any high-impact module.
+
+Production lifecycle work depends on runtime_paths.py, migrations.py, the
+locked dependency file, and the PowerShell scripts. It affects database
+startup, runtime data preservation, Task Scheduler, and firewall scope.

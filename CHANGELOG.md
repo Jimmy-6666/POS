@@ -135,3 +135,19 @@
 
 - Existing roles, permissions, inventory logic, stock counts, receipt printing, voids, reports, and SQLite architecture are retained.
 - Release 2 uses its own runtime data copy, so testing it will not change the original app database.
+
+## Sprint 1 production foundation
+
+- Added canonical runtime-path resolution for database, secret, uploads,
+  backups, logs, support, staging, releases, browser profiles, and config.
+- Added machine-readable startup validation for path containment, directories,
+  secret preservation, disk space, write access, host/port, SQLite integrity,
+  and foreign keys.
+- Added backward-compatible schema_migrations history with a version 19
+  legacy bridge and deterministic failure handling for future migrations.
+- Added exact dependency lock file and Windows production lifecycle scripts for
+  installation, verification, repair, start, stop, restart, and uninstall.
+- Added idempotent Task Scheduler startup and a Private/LocalSubnet-only
+  production firewall rule.
+- VPS backup, disaster recovery, update rollback, admin maintenance, and remote
+  support remain deferred to later sprints.

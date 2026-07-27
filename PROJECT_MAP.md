@@ -61,3 +61,6 @@ imports, generated outputs, and UAT data are not source modules.
   source paths; they are not deployable POS runtime code.
 
 See `MODULE_DEPENDENCIES.md` for cross-module impact.
+
+Production lifecycle files are kept at the repository root for operator use.
+They use production-common.ps1 and never modify start-uat.bat.

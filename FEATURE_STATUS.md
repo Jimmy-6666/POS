@@ -19,12 +19,13 @@ The original acceptance contract remains `REQUIREMENTS_V1.0.md`.
 | Release 2 responsive visual refresh | Implemented | version 2.1 plus manual UI review |
 | Release 2.1 Windows desktop/fullscreen launcher | Implemented | version 2.1 |
 | Customer online ordering, delivery and reconciliation | Implemented; cart-first checkout, searchable customer administration, repeat purchases, staff item additions/quantity edits with confirmed-price warnings, assigned acceptance, direct reconciliation and checked-order printing included | online phases 1-6 |
+| Production runtime and installer | Sprint 1 implemented; later maintenance deferred | runtime tests |
 | Makro catalog enrichment and UAT import tooling | UAT only; production approval incomplete | manifest and `verify-uat.mjs` |
 
 ## Verification baseline — 2026-07-26
 
 - Command: `.venv\Scripts\python.exe -m unittest discover -s tests -v`
-- Result: 61 run, 61 passed.
+- Result: 69 run, 69 passed.
 - The suite includes two project-context contract tests.
 - Online tests cover account isolation/rate limiting/CSRF, catalogue/cart,
   idempotent orders, reservations, staff transitions, reconciliation, payment,

@@ -41,7 +41,7 @@ must not be treated as production-ready without barcode and price approval.
 
 ## Current health
 
-On 2026-07-26, `python -m unittest discover -s tests -v` ran 61 tests and all
+On 2026-07-27, `python -m unittest discover -s tests -v` ran 69 tests and all
 passed, including customer contact UI, delivery payment-method confirmation,
 receipt-only print-agent behavior, stock-sheet print-preview isolation, and the
 online ordering lifecycle. Staff can add or reduce order items before picking;
@@ -70,3 +70,9 @@ synthetic barcodes, so this remains test/catalog-preparation data only.
 No new product scope should be invented. Follow the user's next feature
 priority. If catalog deployment is selected, first complete owner approval of
 selling prices and real barcodes and make the import input path portable.
+
+Sprint 1 production foundation is implemented: canonical runtime paths,
+startup validation, migration history, deterministic dependency locking, and
+Windows lifecycle scripts. The production startup task uses Task Scheduler and
+the firewall rule is limited to Private/LocalSubnet. VPS backup, disaster
+recovery, update automation, and remote support remain deferred.
