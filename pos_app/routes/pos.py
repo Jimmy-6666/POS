@@ -19,7 +19,7 @@ bp = Blueprint("pos", __name__)
 @bp.get("/uploads/products/<path:filename>")
 @login_required
 def product_image(filename):
-    return send_from_directory(Path(current_app.config["PROJECT_ROOT"]) / "uploads" / "products", filename)
+    return send_from_directory(current_app.config["RUNTIME_PATHS"].product_images, filename)
 
 
 @bp.get("/pos")
@@ -85,8 +85,7 @@ def save_evidence(data):
     if len(content) > 5 * 1024 * 1024:
         raise SaleError("ไฟล์หลักฐานต้องมีขนาดไม่เกิน 5 MB")
     filename = f"payment-{secrets.token_hex(12)}{extension}"
-    folder = Path(current_app.config["PROJECT_ROOT"]) / "uploads" / "payments"
-    folder.mkdir(exist_ok=True)
+    folder = current_app.config["RUNTIME_PATHS"].pos_payment_evidence
     (folder / filename).write_bytes(content)
     return filename
 

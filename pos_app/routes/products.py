@@ -31,7 +31,7 @@ def save_image(file):
     if extension not in ALLOWED_IMAGES:
         raise ValueError("รองรับรูป JPG, PNG, WEBP หรือ GIF เท่านั้น")
     filename = f"{secrets.token_hex(12)}{extension}"
-    folder = Path(current_app.config["PROJECT_ROOT"]) / "uploads" / "products"
+    folder = current_app.config["RUNTIME_PATHS"].product_images
     file.save(folder / filename)
     return filename
 

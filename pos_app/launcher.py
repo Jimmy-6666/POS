@@ -9,9 +9,12 @@ from pathlib import Path
 from waitress import serve
 
 from . import create_app
+from .runtime_paths import load_runtime_config
 
 
-PORT = int(os.environ.get("POS_PORT", "8000"))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+RUNTIME_CONFIG = load_runtime_config(PROJECT_ROOT)
+PORT = RUNTIME_CONFIG.port
 
 
 def listener_pids():
@@ -79,7 +82,7 @@ def main():
     print(f"LAN URL:   http://THIS-COMPUTER-IP:{PORT}")
     print("Only one POS server instance is running.")
     print("Press Ctrl+C to stop the server.")
-    serve(create_app(), host="0.0.0.0", port=PORT, threads=8)
+    serve(create_app(), host=RUNTIME_CONFIG.host, port=PORT, threads=8)
     return 0
 
 
