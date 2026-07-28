@@ -5,7 +5,7 @@
 <section class="auth-card">
   <span class="eyebrow dark">ระบบขายหน้าร้าน</span>
   <h1>เข้าสู่ระบบ</h1>
-  <p class="muted">เลือกชื่อพนักงานและกรอกรหัส PIN</p>
+  <p class="muted">{% if remote_admin %}การเข้าใช้จากภายนอกสำหรับผู้ดูแลระบบเท่านั้น และต้องยืนยันสองชั้น{% else %}เลือกชื่อพนักงานและกรอกรหัส PIN{% endif %}</p>
   <form method="post" class="form-stack" autocomplete="off">
     <input type="hidden" name="next" value="{{ next_url }}">
     <label>พนักงาน

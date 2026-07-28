@@ -92,7 +92,7 @@ class OnlinePhase3Tests(unittest.TestCase):
         allowed = self.submit(items=[{"product_uuid": self.product_uuid, "quantity": 6}], idempotency_key="negative-stock-order-123")
         self.assertEqual(allowed.status_code, 200)
 
-    def test_online_negative_stock_returns_a_repeatable_cart_limit(self):
+    def test_online_negative_stock_returns_a_repeatable_customer_quantity_limit(self):
         self.submit(items=[{"product_uuid": self.product_uuid, "quantity": 5}])
         with self.app.app_context():
             db = get_db()
@@ -100,7 +100,8 @@ class OnlinePhase3Tests(unittest.TestCase):
             db.commit()
         response = self.client.post("/order/api/cart/validate", json={"items": [{"product_uuid": self.product_uuid, "quantity": 1}]})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["items"][0]["available_quantity"], 50.0)
+        self.assertEqual(response.get_json()["items"][0]["max_quantity"], 50.0)
+        self.assertNotIn("available_quantity", response.get_json()["items"][0])
 
     def test_customer_order_hides_bank_details_and_uses_contact_icons(self):
         with self.app.app_context():

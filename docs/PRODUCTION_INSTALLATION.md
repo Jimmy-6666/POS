@@ -74,6 +74,43 @@ session cookies, while direct `http://localhost:<port>` continues to work with
 its local cookie. Do not enable it on an internet-facing listener that accepts
 untrusted `X-Forwarded-*` headers.
 
+## Approved public host isolation
+
+Sprint 1 adds application-side host separation but does not publish anything.
+Keep both settings unset until the later Cloudflare and release-gate sprints:
+
+    [Environment]::SetEnvironmentVariable('POS_PUBLIC_ORDER_HOST', 'online.raisanngam.com', 'Machine')
+    [Environment]::SetEnvironmentVariable('POS_ADMIN_HOST', 'admin.raisanngam.com', 'Machine')
+
+When configured, `online.raisanngam.com` serves only customer `/order` and
+LINE-authentication routes. `admin.raisanngam.com` serves staff features only
+to Admin accounts; Manager and Cashier accounts are rejected even if they know
+the address and PIN. Customer ordering, LINE authentication, health, and the
+print agent are not available on the Admin hostname. The LAN host continues to
+use its existing role permissions.
+
+When the later Cloudflare sprint is approved, configure the host allow-list as
+well. Include both public hostnames and each genuine LAN hostname or IP address
+used to reach the POS; do not add wildcard entries:
+
+    [Environment]::SetEnvironmentVariable('POS_TRUSTED_HOSTS', 'online.raisanngam.com,admin.raisanngam.com,LAN_HOST_OR_IP', 'Machine')
+
+At that same time, set `POS_TRUST_PROXY=1` only if the Cloudflare connector is
+the local process forwarding to Waitress, and keep `POS_TRUSTED_PROXY` at its
+default `127.0.0.1` (or set it to the connector's verified local IP). Waitress
+then accepts `X-Forwarded-*` data only from that connector. The application
+will refuse to start with public hosts configured if their names are missing
+from `POS_TRUSTED_HOSTS`.
+
+Do not set either value or add a public tunnel route until the Cloudflare,
+mandatory Admin 2FA, and release-validation sprints are complete.
+
+Before the Admin hostname is enabled, each Admin must sign in through the LAN,
+open **ความปลอดภัยบัญชี**, set up an authenticator app, save the recovery
+codes offline, then sign in again and confirm the code works. The public Admin
+hostname rejects an Admin who has not completed this step. Manager and Cashier
+accounts must not be enrolled for remote access and remain LAN-only.
+
 For customer ordering through LINE LIFF, follow `docs/LINE_LIFF_SETUP.md`
 before enabling the public Rich Menu link. It records the required Machine
 environment values, HTTPS/Cloudflare trust condition, and live acceptance test.

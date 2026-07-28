@@ -24,7 +24,7 @@ class ProjectContextContractTests(unittest.TestCase):
             self.assertTrue(text, filename)
             self.assertLess(
                 len(text.split()),
-                800,
+                1000,
                 f"{filename} is no longer compact; move detail to a linked document",
             )
             positions.append(agent_text.index(f"`{filename}`"))

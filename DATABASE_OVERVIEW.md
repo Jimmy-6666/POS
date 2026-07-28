@@ -23,6 +23,10 @@ Version 25 adds `reconciliations.void_total_satang`. It is an additive closing
 snapshot of the valid, recorded item-void amount during that closing window;
 it does not alter historic sales, refund, or stock records.
 
+Version 26 adds `staff_sessions.two_factor_verified_at`. Only a session created
+after a successful Admin second-factor challenge receives this marker; existing
+sessions are preserved for LAN use but cannot be used on the public Admin host.
+
 SQLite is the single local source of truth. `pos_app/schema.sql` defines new
 databases; `pos_app/database.py` initializes seed data and applies idempotent,
 data-preserving startup migrations. Current seeded `schema_version` is 19.
@@ -65,7 +69,9 @@ data-preserving startup migrations. Current seeded `schema_version` is 19.
 - `reconciliations.void_total_satang` is calculated from `sale_void_items` for
   the applicable cashier and closing window, then stored with the close so
   historical reconciliation summaries remain stable.
-- Sessions are stored server-side; only token hashes are persisted.
+- Sessions are stored server-side; only token hashes are persisted. A public
+  Admin session must also carry the server-side second-factor verification
+  marker and belong to an Admin account with two-factor authentication enabled.
 - Schema version 17 enables `is_online_available` for all existing products
   once and defaults new products to online. The customer catalogue still
   excludes inactive products and products with a zero selling price.

@@ -25,9 +25,10 @@ and prints 80 mm receipts through the browser.
 
 An auxiliary Makro catalog preparation pipeline lives in
 `work/makro-pos-import/`. It uses Node and Codex spreadsheet tooling only for
-development/UAT data preparation; Node is not a POS runtime dependency. The
-pipeline currently depends on an external, hard-coded source path and its data
-must not be treated as production-ready without barcode and price approval.
+development/UAT data preparation; Node is not a POS runtime dependency. Its
+retrieval step accepts explicit raw JSON/CSV input and output paths, preserves
+an exact-Makro-ID result report, and its data must not be treated as
+production-ready without barcode and price approval.
 
 ## Non-negotiable behavior
 

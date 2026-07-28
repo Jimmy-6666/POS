@@ -20,20 +20,37 @@
     script.onerror = () => reject(new Error("ไม่สามารถโหลด LINE LIFF ได้"));
     document.head.append(script);
   });
+  const safeOrderPath = value => {
+    try {
+      const target = new URL(value || "", window.location.origin);
+      return target.origin === window.location.origin && (target.pathname === "/order" || target.pathname.startsWith("/order/"))
+        ? target.pathname + target.search : "";
+    } catch { return ""; }
+  };
   const redirectAfterAuth = customer => {
     const current = new URL(window.location.href);
     if (!customer.profileComplete && !current.pathname.endsWith("/profile")) {
-      const next = current.pathname === "/order" ? current.searchParams.get("next") : current.pathname + current.search;
+      const next = current.pathname === "/order" ? safeOrderPath(current.searchParams.get("next")) : current.pathname + current.search;
       window.location.replace(`/order/profile${next ? `?next=${encodeURIComponent(next)}` : ""}`);
       return true;
     }
     if (current.pathname === "/order" && current.searchParams.get("next")) {
-      window.location.replace(current.searchParams.get("next"));
-      return true;
+      const next = safeOrderPath(current.searchParams.get("next"));
+      if (next) {
+        window.location.replace(next);
+        return true;
+      }
     }
     return false;
   };
   const initialize = async () => {
+    try {
+      const existing = await api("/api/auth/me");
+      if (existing.authenticated) {
+        if (!redirectAfterAuth(existing.customer)) say(`สวัสดี ${existing.customer.displayName || "ลูกค้า"}`);
+        return;
+      }
+    } catch (error) { return say(error.message); }
     let config;
     try { config = await api("/api/auth/config"); }
     catch (error) { return say(error.message); }

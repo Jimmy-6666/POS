@@ -8,6 +8,7 @@ from flask import current_app, g, redirect, request, url_for
 from werkzeug.security import check_password_hash
 
 from .database import get_db
+from .public_host_access import public_surface
 
 
 COOKIE_NAME = "pos_session"
@@ -16,7 +17,7 @@ COOKIE_NAME = "pos_session"
 def session_cookie_options():
     """Keep local HTTP usable while requiring Secure cookies for HTTPS requests."""
 
-    return {"httponly": True, "samesite": "Lax", "secure": request.is_secure}
+    return {"httponly": True, "samesite": "Lax", "secure": request.is_secure or public_surface() is not None}
 
 
 def utc_now():
@@ -31,17 +32,19 @@ def token_hash(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def create_session(staff_id):
+def create_session(staff_id, *, two_factor_verified=False):
     token = secrets.token_urlsafe(32)
     now = utc_now()
     expires = now + timedelta(minutes=current_app.config["SESSION_TIMEOUT_MINUTES"])
     get_db().execute(
         """INSERT INTO staff_sessions
-           (staff_id, token_hash, csrf_token, ip_address, user_agent, created_at, last_seen_at, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           (staff_id, token_hash, csrf_token, ip_address, user_agent, created_at, last_seen_at, expires_at,
+            two_factor_verified_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             staff_id, token_hash(token), secrets.token_urlsafe(24), request.remote_addr,
             request.user_agent.string[:500], iso_time(now), iso_time(now), iso_time(expires),
+            iso_time(now) if two_factor_verified else None,
         ),
     )
     get_db().commit()
@@ -68,7 +71,7 @@ def load_logged_in_staff():
         return
     db = get_db()
     row = db.execute(
-        """SELECT s.id AS session_id, s.created_at, s.expires_at, s.csrf_token,
+        """SELECT s.id AS session_id, s.created_at, s.expires_at, s.csrf_token, s.two_factor_verified_at,
                   st.id, st.display_name, st.must_change_pin, st.is_active,
                   r.code AS role_code, r.name_th AS role_name
            FROM staff_sessions s

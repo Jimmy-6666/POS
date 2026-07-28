@@ -8,6 +8,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from .database import init_app
 from .auth import init_app as init_auth
 from .customer_auth import init_app as init_customer_auth
+from .public_host_access import init_app as init_public_host_access, normalize_public_host
+from .web_security import init_app as init_web_security
 from .routes.auth import bp as auth_bp
 from .routes.products import bp as products_bp
 from .routes.pos import bp as pos_bp
@@ -67,10 +69,16 @@ def create_app(test_config=None):
         POS_BACKUP_RETENTION=int(os.environ.get("POS_BACKUP_RETENTION", "7")),
         BACKUP_SCHEDULER_ENABLED=os.environ.get("POS_BACKUP_SCHEDULER_ENABLED", "1").lower() not in {"0", "false", "no"},
         SESSION_TIMEOUT_MINUTES=30,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=False,
         MAX_CONTENT_LENGTH=8 * 1024 * 1024,
         CUSTOMER_SESSION_DAYS=14,
         PRINT_AGENT_TOKEN=os.environ.get("POS_PRINT_AGENT_TOKEN", ""),
         POS_TRUST_PROXY=os.environ.get("POS_TRUST_PROXY", "").lower() in {"1", "true", "yes"},
+        POS_PUBLIC_ORDER_HOST=normalize_public_host(os.environ.get("POS_PUBLIC_ORDER_HOST")),
+        POS_ADMIN_HOST=normalize_public_host(os.environ.get("POS_ADMIN_HOST")),
+        POS_TRUSTED_HOSTS=os.environ.get("POS_TRUSTED_HOSTS", ""),
         LINE_LIFF_ID=os.environ.get("LINE_LIFF_ID", "").strip(),
         LINE_LOGIN_CHANNEL_ID=os.environ.get("LINE_LOGIN_CHANNEL_ID", "").strip(),
         LINE_LOGIN_CHANNEL_SECRET=os.environ.get("LINE_LOGIN_CHANNEL_SECRET", ""),
@@ -82,6 +90,19 @@ def create_app(test_config=None):
     )
     if test_config:
         app.config.update(test_config)
+    app.config["POS_PUBLIC_ORDER_HOST"] = normalize_public_host(app.config["POS_PUBLIC_ORDER_HOST"])
+    app.config["POS_ADMIN_HOST"] = normalize_public_host(app.config["POS_ADMIN_HOST"])
+    if app.config["POS_PUBLIC_ORDER_HOST"] and app.config["POS_PUBLIC_ORDER_HOST"] == app.config["POS_ADMIN_HOST"]:
+        raise RuntimeError("POS_PUBLIC_ORDER_HOST and POS_ADMIN_HOST must be different hostnames.")
+    trusted_hosts = [host.strip().lower().rstrip(".") for host in str(app.config["POS_TRUSTED_HOSTS"] or "").split(",") if host.strip()]
+    public_hosts = {host for host in (app.config["POS_PUBLIC_ORDER_HOST"], app.config["POS_ADMIN_HOST"]) if host}
+    if not app.config.get("TESTING") and public_hosts:
+        if not trusted_hosts:
+            raise RuntimeError("POS_TRUSTED_HOSTS must be configured before public host isolation is enabled.")
+        if not public_hosts.issubset(set(trusted_hosts)):
+            raise RuntimeError("POS_TRUSTED_HOSTS must include every configured public hostname.")
+    if trusted_hosts:
+        app.config["TRUSTED_HOSTS"] = trusted_hosts
     if app.config["POS_TRUST_PROXY"]:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
@@ -95,6 +116,8 @@ def create_app(test_config=None):
     app.config["RUNTIME_VALIDATION"] = validation
     init_auth(app)
     init_customer_auth(app)
+    init_public_host_access(app)
+    init_web_security(app)
     init_print_jobs(app)
     if not app.config.get("TESTING"):
         init_backup_scheduler(app)
