@@ -1,3 +1,93 @@
+# Version 2.4 — Released 2026-07-28
+
+## Approved sprint 1
+
+- Added product-camera capture on the new-product form for supported mobile
+  browsers, including a preview/remove control. Captures use the exact same
+  multipart validation and runtime storage path as desktop file uploads and
+  are not saved until the product form submits.
+- Added cashier-initiated, Manager-authorized item voids. The server validates
+  an active Manager PIN (or a Manager/Admin's own PIN), applies the existing
+  failed-PIN protection, and never records PIN values. Successful void audits
+  retain cashier, authorizer, sale, item, quantity, product/price, amount, and
+  reason data while the existing atomic stock/sale update remains intact.
+- Added reconciliation `ยอดยกเลิกรวม` from valid recorded void items for the
+  active closing window and stored it in additive migration 25 for historical
+  close summaries.
+- Matched Product list price/create actions to the shared glass-style menu
+  button and added latest valid receiving cost to product pricing with one
+  window-query instead of N+1 lookups.
+
+## Approved follow-up fixes
+
+- Replaced the editable Void quantity field with the POS-style touch `− / +`
+  control and added the existing login-style PIN numpad to Void authorization.
+- Product pricing now also shows the read-only current weighted-average cost
+  alongside the latest valid receiving cost; selling-price editing is unchanged.
+- POS barcode input now detects fast keyboard-wedge scans globally, returns
+  focus to the barcode field on scanner Enter, and rebuilds scanner characters
+  from physical key codes so numeric scans remain correct under a Thai keyboard
+  layout.
+- Made Void reasons optional while retaining an entered reason in the void and
+  audit history.
+
+## Approved online sprint 1
+
+- Updated the customer order-detail screen with fixed-height, three-line item
+  rows: two-line product names with ellipsis, compact quantities, and aligned
+  line totals. Added the customer-facing five-state delivery progress display,
+  removed only the customer payment-status text, kept payment-at-delivery data
+  intact, made the repeat action single-line, and simplified the header to the
+  catalog and order-history links.
+
+## Approved online sprint 1.1
+
+- Added a customer-visible status refresh action while an order is active. It
+  is hidden after completion, cancellation, rejection, or expiry; cancelled
+  orders now show the red `ยกเลิก` status with an intentionally empty five-step
+  progress indicator.
+- Added a permission-gated staff cancel action to the online-order detail page.
+  It requires a confirmation dialog and reason, then reuses the existing
+  transactional cancellation, reservation release, history, and audit path.
+- Removed customer-visible available-quantity values. Out-of-stock products
+  now show a disabled `สินค้าหมด` action only when online negative stock is
+  disabled; when it is enabled, the existing configured cart limit remains
+  operational without presenting the limit as stock.
+- Moved the staff `ยกเลิกออเดอร์` action to the order heading, matching the
+  shared primary-action size and keeping `กลับหน้ารายการ` at the far right;
+  its red danger treatment, confirmation dialog, and server-side permission
+  check remain.
+
+## Approved online sprint 2
+
+- Translated every customer-facing order and payment status shown in the staff
+  online-order list, while retaining the existing internal status values for
+  filtering and lifecycle validation.
+- Reordered only the reconciliation display: incomplete items retain their
+  original order and completed items move to the bottom immediately after a
+  barcode scan or manual confirmation. No lifecycle, reservation, audit, or
+  permission behavior changed.
+
+## Approved online sprint 3
+
+- Moved new-online-order attention from the sidebar to the POS shortcut for
+  `จัดการออเดอร์ออนไลน์`. Its count and reduced-motion-aware pulse reflect
+  only submitted orders.
+- Added the supplied local order-alert MP3. It loops while submitted orders
+  remain, stops as soon as none remain, respects the existing mute setting,
+  and retries playback after a touch or key interaction when browser autoplay
+  protection initially blocks it. Polling and server permissions are unchanged.
+- Enlarged the POS alert count into a high-contrast circular counter with a
+  clearer pulse while submitted orders remain.
+
+## Approved online delivery cancellation follow-up
+
+- Cashiers can now cancel online orders before they leave for delivery
+  (`submitted` through `ready`) without Void-style PIN authorization. The
+  existing transaction still releases reservations and retains the staff actor,
+  reason, status history, and audit record. Orders already delivering or final
+  remain protected from cancellation.
+
 # Version 2.3 — Released 2026-07-28
 
 ## Release summary

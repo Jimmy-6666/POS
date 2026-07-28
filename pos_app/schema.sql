@@ -372,6 +372,7 @@ CREATE TABLE IF NOT EXISTS reconciliations (
     scan_sales_satang INTEGER NOT NULL DEFAULT 0,
     transfer_sales_satang INTEGER NOT NULL DEFAULT 0,
     billed_sales_satang INTEGER NOT NULL DEFAULT 0,
+    void_total_satang INTEGER NOT NULL DEFAULT 0,
     cash_refunds_satang INTEGER NOT NULL DEFAULT 0,
     cash_removals_satang INTEGER NOT NULL DEFAULT 0,
     cash_additions_satang INTEGER NOT NULL DEFAULT 0,

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from flask import current_app, g, redirect, request, url_for
+from werkzeug.security import check_password_hash
 
 from .database import get_db
 
@@ -147,6 +148,49 @@ def admin_required(view):
 
 def valid_csrf(value):
     return bool(g.session_row and value and hmac.compare_digest(value, g.session_row["csrf_token"]))
+
+
+def verify_void_authorizer_pin(staff_id, pin, allowed_roles):
+    """Verify an active void approver with the same hash and throttling model as login."""
+
+    db = get_db()
+    now = utc_now()
+    cutoff = iso_time(now - timedelta(minutes=5))
+    failures = db.execute(
+        """SELECT COUNT(*) FROM login_events
+           WHERE event_type='login_failed' AND ip_address IS ? AND created_at>=?""",
+        (request.remote_addr, cutoff),
+    ).fetchone()[0]
+    if failures >= 5:
+        return None, "ลอง PIN ผิดหลายครั้ง กรุณารอ 5 นาทีแล้วลองใหม่"
+    staff = db.execute(
+        """SELECT st.id,st.pin_hash,st.is_active,r.code AS role_code
+           FROM staff st JOIN roles r ON r.id=st.role_id WHERE st.id=?""",
+        (staff_id,),
+    ).fetchone()
+    if not staff or not staff["is_active"] or staff["role_code"] not in allowed_roles:
+        db.execute(
+            "INSERT INTO login_events(staff_id,event_type,ip_address,created_at) VALUES(?,?,?,?)",
+            (staff_id, "login_failed", request.remote_addr, iso_time(now)),
+        )
+        db.execute(
+            "INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,created_at) VALUES(?,?,?,?,?)",
+            (staff_id, "void_authorization_failed", "staff", str(staff_id or "unknown"), iso_time(now)),
+        )
+        db.commit()
+        return None, "ผู้อนุมัติไม่พร้อมใช้งานหรือไม่มีสิทธิ์อนุมัติ Void"
+    if not pin or len(pin) not in (4, 6) or not pin.isdigit() or not check_password_hash(staff["pin_hash"], pin):
+        db.execute(
+            "INSERT INTO login_events(staff_id,event_type,ip_address,created_at) VALUES(?,?,?,?)",
+            (staff["id"], "login_failed", request.remote_addr, iso_time(now)),
+        )
+        db.execute(
+            "INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,created_at) VALUES(?,?,?,?,?)",
+            (staff["id"], "void_authorization_failed", "staff", str(staff["id"]), iso_time(now)),
+        )
+        db.commit()
+        return None, "PIN ผู้จัดการไม่ถูกต้อง"
+    return staff["id"], None
 
 
 def init_app(app):

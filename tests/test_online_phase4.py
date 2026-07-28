@@ -53,8 +53,84 @@ class OnlinePhase4Tests(unittest.TestCase):
             self.assertEqual(get_db().execute("SELECT status FROM online_orders").fetchone()[0], "reconciling")
 
     def test_queue_and_summary_render(self):
-        self.assertEqual(self.staff.get("/online-orders").status_code, 200)
+        page = self.staff.get("/online-orders").get_data(as_text=True)
+        self.assertIn("รอร้านตรวจสอบ", page)
+        self.assertIn("ยังไม่ชำระ", page)
+        self.assertNotIn(">submitted<", page)
+        self.assertNotIn(">unpaid<", page)
         self.assertEqual(self.staff.get("/online-orders/api/summary").get_json()["new_count"], 1)
+
+    def test_pos_submitted_alert_uses_local_looping_audio_not_sidebar_badge(self):
+        staff_page = self.staff.get("/online-orders").get_data(as_text=True)
+        pos_page = self.staff.get("/pos").get_data(as_text=True)
+        script = (Path(__file__).resolve().parents[1] / "pos_app" / "static" / "js" / "online-order-alerts.js").read_text(encoding="utf-8")
+        css = (Path(__file__).resolve().parents[1] / "pos_app" / "static" / "css" / "v2.css").read_text(encoding="utf-8")
+        audio = Path(__file__).resolve().parents[1] / "pos_app" / "static" / "audio" / "order_sound.mp3"
+        self.assertNotIn('id="onlineOrderBadge"', staff_page)
+        self.assertIn('id="posOnlineOrderBadge"', pos_page)
+        self.assertIn('id="onlineOrderShortcut"', pos_page)
+        self.assertTrue(audio.is_file())
+        self.assertIn('new Audio("/static/audio/order_sound.mp3")', script)
+        self.assertIn("audio.loop = true", script)
+        self.assertIn("setInterval(poll, 15000)", script)
+        self.assertIn("width:32px", css)
+        self.assertIn("border-radius:50%", css)
+        self.assertIn("animation:online-order-pulse .85s", css)
+        self.assertEqual(self.staff.get("/online-orders/api/summary").get_json()["new_count"], 1)
+        self.staff.post("/online-orders/1/accept", data={"csrf_token": self.csrf, "staff_id": "1"})
+        self.assertEqual(self.staff.get("/online-orders/api/summary").get_json()["new_count"], 0)
+
+    def test_staff_cancel_uses_confirmation_ui_and_releases_reservation(self):
+        with self.app.app_context():
+            cashier_role_id = get_db().execute("SELECT id FROM roles WHERE code='cashier'").fetchone()[0]
+            get_db().execute("UPDATE staff SET role_id=? WHERE id=1", (cashier_role_id,))
+            get_db().commit()
+        page = self.staff.get("/online-orders/1").get_data(as_text=True)
+        self.assertIn('id="cancelOrderDialog"', page)
+        self.assertIn("ยืนยันยกเลิกออเดอร์", page)
+        self.assertIn('class="actions order-heading-actions"', page)
+        self.assertIn('class="primary-button danger-small cancel-order-button"', page)
+        self.assertLess(page.index("ยกเลิกออเดอร์"), page.index("กลับหน้ารายการ"))
+        self.assertLess(page.index('class="actions order-heading-actions"'), page.index('class="staff-order-side"'))
+        css = (Path(__file__).resolve().parents[1] / "pos_app" / "static" / "css" / "online-staff.css").read_text(encoding="utf-8")
+        self.assertIn(".order-heading-actions .cancel-order-button", css)
+        self.assertIn("background:#fee2e2", css)
+        response = self.staff.post(
+            "/online-orders/1/cancel", data={"csrf_token": self.csrf, "reason": "ลูกค้าขอยกเลิก"}
+        )
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            db = get_db()
+            self.assertEqual(db.execute("SELECT status FROM online_orders WHERE id=1").fetchone()[0], "staff_cancelled")
+            self.assertEqual(db.execute("SELECT status FROM stock_reservations WHERE order_id=1").fetchone()[0], "released")
+            history = db.execute(
+                "SELECT new_status,actor_staff_id,reason FROM online_order_status_history WHERE order_id=1 ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            self.assertEqual((history["new_status"], history["actor_staff_id"], history["reason"]), ("staff_cancelled", 1, "ลูกค้าขอยกเลิก"))
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM audit_logs WHERE action='online_order_staff_cancelled'"
+            ).fetchone()[0], 1)
+
+    def test_cashier_cannot_cancel_after_delivery_has_started(self):
+        with self.app.app_context():
+            db = get_db()
+            cashier_role_id = db.execute("SELECT id FROM roles WHERE code='cashier'").fetchone()[0]
+            db.execute("UPDATE staff SET role_id=? WHERE id=1", (cashier_role_id,))
+            db.execute("UPDATE online_orders SET status='delivering' WHERE id=1")
+            db.commit()
+        page = self.staff.get("/online-orders/1").get_data(as_text=True)
+        self.assertNotIn('id="cancelOrderDialog"', page)
+        response = self.staff.post(
+            "/online-orders/1/cancel", data={"csrf_token": self.csrf, "reason": "ยกเลิกช้าเกินไป"}, follow_redirects=True
+        )
+        self.assertIn("ยกเลิกได้ก่อนออกจัดส่งเท่านั้น", response.get_data(as_text=True))
+        with self.app.app_context():
+            db = get_db()
+            self.assertEqual(db.execute("SELECT status FROM online_orders WHERE id=1").fetchone()[0], "delivering")
+            self.assertEqual(db.execute("SELECT status FROM stock_reservations WHERE order_id=1").fetchone()[0], "active")
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM audit_logs WHERE action='online_order_staff_cancelled'"
+            ).fetchone()[0], 0)
 
     def test_staff_adds_item_and_price_change_requires_customer_confirmation(self):
         self.staff.post("/online-orders/1/accept", data={"csrf_token": self.csrf, "staff_id": "1"})

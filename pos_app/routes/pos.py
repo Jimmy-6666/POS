@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, g, jsonify, render_template, request, send_from_directory
 
-from ..auth import login_required, permission_required, valid_csrf
+from ..auth import login_required, permission_required, valid_csrf, verify_void_authorizer_pin
 from ..database import get_db
 from ..product_identity import ProductIdentityError, canonical_product_uuid
 from ..services.money import change_breakdown
@@ -180,7 +180,7 @@ def receipt(sale_id):
 
 
 @bp.route("/sales/<int:sale_id>/void", methods=("GET", "POST"))
-@permission_required("sales.approve")
+@login_required
 def void_receipt(sale_id):
     db = get_db()
     sale = db.execute(
@@ -188,6 +188,15 @@ def void_receipt(sale_id):
     ).fetchone()
     if not sale:
         return ("ไม่พบใบเสร็จ", 404)
+    is_self_authorizer = g.staff["role_code"] in {"manager", "admin"}
+    if g.staff["role_code"] == "cashier" and sale["cashier_id"] != g.staff["id"]:
+        return ("ไม่พบใบเสร็จ", 404)
+    if g.staff["role_code"] not in {"cashier", "manager", "admin"}:
+        return ("ไม่มีสิทธิ์อนุมัติรายการนี้", 403)
+    managers = [] if is_self_authorizer else db.execute(
+        """SELECT st.id,st.display_name FROM staff st JOIN roles r ON r.id=st.role_id
+           WHERE st.is_active=1 AND r.code='manager' ORDER BY st.display_name"""
+    ).fetchall()
     items = db.execute(
         "SELECT *,quantity-voided_quantity AS remaining_quantity FROM sale_items WHERE sale_id=? ORDER BY id", (sale_id,)
     ).fetchall()
@@ -198,13 +207,29 @@ def void_receipt(sale_id):
         for item in items:
             value = request.form.get(f"quantity_{item['id']}", "0")
             payload["items"].append({"sale_item_id": item["id"], "quantity": value})
+        allowed_roles = {"manager", "admin"} if is_self_authorizer else {"manager"}
+        selected_authorizer = g.staff["id"] if is_self_authorizer else request.form.get("authorizer_id", type=int)
+        authorizer_id, authorization_error = verify_void_authorizer_pin(
+            selected_authorizer, request.form.get("authorizer_pin", ""), allowed_roles
+        )
+        if authorization_error:
+            return render_template(
+                "sale_void.html", sale=sale, items=items, managers=managers,
+                is_self_authorizer=is_self_authorizer, authorization_error=authorization_error,
+            ), 400
         try:
-            void_sale(sale_id, payload, g.staff["id"])
+            void_sale(sale_id, payload, authorizer_id)
             return ("", 302, {"Location": "/sales"})
         except SaleError as exc:
-            return render_template("sale_void.html", sale=sale, items=items, error=str(exc)), 400
+            return render_template(
+                "sale_void.html", sale=sale, items=items, managers=managers,
+                is_self_authorizer=is_self_authorizer, error=str(exc),
+            ), 400
     history = db.execute(
         """SELECT v.*,st.display_name FROM sale_voids v JOIN staff st ON st.id=v.voided_by
            WHERE v.sale_id=? ORDER BY v.created_at DESC""", (sale_id,)
     ).fetchall()
-    return render_template("sale_void.html", sale=sale, items=items, history=history)
+    return render_template(
+        "sale_void.html", sale=sale, items=items, history=history, managers=managers,
+        is_self_authorizer=is_self_authorizer,
+    )

@@ -115,6 +115,54 @@ class OnlinePhase3Tests(unittest.TestCase):
         self.assertIn("line-logo", page)
         self.assertIn("phone-logo", page)
 
+    def test_customer_order_detail_uses_fixed_three_line_items_and_hides_payment_status(self):
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE products SET name_th=? WHERE id=1", ("สินค้าชื่อยาวมากสำหรับทดสอบการตัดข้อความในหน้ารายละเอียดออเดอร์ลูกค้า",))
+            db.commit()
+        public_id = self.submit().get_json()["public_id"]
+        page = self.client.get(f"/order/orders/{public_id}").get_data(as_text=True)
+        self.assertIn('class="customer-order-progress"', page)
+        self.assertIn('class="customer-order-item-name"', page)
+        self.assertIn('class="customer-order-item-quantity">× 2', page)
+        self.assertIn('class="customer-order-item-price">50.00 บาท', page)
+        self.assertNotIn("การชำระเงิน:", page)
+        self.assertNotIn('id="lineLogout"', page)
+        self.assertIn("รอร้าน", page)
+        css = (Path(__file__).resolve().parents[1] / "pos_app" / "static" / "css" / "online-orders.css").read_text(encoding="utf-8")
+        self.assertIn("-webkit-line-clamp:2", css)
+        self.assertIn("grid-template-rows:2.7em 1.5em", css)
+
+    def test_customer_order_refresh_and_cancelled_progress(self):
+        public_id = self.submit().get_json()["public_id"]
+        page = self.client.get(f"/order/orders/{public_id}").get_data(as_text=True)
+        self.assertIn('class="order-status-refresh"', page)
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE online_orders SET status='staff_cancelled' WHERE public_id=?", (public_id,))
+            db.commit()
+        cancelled = self.client.get(f"/order/orders/{public_id}").get_data(as_text=True)
+        self.assertIn('class="customer-order-status cancelled"', cancelled)
+        self.assertIn('class="customer-order-progress no-progress"', cancelled)
+        self.assertIn("ยกเลิก", cancelled)
+        self.assertNotIn('class="order-status-refresh"', cancelled)
+
+    def test_catalog_hides_availability_and_respects_online_negative_stock(self):
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE products SET stock_quantity=0 WHERE id=1")
+            db.commit()
+        unavailable = self.client.get("/order").get_data(as_text=True)
+        self.assertNotIn("พร้อมขาย", unavailable)
+        self.assertIn('class="add-product" disabled>สินค้าหมด</button>', unavailable)
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE settings SET value='1' WHERE key='online_allow_negative_stock'")
+            db.commit()
+        negative_allowed = self.client.get("/order").get_data(as_text=True)
+        self.assertNotIn("สินค้าหมด</button>", negative_allowed)
+        self.assertIn('class="add-product" >เพิ่มลงตะกร้า</button>', negative_allowed)
+
     def test_repeat_uses_current_price(self):
         public_id = self.submit().get_json()["public_id"]
         with self.app.app_context():

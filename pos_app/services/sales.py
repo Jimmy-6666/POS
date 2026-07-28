@@ -176,15 +176,13 @@ def complete_sale(payload, staff_id, *, manage_transaction=True, online_order_id
         raise
 
 
-def void_sale(sale_id, payload, staff_id):
-    """Void selected remaining quantities, restoring stock in one transaction."""
+def void_sale(sale_id, payload, authorizer_id):
+    """Void selected quantities with an active manager/admin authorizer in one transaction."""
     db = get_db()
     sale = db.execute("SELECT * FROM sales WHERE id=?", (sale_id,)).fetchone()
     if not sale or sale["status"] != "completed":
         raise SaleError("ใบเสร็จนี้ไม่สามารถ Void ได้")
     reason = str(payload.get("reason") or "").strip()
-    if not reason:
-        raise SaleError("กรุณาระบุเหตุผลการ Void")
     full = payload.get("void_type") == "full"
     rows = db.execute("SELECT * FROM sale_items WHERE sale_id=? ORDER BY id", (sale_id,)).fetchall()
     requested = {}
@@ -212,11 +210,19 @@ def void_sale(sale_id, payload, staff_id):
         for row in rows
     )
     refund_total = cost_total = subtotal_refund = item_discount_refund = bill_discount_refund = 0
+    audit_items = []
     try:
         db.execute("BEGIN IMMEDIATE")
+        authorizer = db.execute(
+            """SELECT st.id FROM staff st JOIN roles r ON r.id=st.role_id
+               WHERE st.id=? AND st.is_active=1 AND r.code IN ('manager','admin')""",
+            (authorizer_id,),
+        ).fetchone()
+        if not authorizer:
+            raise SaleError("ผู้อนุมัติไม่พร้อมใช้งานหรือไม่มีสิทธิ์อนุมัติ Void")
         cursor = db.execute(
             "INSERT INTO sale_voids (sale_id,void_type,reason,voided_by,created_at) VALUES (?,?,?,?,?)",
-            (sale_id, "full" if full else "partial", reason, staff_id, now),
+            (sale_id, "full" if full else "partial", reason, authorizer_id, now),
         )
         void_id = cursor.lastrowid
         for row, quantity in selected:
@@ -241,8 +247,12 @@ def void_sale(sale_id, payload, staff_id):
                     reference_type,reference_number,staff_id,note,created_at)
                    VALUES (?,'sale_void',?,?,?,?, 'sale_void',?,?,?,?)""",
                 (row["product_id"], product["stock_quantity"], quantity, new_stock, product["cost_satang"],
-                 sale["receipt_number"], staff_id, reason, now),
+                 sale["receipt_number"], authorizer_id, reason, now),
             )
+            audit_items.append({
+                "sale_item_id": row["id"], "product_id": row["product_id"], "product_name": row["product_name"],
+                "quantity": quantity, "unit_price_satang": row["unit_price_satang"], "void_amount_satang": refund,
+            })
             refund_total += refund
             cost_total += cost
             subtotal_refund += subtotal
@@ -263,7 +273,10 @@ def void_sale(sale_id, payload, staff_id):
             )
         db.execute(
             "INSERT INTO audit_logs (staff_id,action,entity_type,entity_id,new_value,created_at) VALUES (?,'void_sale','sale',?,?,?)",
-            (staff_id, str(sale_id), json.dumps({"void_id": void_id, "full": full, "refund": refund_total, "reason": reason}, ensure_ascii=False), now),
+            (authorizer_id, str(sale_id), json.dumps({
+                "void_id": void_id, "cashier_id": sale["cashier_id"], "authorizing_manager_id": authorizer_id,
+                "full": full, "refund": refund_total, "reason": reason, "items": audit_items,
+            }, ensure_ascii=False), now),
         )
         db.commit()
         return void_id, refund_total

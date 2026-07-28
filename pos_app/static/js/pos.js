@@ -5,7 +5,54 @@
   const csrf = app.dataset.csrf;
   const money = (satang) => `${Math.round(satang / 100).toLocaleString('th-TH')} บาท`;
   const escapeHtml = (text) => { const node = document.createElement('div'); node.textContent = text || ''; return node.innerHTML; };
-  let products = [], cart = [], total = 0, paymentMethod = 'cash', activeCategory = '', completing = false, searchTimer;
+  let products = [], cart = [], total = 0, paymentMethod = 'cash', activeCategory = '', completing = false, searchTimer, scannerTimer, scannerStream = [];
+
+  // Keyboard-wedge barcode readers emit physical keyboard codes.  Those codes
+  // remain stable even when Windows/iOS has a Thai keyboard layout selected.
+  const scannerCharacter = (code) => {
+    if (/^Digit\d$/.test(code)) return code.slice(-1);
+    if (/^Numpad\d$/.test(code)) return code.slice(-1);
+    if (/^Key[A-Z]$/.test(code)) return code.slice(-1);
+    return ({ Minus: '-', NumpadSubtract: '-', Slash: '/', NumpadDivide: '/', Period: '.', NumpadDecimal: '.' })[code] || '';
+  };
+  const scannerBlocked = () => ['#paymentDialog', '#saleSuccessDialog', '#heldDialog'].some((selector) => $(selector)?.open);
+  const scannerEntryTarget = (target) => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+  function resetScannerStream() { scannerStream = []; clearTimeout(scannerTimer); }
+  function scannerIsFast() {
+    return scannerStream.length >= 3 && scannerStream.every((entry, index) => index === 0 || entry.at - scannerStream[index - 1].at <= 75);
+  }
+  function restoreScannerTarget(stream) {
+    if (!stream || !scannerEntryTarget(stream.target)) return;
+    stream.target.value = stream.value;
+    if (stream.target.setSelectionRange && stream.selectionStart !== null) stream.target.setSelectionRange(stream.selectionStart, stream.selectionEnd);
+    stream.target.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  function receiveScannerKey(event) {
+    if (scannerBlocked() || event.ctrlKey || event.altKey || event.metaKey || event.isComposing) { resetScannerStream(); return; }
+    if (event.key === 'Enter') {
+      if (!scannerIsFast()) { resetScannerStream(); return; }
+      const value = scannerStream.map((entry) => scannerCharacter(entry.code)).join('');
+      const stream = scannerStream[0];
+      resetScannerStream();
+      if (!value) return;
+      event.preventDefault();
+      event.stopPropagation();
+      restoreScannerTarget(stream);
+      const lookup = $('#productLookup');
+      lookup.value = value;
+      lookup.focus({ preventScroll: true });
+      clearTimeout(searchTimer);
+      addFromLookup();
+      return;
+    }
+    const character = scannerCharacter(event.code);
+    if (!character || event.key.length !== 1) { resetScannerStream(); return; }
+    if (!scannerStream.length) {
+      scannerStream.push({ code: event.code, at: performance.now(), target: event.target, value: scannerEntryTarget(event.target) ? event.target.value : '', selectionStart: scannerEntryTarget(event.target) ? event.target.selectionStart : null, selectionEnd: scannerEntryTarget(event.target) ? event.target.selectionEnd : null });
+    } else scannerStream.push({ code: event.code, at: performance.now() });
+    clearTimeout(scannerTimer);
+    scannerTimer = setTimeout(resetScannerStream, 120);
+  }
 
   async function api(url, options = {}) {
     options.headers = { ...(options.headers || {}), 'X-CSRF-Token': csrf };
@@ -174,6 +221,7 @@
   $('#categoryBoxes').addEventListener('click', (event) => { const button = event.target.closest('[data-category]'); if (!button) return; activeCategory = button.dataset.category; document.querySelectorAll('.category-chip').forEach((chip) => chip.classList.toggle('active', chip === button)); loadProducts(); });
   $('#cartItems').addEventListener('change', (event) => { const index = Number(event.target.dataset.i); if (event.target.dataset.action === 'qty') cart[index].quantity = Math.max(Number(event.target.min), Number(event.target.value) || 1); renderCart(); });
   $('#cartItems').addEventListener('click', (event) => { const button = event.target.closest('[data-action]'); if (!button || button.tagName === 'INPUT') return; const index = Number(button.dataset.i); if (button.dataset.action === 'plus') cart[index].quantity += 1; if (button.dataset.action === 'minus') cart[index].quantity -= 1; if (button.dataset.action === 'remove' || cart[index]?.quantity <= 0) cart.splice(index, 1); renderCart(); });
+  document.addEventListener('keydown', receiveScannerKey, true);
   $('#productLookup').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); clearTimeout(searchTimer); addFromLookup(); } });
   $('#productLookup').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadProducts, 250); });
   $('#addLookupButton').onclick = addFromLookup;

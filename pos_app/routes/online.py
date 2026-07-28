@@ -330,8 +330,11 @@ def catalog():
            ORDER BY c.sort_order,c.name_th"""
     ).fetchall()
     repeat_products = customer_repeat_products(g.customer["id"], settings) if g.customer and not g.customer["is_guest"] else []
-    return render_template("online/catalog.html", settings=settings, products=products, categories=categories,
-                           repeat_products=repeat_products, is_open=ordering_open(settings))
+    return render_template(
+        "online/catalog.html", settings=settings, products=products, categories=categories,
+        repeat_products=repeat_products, is_open=ordering_open(settings),
+        allow_negative_stock=negative_stock_allowed(settings),
+    )
 
 
 @bp.get("/cart")
@@ -341,6 +344,7 @@ def cart():
     return render_template(
         "online/cart.html", repeat_products=repeat_products,
         settings=settings, is_open=ordering_open(settings),
+        allow_negative_stock=negative_stock_allowed(settings),
     )
 
 

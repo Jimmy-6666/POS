@@ -19,6 +19,10 @@ Version 24 adds admin-only encrypted TOTP state, one-way-hashed recovery codes,
 and short-lived pre-session login challenges. No password, TOTP secret, TOTP
 code, or recovery code is recorded in audit data.
 
+Version 25 adds `reconciliations.void_total_satang`. It is an additive closing
+snapshot of the valid, recorded item-void amount during that closing window;
+it does not alter historic sales, refund, or stock records.
+
 SQLite is the single local source of truth. `pos_app/schema.sql` defines new
 databases; `pos_app/database.py` initializes seed data and applies idempotent,
 data-preserving startup migrations. Current seeded `schema_version` is 19.
@@ -54,6 +58,13 @@ data-preserving startup migrations. Current seeded `schema_version` is 19.
 - Foreign keys are enabled per connection; WAL is enabled for LAN concurrency.
 - A completed sale may be settled once through
   `sales.settled_reconciliation_id`.
+- Each successful void links the original sale cashier through `sales.cashier_id`
+  and the authorizing active Manager/Admin through `sale_voids.voided_by`.
+  Item-level records retain product identity, quantity, and the refund amount;
+  the audit payload additionally snapshots the product name and unit price.
+- `reconciliations.void_total_satang` is calculated from `sale_void_items` for
+  the applicable cashier and closing window, then stored with the close so
+  historical reconciliation summaries remain stable.
 - Sessions are stored server-side; only token hashes are persisted.
 - Schema version 17 enables `is_online_available` for all existing products
   once and defaults new products to online. The customer catalogue still

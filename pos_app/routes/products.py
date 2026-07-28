@@ -49,6 +49,13 @@ def save_image(file):
     return filename
 
 
+def submitted_product_image():
+    """Treat a browser camera capture as a normal multipart product image."""
+
+    camera_image = request.files.get("camera_image")
+    return camera_image if camera_image and camera_image.filename else request.files.get("image")
+
+
 def parse_product_form():
     name_th = request.form.get("name_th", "").strip()
     barcode = request.form.get("barcode", "").strip()
@@ -173,7 +180,7 @@ def create():
             opening_stock = float(request.form.get("stock_quantity") or 0)
             if opening_stock < 0 or (not data["allow_decimal_quantity"] and not opening_stock.is_integer()):
                 raise ValueError("จำนวนสต็อกเริ่มต้นไม่ถูกต้อง")
-            data["image_path"] = save_image(request.files.get("image"))
+            data["image_path"] = save_image(submitted_product_image())
             db = get_db()
             db.execute("BEGIN IMMEDIATE")
             cursor = db.execute(
@@ -356,6 +363,18 @@ def prices():
         ))
     category_id = request.args.get("category_id", type=int)
     query = request.args.get("q", "").strip()
+    rows = price_rows(db, category_id, query)
+    categories = db.execute("SELECT id,name_th FROM categories WHERE is_active=1 ORDER BY sort_order,name_th").fetchall()
+    exact_barcode_uuid = next((row["product_uuid"] for row in rows if row["barcode"] == query), None) if query else None
+    return render_template(
+        "product_prices.html", products=rows, categories=categories,
+        selected_category=category_id, query=query, exact_barcode_uuid=exact_barcode_uuid,
+    )
+
+
+def price_rows(db, category_id, query):
+    """Fetch latest receiving costs with the price rows, never per product."""
+
     params = []
     filters = []
     if category_id:
@@ -366,14 +385,23 @@ def prices():
         filters.append("(p.barcode LIKE ? OR p.sku LIKE ? OR p.name_th LIKE ? OR p.name_en LIKE ?)")
         params.extend([term] * 4)
     filter_sql = "".join(f" AND {condition}" for condition in filters)
-    rows = db.execute(
-        f"""SELECT p.product_uuid,p.barcode,p.sku,p.name_th,p.price_satang,c.name_th AS category_name
-            FROM products p JOIN categories c ON c.id=p.category_id
-            WHERE p.is_active=1 {filter_sql} ORDER BY c.name_th,p.name_th""", params
+    return db.execute(
+        f"""WITH latest_receipt_cost AS (
+                SELECT sri.product_id,sri.unit_cost_satang,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY sri.product_id
+                           ORDER BY sr.created_at DESC,sr.id DESC,sri.id DESC
+                       ) AS row_number
+                FROM stock_receipt_items sri
+                JOIN stock_receipts sr ON sr.id=sri.receipt_id
+            )
+            SELECT p.product_uuid,p.barcode,p.sku,p.name_th,p.cost_satang,p.price_satang,
+                   c.name_th AS category_name,
+                   latest_receipt_cost.unit_cost_satang AS latest_cost_satang
+            FROM products p
+            JOIN categories c ON c.id=p.category_id
+            LEFT JOIN latest_receipt_cost
+              ON latest_receipt_cost.product_id=p.id AND latest_receipt_cost.row_number=1
+            WHERE p.is_active=1 {filter_sql}
+            ORDER BY c.name_th,p.name_th""", params
     ).fetchall()
-    categories = db.execute("SELECT id,name_th FROM categories WHERE is_active=1 ORDER BY sort_order,name_th").fetchall()
-    exact_barcode_uuid = next((row["product_uuid"] for row in rows if row["barcode"] == query), None) if query else None
-    return render_template(
-        "product_prices.html", products=rows, categories=categories,
-        selected_category=category_id, query=query, exact_barcode_uuid=exact_barcode_uuid,
-    )

@@ -18,6 +18,19 @@ def utc_bounds(day_text):
     return start.isoformat(timespec="seconds"),(start+timedelta(days=1)).isoformat(timespec="seconds")
 
 
+def void_total_for_window(db, cashier_id, start, end):
+    """Sum only recorded item voids made in the reconciliation window."""
+
+    return db.execute(
+        """SELECT COALESCE(SUM(vi.refund_satang),0)
+           FROM sale_voids v
+           JOIN sales s ON s.id=v.sale_id
+           JOIN sale_void_items vi ON vi.void_id=v.id
+           WHERE s.cashier_id=? AND v.created_at>? AND v.created_at<=?""",
+        (cashier_id, start, end),
+    ).fetchone()[0]
+
+
 @bp.route("/reconciliations",methods=("GET","POST"))
 @permission_required("reconciliation.manage")
 def reconciliations():
@@ -41,6 +54,7 @@ def reconciliations():
     totals={}
     for sale in unsettled_sales:totals[sale["payment_method_code"]]=totals.get(sale["payment_method_code"],0)+sale["total_satang"]
     cash=totals.get("cash",0) or 0;scan=totals.get("scan",0) or 0;transfer=totals.get("transfer",0) or 0;billing=totals.get("billing",0) or 0
+    void_total=void_total_for_window(db,cashier_id,start,end)
     if request.method=="POST":
         if not valid_csrf(request.form.get("csrf_token")):return ("คำขอไม่ถูกต้อง",400)
         opening=baht_to_satang(request.form.get("opening_float"));actual=baht_to_satang(request.form.get("actual_cash"));removals=baht_to_satang(request.form.get("cash_removals"));additions=baht_to_satang(request.form.get("cash_additions"));expected=opening+cash-removals+additions;difference=actual-expected
@@ -52,10 +66,11 @@ def reconciliations():
             locked_totals={}
             for sale in unsettled_sales:locked_totals[sale["payment_method_code"]]=locked_totals.get(sale["payment_method_code"],0)+sale["total_satang"]
             cash=locked_totals.get("cash",0) or 0;scan=locked_totals.get("scan",0) or 0;transfer=locked_totals.get("transfer",0) or 0;billing=locked_totals.get("billing",0) or 0
+            void_total=void_total_for_window(db,cashier_id,start,end)
             expected=opening+cash-removals+additions;difference=actual-expected
             cursor=db.execute("""INSERT INTO reconciliations (cashier_id,business_date,opening_float_satang,cash_sales_satang,scan_sales_satang,
-                transfer_sales_satang,billed_sales_satang,cash_removals_satang,cash_additions_satang,expected_cash_satang,actual_cash_satang,difference_satang,note,closed_by,created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(cashier_id,business_date,opening,cash,scan,transfer,billing,removals,additions,expected,actual,difference,request.form.get("note"),g.staff["id"],datetime.now(timezone.utc).isoformat(timespec="seconds")))
+                transfer_sales_satang,billed_sales_satang,void_total_satang,cash_removals_satang,cash_additions_satang,expected_cash_satang,actual_cash_satang,difference_satang,note,closed_by,created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(cashier_id,business_date,opening,cash,scan,transfer,billing,void_total,removals,additions,expected,actual,difference,request.form.get("note"),g.staff["id"],datetime.now(timezone.utc).isoformat(timespec="seconds")))
             sale_ids=[sale["id"] for sale in unsettled_sales]
             if sale_ids:
                 placeholders=",".join("?" for _ in sale_ids)
@@ -70,6 +85,7 @@ def reconciliations():
         history=db.execute("""SELECT MIN(r.id) id,r.cashier_id,r.business_date,s.display_name,
             SUM(r.cash_sales_satang) cash_sales_satang,SUM(r.scan_sales_satang) scan_sales_satang,
             SUM(r.transfer_sales_satang) transfer_sales_satang,SUM(r.billed_sales_satang) billed_sales_satang,
+            SUM(r.void_total_satang) void_total_satang,
             SUM(r.expected_cash_satang) expected_cash_satang,SUM(r.actual_cash_satang) actual_cash_satang,
             SUM(r.difference_satang) difference_satang,COUNT(*) close_count,
             SUM(CASE WHEN r.verified_by IS NOT NULL THEN 1 ELSE 0 END) verified_count,
@@ -81,7 +97,7 @@ def reconciliations():
             JOIN staff s ON s.id=r.cashier_id LEFT JOIN staff v ON v.id=r.verified_by
             WHERE r.cashier_id=? ORDER BY r.business_date DESC,r.id DESC LIMIT 100""",(g.staff["id"],)).fetchall()
     bill_count=len(unsettled_sales)
-    return render_template("reconciliation.html",business_date=business_date,cashier_id=cashier_id,cashiers=cashiers,cash=cash,scan=scan,transfer=transfer,billing=billing,bill_count=bill_count,history=history,summary_mode=summary_mode)
+    return render_template("reconciliation.html",business_date=business_date,cashier_id=cashier_id,cashiers=cashiers,cash=cash,scan=scan,transfer=transfer,billing=billing,void_total=void_total,bill_count=bill_count,history=history,summary_mode=summary_mode)
 
 
 @bp.get("/billing")

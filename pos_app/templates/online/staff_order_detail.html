@@ -1,13 +1,18 @@
 {% extends "base.html" %}
 {% block title %}{{order.order_number}}{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{{url_for('static',filename='css/online-uat.css',v=6)}}">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{url_for('static',filename='css/online-uat.css',v=6)}}"><link rel="stylesheet" href="{{url_for('static',filename='css/online-staff.css',v=1)}}">{% endblock %}
 {% block content %}
 <div class="page-heading">
   <div>
     <h1>{{order.order_number}}</h1>
     <p>{{order.location_name_snapshot}} {{order.room_reference or ''}} · {{order.contact_phone or order.phone_normalized}} · {{order.contact_name or order.display_name or ''}}</p>
   </div>
-  <a class="primary-button" href="{{url_for('online_staff.index')}}">กลับรายการ</a>
+  <div class="actions order-heading-actions">
+    {% if can_cancel and order.status in ('submitted','accepted','preparing','reconciling','ready') %}
+    <button class="primary-button danger-small cancel-order-button" type="button" onclick="document.querySelector('#cancelOrderDialog').showModal()">ยกเลิกออเดอร์</button>
+    {% endif %}
+    <a class="primary-button" href="{{url_for('online_staff.index')}}">กลับหน้ารายการ</a>
+  </div>
 </div>
 {% set steps={'submitted':1,'accepted':2,'preparing':3,'reconciling':4,'ready':5,'delivering':6,'completed':7} %}
 <div class="staff-order-progress">
@@ -52,6 +57,24 @@
       <textarea name="reason" required>ลูกค้าขอเพิ่มสินค้า กรุณายืนยันรายการและยอดราคาใหม่</textarea>
     </label>
     <button class="primary-button">เพิ่มเข้ารายการลูกค้า</button>
+  </form>
+</dialog>
+{% endif %}
+
+{% if can_cancel and order.status in ('submitted','accepted','preparing','reconciling','ready') %}
+<dialog id="cancelOrderDialog" class="held-dialog cancel-order-dialog">
+  <form method="post" action="{{url_for('online_staff.staff_cancel',order_id=order.id)}}">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <button class="dialog-close" type="button" onclick="this.closest('dialog').close()">×</button>
+    <h2>ยืนยันยกเลิกออเดอร์</h2>
+    <p class="muted">การยกเลิกจะคืนจำนวนสินค้าที่จองไว้ และไม่สามารถย้อนกลับได้</p>
+    <label>เหตุผลในการยกเลิก
+      <textarea name="reason" required minlength="1" placeholder="ระบุเหตุผลเพื่อบันทึกในประวัติออเดอร์"></textarea>
+    </label>
+    <div class="confirm-actions">
+      <button class="secondary-button" type="button" onclick="this.closest('dialog').close()">กลับ</button>
+      <button class="danger-small" type="submit">ยืนยันยกเลิกออเดอร์</button>
+    </div>
   </form>
 </dialog>
 {% endif %}

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-echo Installing Saengngam Minimart POS 2.0 Production...
+echo Installing Saengngam Minimart POS 2.4 Production...
 where python >nul 2>&1
 if errorlevel 1 goto python_missing
 if not exist ".venv\Scripts\python.exe" python -m venv .venv

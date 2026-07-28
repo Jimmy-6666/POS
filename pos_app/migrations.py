@@ -178,12 +178,21 @@ def _add_admin_two_factor(db: sqlite3.Connection) -> None:
     )
 
 
+def _add_reconciliation_void_total(db: sqlite3.Connection) -> None:
+    columns = {row[1] for row in db.execute("PRAGMA table_info(reconciliations)")}
+    if "void_total_satang" not in columns:
+        db.execute(
+            "ALTER TABLE reconciliations ADD COLUMN void_total_satang INTEGER NOT NULL DEFAULT 0"
+        )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(20, "enable configured negative stock", _enable_configured_negative_stock),
     Migration(21, "add LINE customer identity", _add_line_customer_identity),
     Migration(22, "add customer lifecycle fields", _add_customer_lifecycle_fields),
     Migration(23, "add immutable product UUIDs", _add_product_uuid),
     Migration(24, "add admin TOTP two-factor authentication", _add_admin_two_factor),
+    Migration(25, "add reconciliation void total", _add_reconciliation_void_total),
 )
 
 

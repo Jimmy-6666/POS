@@ -2,7 +2,7 @@
 {% block content %}
 <div id="posApp" data-csrf="{{csrf_token}}" class="pos-layout-v2">
   <section class="catalog-v2" aria-label="เลือกสินค้า">
-    <header class="register-head"><div><span class="eyebrow">จุดขายสินค้า</span><h1>ขายสินค้า</h1></div><div class="register-shortcuts"><a class="text-button" href="{{url_for('online_staff.index')}}">☰ จัดการออเดอร์ออนไลน์</a><button id="heldButton" class="text-button" type="button">▤ บิลที่พักไว้</button></div></header>
+    <header class="register-head"><div><span class="eyebrow">จุดขายสินค้า</span><h1>ขายสินค้า</h1></div><div class="register-shortcuts"><a id="onlineOrderShortcut" class="text-button online-order-shortcut" href="{{url_for('online_staff.index')}}">☰ จัดการออเดอร์ออนไลน์ <b id="posOnlineOrderBadge" class="online-order-badge" aria-label="ออเดอร์ใหม่" aria-live="polite" hidden>0</b></a><button id="heldButton" class="text-button" type="button">▤ บิลที่พักไว้</button></div></header>
     <div class="lookup-bar"><span aria-hidden="true">⌕</span><label class="sr-only" for="productLookup">ค้นหาหรือสแกนสินค้า</label><input id="productLookup" autocomplete="off" placeholder="สแกนบาร์โค้ด หรือค้นหาชื่อสินค้า / SKU" autofocus><button id="clearLookup" type="button" aria-label="ล้างช่องค้นหา">×</button><button id="addLookupButton" class="primary-button" type="button">เพิ่ม</button></div>
     <div class="category-rail" id="categoryBoxes" aria-label="หมวดสินค้า"><button class="category-chip active" data-category="">ทั้งหมด</button>{% for row in categories %}<button class="category-chip" data-category="{{row.id}}">{{row.name_th}}</button>{% endfor %}</div>
     <div class="catalog-status"><div id="posMessage" class="pos-message" role="status" aria-live="polite"></div><span id="resultCount"></span></div>
@@ -34,5 +34,5 @@
 
 <dialog id="saleSuccessDialog" class="success-dialog success-v2" aria-labelledby="successTitle"><div class="success-mark">✓</div><span id="printStatus" class="eyebrow">บันทึกการขายแล้ว</span><h2 id="successTitle">ชำระเงินสำเร็จ</h2><strong id="successReceipt"></strong><div id="successItems" class="success-items"></div><div class="success-review"><span>ยอดรวม</span><strong id="successTotal"></strong><span>เงินทอน</span><strong id="successChange"></strong></div><div class="success-actions"><a id="manualReceiptLink" class="secondary-button" target="_blank" rel="noopener" hidden>เปิดใบเสร็จเพื่อพิมพ์</a><button id="closeSuccessButton" class="primary-button" type="button">ขายรายการถัดไป</button></div></dialog>
 <dialog id="heldDialog" class="held-dialog"><form method="dialog"><button class="dialog-close" value="cancel">×</button></form><h2>บิลที่พักไว้</h2><div id="heldList"></div></dialog>
-<script src="{{url_for('static',filename='js/pos.js',v=26)}}"></script>
+<script src="{{url_for('static',filename='js/pos.js',v=27)}}"></script>
 {% endblock %}

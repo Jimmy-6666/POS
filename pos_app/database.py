@@ -58,7 +58,7 @@ ROLE_PERMISSIONS = {
                 "online_orders.view", "online_orders.accept", "online_orders.prepare", "online_orders.reconcile",
                 "online_orders.assign", "online_orders.deliver", "online_orders.cancel", "online_customers.manage", "online_settings.manage"},
     "cashier": {"pos.use", "stock_count.participate", "reconciliation.manage", "online_orders.view", "online_orders.accept",
-                "online_orders.prepare", "online_orders.reconcile", "online_orders.assign", "online_orders.deliver"},
+                "online_orders.prepare", "online_orders.reconcile", "online_orders.assign", "online_orders.deliver", "online_orders.cancel"},
 }
 
 

@@ -15,6 +15,7 @@ from ..services.sales import SaleError, negative_stock_allowed
 
 bp = Blueprint("online_staff", __name__, url_prefix="/online-orders")
 FINAL = {"completed", "customer_cancelled", "staff_cancelled", "rejected", "expired"}
+CANCELLABLE_BEFORE_DELIVERY = {"submitted", "accepted", "preparing", "reconciling", "ready"}
 
 
 def now():
@@ -134,11 +135,18 @@ def detail(order_id):
         and item["current_price_satang"] != item["customer_confirmed_unit_price_satang"]
         for item in items if not item["is_removed"]
     )
+    can_cancel = bool(db.execute(
+        """SELECT 1 FROM role_permissions rp JOIN roles r ON r.id=rp.role_id
+           JOIN permissions p ON p.id=rp.permission_id
+           WHERE r.code=? AND p.code='online_orders.cancel'""",
+        (g.staff["role_code"],),
+    ).fetchone())
     return render_template(
         "online/staff_order_detail.html", order=order, items=items, history=history,
         staff_rows=staff, product_rows=product_rows,
         confirmed_subtotal=confirmed_subtotal,
         order_price_changed=order["subtotal_satang"] != confirmed_subtotal or has_catalog_price_change,
+        can_cancel=can_cancel,
         print_status=request.args.get("print_status"),
     )
 
@@ -418,7 +426,12 @@ def reconcile(order_id):
     order = load_order(order_id)
     if not order or order["status"] not in {"reconciling", "ready"}:
         return ("ออเดอร์ยังไม่พร้อมตรวจสินค้า", 400)
-    items = get_db().execute("SELECT * FROM online_order_items WHERE order_id=? AND is_removed=0 ORDER BY id", (order_id,)).fetchall()
+    items = get_db().execute(
+        """SELECT * FROM online_order_items WHERE order_id=? AND is_removed=0
+           ORDER BY CASE WHEN ABS(reconciled_quantity-ordered_quantity)<=0.000001 AND missing_flag=0 THEN 1 ELSE 0 END,
+                    id""",
+        (order_id,),
+    ).fetchall()
     events = get_db().execute(
         """SELECT e.*,st.display_name,oi.product_name_snapshot FROM order_reconciliation_events e
            JOIN staff st ON st.id=e.staff_id JOIN online_order_items oi ON oi.id=e.order_item_id
@@ -592,17 +605,29 @@ def staff_cancel(order_id):
         return ("คำขอไม่ถูกต้อง", 400)
     reason = request.form.get("reason", "").strip()
     order = load_order(order_id)
-    if not reason or not order or order["status"] in FINAL:
-        flash("กรุณาระบุเหตุผลหรือออเดอร์สิ้นสุดแล้ว", "error")
+    if not reason or not order or order["status"] not in CANCELLABLE_BEFORE_DELIVERY:
+        flash("กรุณาระบุเหตุผล และยกเลิกได้ก่อนออกจัดส่งเท่านั้น", "error")
     else:
         db = get_db(); db.execute("BEGIN IMMEDIATE")
-        release_reservations(order_id, "staff_cancelled")
-        payment_status = "refund_pending" if order["payment_status"] == "confirmed" else order["payment_status"]
-        db.execute("""UPDATE online_orders SET status='staff_cancelled',payment_status=?,cancellation_reason=?,
-                      cancelled_at=?,updated_at=? WHERE id=?""", (payment_status, reason, now(), now(), order_id))
-        record_history(order_id, order["status"], "staff_cancelled", "staff", staff_id=g.staff["id"], reason=reason)
-        audit_order("online_order_staff_cancelled", order_id, staff_id=g.staff["id"], detail={"reason": reason})
-        db.commit()
+        current_order = load_order(order_id)
+        if not current_order or current_order["status"] not in CANCELLABLE_BEFORE_DELIVERY:
+            db.rollback()
+            flash("ออเดอร์ออกจัดส่งหรือสิ้นสุดแล้ว จึงไม่สามารถยกเลิกได้", "error")
+        else:
+            release_reservations(order_id, "staff_cancelled")
+            payment_status = "refund_pending" if current_order["payment_status"] == "confirmed" else current_order["payment_status"]
+            cursor = db.execute(
+                """UPDATE online_orders SET status='staff_cancelled',payment_status=?,cancellation_reason=?,
+                   cancelled_at=?,updated_at=? WHERE id=? AND status IN ('submitted','accepted','preparing','reconciling','ready')""",
+                (payment_status, reason, now(), now(), order_id),
+            )
+            if cursor.rowcount != 1:
+                db.rollback()
+                flash("ออเดอร์นี้ไม่สามารถยกเลิกได้", "error")
+            else:
+                record_history(order_id, current_order["status"], "staff_cancelled", "staff", staff_id=g.staff["id"], reason=reason)
+                audit_order("online_order_staff_cancelled", order_id, staff_id=g.staff["id"], detail={"reason": reason})
+                db.commit()
     return redirect(url_for("online_staff.detail", order_id=order_id))
 
 
