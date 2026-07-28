@@ -22,7 +22,7 @@ and detailed verification remain in their linked version documents and tests.
 | Version 2.4 product, POS, reconciliation, and online-order updates | Released 2026-07-28 | V2.4 plus online phases, 121-test full suite |
 | Version 2.4.1 product-form hotfix | Released 2026-07-28 | direct price, product-image layout/current preview, touch camera control |
 | Version 2.4.2 online-alert update | Released 2026-07-28 | list badge, scoped sound/polling, sidebar gesture retry, auto-refresh |
-| Release 3.0 transaction and Sprint 3 security hardening | 148 passed | `RELEASE_3.0.md` |
+| Release 3.0 customer-delivery hardening | Approved; 151 passed, 1 capability skip | `RELEASE_3.0.md`, `VERSION_3.0.0.md` |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6 |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -45,6 +45,17 @@ and detailed verification remain in their linked version documents and tests.
 
 - Online-order list badge, scoped audio/polling, sidebar gesture retry, and
   new-order refresh; no migration. Full suite: 122 passed; UAT/LIFF verified.
+
+## Version 3.0.0 release baseline — 2026-07-28
+
+- Transaction, public-host security, production verification, recovery bundle,
+  and clean committed-source packaging controls are complete; no new schema
+  migration. Full suite: 151 passed, with one symlink test skipped because the
+  Windows test filesystem did not permit link creation.
+- Isolated Windows runtime acceptance passed health, runtime Version 3.0.0,
+  recovery-bundle verification, empty-target restore, and product-image
+  recovery. Physical peripherals and live Cloudflare/LINE/provider checks
+  remain customer-site operational gates.
 
 ## Approved online sprint 1 verification — 2026-07-28
 

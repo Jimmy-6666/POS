@@ -1,6 +1,6 @@
-# Thai Minishop POS — Version 2.4.2 next-session hands-on prompt
+# Thai Minishop POS — Version 3.0.0 next-session hands-on prompt
 
-Continue from the published Version 2.4.2 baseline in this workspace. Work
+Continue from the published Version 3.0.0 baseline in this workspace. Work
 hands-on only after the owner gives a specific approved fix or sprint. Do not
 start a new sprint or broaden product scope on your own.
 
@@ -11,7 +11,7 @@ start a new sprint or broaden product scope on your own.
    `DESIGN_RULES.md`.
 2. Confirm the branch/tag and run `git status --short`. Preserve all existing
    data and uncommitted work; never reset, clean, or overwrite it.
-3. Read `VERSION_2.4.2.md` and the newest `CHANGELOG.md` section before changing
+3. Read `VERSION_3.0.0.md` and the newest `CHANGELOG.md` section before changing
    release behavior.
 4. If the task touches customer ordering, verify UAT at
    `http://127.0.0.1:8001/health` and check LIFF configuration through
@@ -23,7 +23,7 @@ start a new sprint or broaden product scope on your own.
 6. Run focused tests for every change. Run the full suite for shared logic,
    schema, auth, sales, inventory, reconciliation, backup, or release work.
 
-## Version 2.4.2 facts
+## Version 3.0.0 facts
 
 - UAT runs on port 8001; the desktop release defaults to port 8002.
 - LINE LIFF customer authentication is active at
@@ -50,9 +50,8 @@ start a new sprint or broaden product scope on your own.
   production approval.
 - Daily backup time is set on the Backup page and runs only while the POS is
   open during that minute.
-- Version 2.4.2 verification baseline: 122 tests passed on 2026-07-28. Rerun
-  rather than carrying this count forward.
-  rather than carrying this count forward.
+- Version 3.0.0 verification baseline is recorded in `RELEASE_3.0.md`. Rerun
+  rather than carrying its count forward.
 
 ## Safe task process
 

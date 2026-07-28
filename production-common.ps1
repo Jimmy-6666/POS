@@ -42,6 +42,7 @@ function Get-ProductionContext {
         InstallRoot = $resolvedInstallRoot
         RuntimeRoot = $resolvedRuntimeRoot
         Port = $Port
+        AppVersion = "3.0.0"
         Python = Join-Path $resolvedInstallRoot ".venv\Scripts\python.exe"
         LockFile = Join-Path $resolvedInstallRoot "requirements.lock.txt"
         StartScript = Join-Path $resolvedInstallRoot "start-production.ps1"
@@ -60,6 +61,7 @@ function Set-ProductionEnvironment {
     $env:POS_PORT = [string]$Context.Port
     $env:POS_BIND_HOST = "0.0.0.0"
     $env:POS_PRODUCTION = "1"
+    $env:POS_APP_VERSION = $Context.AppVersion
 }
 
 function Invoke-Checked {

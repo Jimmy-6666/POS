@@ -181,6 +181,23 @@ def _config_snapshot(runtime_config, paths: object, schema_version: str, created
     }
 
 
+def _copy_product_images(source: Path, destination: Path) -> None:
+    """Copy regular product-image files without following filesystem links."""
+
+    if not source.exists():
+        return
+    for path in sorted(source.rglob("*")):
+        if path.is_symlink():
+            raise BackupError(f"Product-image links are not allowed in a recovery bundle: {path}")
+        if not path.is_file():
+            continue
+        relative = path.relative_to(source)
+        _safe_zip_name(relative.as_posix())
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, target)
+
+
 def verify_backup(archive: str | os.PathLike[str], *, _allow_staging: bool = False) -> dict[str, object]:
     """Verify a published backup and return its manifest."""
 
@@ -225,13 +242,21 @@ def verify_backup(archive: str | os.PathLike[str], *, _allow_staging: bool = Fal
     return {**manifest, "archive_sha256": sha256_file(archive_path), "archive": str(archive_path)}
 
 
-def create_local_backup(runtime_paths, runtime_config, *, retention: int = 7, now: datetime | None = None) -> BackupArtifact:
+def create_local_backup(
+    runtime_paths,
+    runtime_config,
+    *,
+    retention: int = 7,
+    now: datetime | None = None,
+    include_product_images: bool = False,
+) -> BackupArtifact:
     """Create and verify one local backup without blocking the Flask app."""
 
     paths = runtime_paths
     paths.create_directories()
     created = _now_utc(now)
-    backup_id = "backup-" + created.strftime("%Y%m%dT%H%M%SZ")
+    prefix = "recovery" if include_product_images else "backup"
+    backup_id = prefix + "-" + created.strftime("%Y%m%dT%H%M%SZ")
     if (paths.backups / f"{backup_id}.zip").exists():
         backup_id += "-" + uuid.uuid4().hex[:8]
     final_archive = paths.backups / f"{backup_id}.zip"
@@ -253,6 +278,8 @@ def create_local_backup(runtime_paths, runtime_config, *, retention: int = 7, no
                 config_path = root / "config" / "recovery-config.json"
                 config_path.parent.mkdir(parents=True, exist_ok=True)
                 _write_json(config_path, config_snapshot)
+                if include_product_images:
+                    _copy_product_images(paths.product_images, root / "uploads" / "products")
                 entries = _manifest_files(root)
                 manifest: dict[str, object] = {
                     "status": "complete",
@@ -265,7 +292,8 @@ def create_local_backup(runtime_paths, runtime_config, *, retention: int = 7, no
                     "store_id": getattr(runtime_config, "store_id", "") or "unassigned",
                     "files": entries,
                     "file_count": len(entries),
-                    "product_images_separate_sync": True,
+                    "product_images_separate_sync": not include_product_images,
+                    "recovery_bundle": include_product_images,
                 }
                 _write_json(root / "manifest.json", manifest)
                 checksums = [f"{sha256_file(path)}  {path.relative_to(root).as_posix()}" for path in sorted(root.rglob("*")) if path.is_file()]
@@ -284,6 +312,23 @@ def create_local_backup(runtime_paths, runtime_config, *, retention: int = 7, no
         prune_local_backups(paths.backups, retention)
         _record_backup_status(paths, "complete", {"backup_id": backup_id, "archive": final_archive.name, "archive_sha256": verified["archive_sha256"]})
     return BackupArtifact(final_archive, backup_id, dict(verified), str(verified["archive_sha256"]))
+
+
+def create_local_recovery_bundle(
+    runtime_paths,
+    runtime_config,
+    *,
+    now: datetime | None = None,
+) -> BackupArtifact:
+    """Create a verified database-and-product-image bundle for offline recovery."""
+
+    return create_local_backup(
+        runtime_paths,
+        runtime_config,
+        retention=7,
+        now=now,
+        include_product_images=True,
+    )
 
 
 def list_verified_backups(backups: Path) -> list[dict[str, object]]:

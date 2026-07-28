@@ -1,6 +1,6 @@
 # Release 3.0
 
-Status: in development on `codex/release-3.0`.
+Status: approved customer-delivery source release on `codex/release-3.0`.
 
 Release 3.0 is the final customer-delivery hardening release. It preserves the
 accepted offline-first Windows/LAN product contract and produces a clean
@@ -61,8 +61,32 @@ installer before customer-site VPS, LINE LIFF, and Cloudflare configuration.
   transition, and the fresh schema.
 - Full suite: 148 passed in 60.401 seconds on Flask 3.1.3.
 
-## Remaining release gates
+## Sprints 4–6 — release engineering
 
-- Sprint 4: installer, production verification, packaging, and backup state.
-- Sprint 5: version 3.0.0 identity and clean-machine Windows acceptance.
-- Sprint 6: final audit, merge, tag, checksums, and customer delivery artifact.
+- Production verification now validates the configured in-process backup
+  schedule and fails if the obsolete Windows backup task still exists.
+- Routine database-only backup and incremental VPS image sync remain intact.
+  A separate full recovery bundle provides verified database plus product
+  images for offline recovery and customer handoff.
+- Runtime, desktop, UAT, and mobile badge identity is Version 3.0.0.
+- The release builder archives a committed Git ref only, rejects runtime data,
+  uploads, credentials, private-key formats, and virtual environments, then
+  emits SHA-256 and a JSON manifest.
+- Isolated Windows acceptance passed live health/database readiness, Version
+  3.0.0 runtime validation, recovery-bundle verification, empty-target restore,
+  and product-image recovery.
+- Flask 3.1.3 `pip check` passed. The full suite passed 151 tests in 57.099
+  seconds; one symlink rejection test was skipped because the test filesystem
+  did not permit creating a link.
+
+## Customer-site operational gates
+
+- Run the elevated installer/Task Scheduler/firewall checks on the target
+  customer machine and confirm restart behavior.
+- Test the physical barcode scanner and receipt printer.
+- Copy a full recovery bundle to owner-controlled off-machine storage and
+  retain a restore-drill record.
+- Complete live Cloudflare Access, Admin TOTP, LINE LIFF, DNS/tunnel, and real
+  phone acceptance before enabling public traffic.
+- Obtain owner approval for production barcodes, prices, costs, stock, staff,
+  and payment details; UAT mock catalogue values are not production data.

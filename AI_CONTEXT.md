@@ -16,7 +16,7 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- Release 2.4.2 desktop launcher uses port `8002` and `runtime/`.
+- Release 3.0.0 desktop launcher uses port `8002` and `runtime/`.
 - UAT launcher uses port `8001` and `uat_runtime/`.
 - Legacy launcher uses port `8000` and the repository root runtime.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
@@ -44,14 +44,16 @@ production-ready without barcode and price approval.
 
 ## Current health
 
-On 2026-07-28, `python -m unittest discover -s tests -q` completed 148 tests
-successfully, including customer contact UI, delivery payment-method confirmation,
+On 2026-07-28, `python -m unittest discover -s tests -v` completed 151 tests
+successfully with one filesystem-capability skip, including customer contact UI, delivery payment-method confirmation,
 receipt-only print-agent behavior, stock-sheet print-preview isolation, and the
 online ordering lifecycle. Release 3 transaction regressions cover concurrent
 checkout, void, expiry, and idempotent order submission. Sprint 3 security
 regressions cover pre-login CSRF, localhost-only staff access, remote Admin
 host isolation and 2FA, signed-update reauthentication, and structured support
-redaction. Flask 3.1.3 is installed and the dependency set passes `pip check`.
+redaction. Release 3 recovery and runtime regressions cover the full
+database-and-product-image bundle and in-process schedule validation. Flask
+3.1.3 is installed and the dependency set passes `pip check`.
 LINE LIFF verifies customer identity before the POS
 creates a customer session and delivery profile. Staff can add or reduce order items before picking;
 price/total changes retain the customer's confirmed price snapshot and show a
@@ -82,7 +84,7 @@ No new product scope should be invented. Follow the user's next feature
 priority. If catalog deployment is selected, first complete owner approval of
 selling prices and real barcodes and make the import input path portable.
 
-Version 2.4.2 is the current published baseline. It retains Version 2.4's
+Version 3.0.0 is the current customer-delivery baseline. It retains Version 2.4's
 product camera capture, Manager-authorized POS item voids, reconciliation void
 totals, current/latest cost pricing, customer/staff online-order workflow
 improvements, and submitted-order sound/badge alerts. It also restores direct
@@ -103,4 +105,5 @@ staged update to a Windows runner only after manifest hash plus pinned
 Authenticode signer verification. It has no automatic download, private key,
 or remote-control channel; see `docs/SIGNED_UPDATE_AND_SUPPORT.md`.
 The Backup page records the latest VPS result and provides an in-process daily
-Bangkok-time schedule; it runs only while the POS is open.
+Bangkok-time schedule; it runs only while the POS is open. A separate verified
+full recovery bundle includes current product images for handoff and drills.

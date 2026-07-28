@@ -47,11 +47,16 @@ stop the POS and sales continue if a VPS is offline.
 
 For a manual local backup:
 
-    .\backup-production.ps1
+    .\backup-production.ps1 -LocalOnly
 
 For a manual backup plus VPS upload and incremental file sync:
 
     .\backup-production.ps1
+
+For a verified database-and-product-image bundle before handoff or a recovery
+drill:
+
+    .\backup-production.ps1 -FullRecoveryBundle
 
 The remote backup command requires `POS_VPS_*` settings only when remote sync is wanted.
 Without them, local backup remains available and the POS itself remains
@@ -115,6 +120,7 @@ accounts must not be enrolled for remote access and remain LAN-only.
 For customer ordering through LINE LIFF, follow `docs/LINE_LIFF_SETUP.md`
 before enabling the public Rich Menu link. It records the required Machine
 environment values, HTTPS/Cloudflare trust condition, and live acceptance test.
+Complete and retain `docs/CUSTOMER_ACCEPTANCE_3.0.md` before store go-live.
 
 ## Signed update and support
 

@@ -1,5 +1,19 @@
 # Unreleased — Release 3.0
 
+## Sprints 4–6 — customer delivery
+
+- Corrected production verification to require the in-process backup schedule
+  and reject the obsolete Windows backup task that install/repair removes.
+- Added a separate verified full recovery bundle containing the SQLite
+  snapshot and regular product-image files; scheduled daily archives and
+  incremental VPS image sync are unchanged.
+- Set runtime, launcher, UAT launcher, and mobile badge identity to 3.0.0.
+- Added committed-ref packaging with runtime/credential rejection, SHA-256,
+  JSON manifest, and a customer-site acceptance checklist.
+- Verification: `pip check` passed; 21 focused tests passed with one
+  filesystem-capability skip; isolated Windows health/backup/restore/image
+  acceptance passed; full suite passed 151 tests with the same skip.
+
 ## Sprints 1–2 — transaction correctness
 
 - Moved authoritative POS cart, stock, reservation, price, cost, and payment

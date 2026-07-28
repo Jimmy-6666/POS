@@ -11,7 +11,7 @@ interrupt sales; inspect the local backup directory and Backup page status.
 
 ## Manual commands
 
-    .\backup-production.ps1
+    .\backup-production.ps1 -LocalOnly
     .\sync-production.ps1
     .\.venv\Scripts\python.exe -m pos_app.backup_cli verify .\runtime\backups\backup-YYYYMMDDT020000Z.zip
 
@@ -30,6 +30,17 @@ after reviewing their privacy and recovery need.
 Never sync: databases, WAL/SHM files, secrets, private keys, logs, browser
 profiles, virtual environments, caches, incomplete uploads, UAT data, source
 imports, or generated development artifacts.
+
+## Full recovery bundle
+
+Before customer handoff, upgrade, or an offline recovery drill, create a
+verified bundle containing the SQLite snapshot and current product images:
+
+    .\backup-production.ps1 -FullRecoveryBundle
+
+Copy the resulting `recovery-*.zip` and its recorded SHA-256 to
+owner-controlled off-machine storage. This command is intentionally separate
+from the smaller daily database backup and incremental VPS image sync.
 
 ## Recovery drill
 

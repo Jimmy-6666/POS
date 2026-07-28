@@ -12,7 +12,14 @@ from zipfile import ZipFile
 
 from pos_app import backup_cli
 from pos_app.runtime_paths import RuntimePaths
-from pos_app.services.backup import BackupBusyError, BackupError, create_local_backup, restore_backup_to_runtime, verify_backup
+from pos_app.services.backup import (
+    BackupBusyError,
+    BackupError,
+    create_local_backup,
+    create_local_recovery_bundle,
+    restore_backup_to_runtime,
+    verify_backup,
+)
 from pos_app.services.file_sync import sync_files
 from pos_app.services.remote_backup import RemoteBackupConfig, SftpTransport
 
@@ -120,6 +127,27 @@ class Sprint2MaintenanceTests(unittest.TestCase):
         self.assertFalse((restored / "uploads" / "products" / "coffee.png").exists())
         with self.assertRaises(BackupError):
             restore_backup_to_runtime(artifact.path, target)
+
+    def test_full_recovery_bundle_restores_product_images(self):
+        artifact = create_local_recovery_bundle(self.paths, self.config)
+        verified = verify_backup(artifact.path)
+        self.assertTrue(verified["recovery_bundle"])
+        self.assertFalse(verified["product_images_separate_sync"])
+        target = Path(self.folder.name) / "full-recovery-runtime"
+        restored = restore_backup_to_runtime(artifact.path, target)
+        self.assertEqual(
+            (restored / "uploads" / "products" / "coffee.png").read_bytes(),
+            b"image-v1",
+        )
+
+    def test_recovery_bundle_rejects_product_image_links(self):
+        link = self.paths.product_images / "linked.png"
+        try:
+            link.symlink_to(self.paths.product_images / "coffee.png")
+        except (OSError, NotImplementedError):
+            self.skipTest("Filesystem links are unavailable.")
+        with self.assertRaises(BackupError):
+            create_local_recovery_bundle(self.paths, self.config)
 
     def test_sftp_upload_uses_temp_name_then_atomic_rename(self):
         calls = []

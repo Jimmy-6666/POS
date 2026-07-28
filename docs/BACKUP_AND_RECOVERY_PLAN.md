@@ -32,6 +32,18 @@ The default local retention is seven verified archives. Set
 `POS_BACKUP_RETENTION` to change it. Invalid or incomplete archives are never
 counted as restorable and are not silently deleted.
 
+## Full recovery bundle
+
+`backup-production.ps1 -FullRecoveryBundle` creates a separately named
+`recovery-<UTC timestamp>.zip`. It uses the same verified SQLite snapshot and
+manifest/checksum validation, and additionally includes regular files from
+`uploads/products`. Filesystem links are rejected. The bundle is for handoff,
+upgrade protection, and recovery drills; it does not change the daily
+database-only schedule or its retention behavior.
+
+Copy the bundle to owner-controlled off-machine storage. A bundle left only on
+the POS disk does not protect against disk loss.
+
 ## VPS transfer
 
 When `POS_VPS_HOST` and the required key/known-host files are configured, the

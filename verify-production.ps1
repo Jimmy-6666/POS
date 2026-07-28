@@ -16,10 +16,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Runtime validation failed: $json" }
     $report = $json | ConvertFrom-Json
     if (-not $report.ok) { throw "Runtime validation failed." }
+    if ($report.app_version -ne $context.AppVersion) {
+        throw "Runtime version mismatch: expected $($context.AppVersion), found $($report.app_version)."
+    }
     $task = Get-ScheduledTask -TaskName $context.TaskName -ErrorAction SilentlyContinue
     if (-not $task) { throw "Automatic startup task is missing." }
     $backupTask = Get-ScheduledTask -TaskName $context.BackupTaskName -ErrorAction SilentlyContinue
-    if (-not $backupTask) { throw "Automatic backup task is missing." }
+    if ($backupTask) { throw "Legacy backup task is still registered and may create duplicate backups." }
+    if (-not $report.checks.backup_schedule.ok) { throw "In-process backup schedule is invalid." }
     if (-not (Test-ProductionFirewall $context)) { throw "Private-LAN firewall rule is missing or unsafe." }
     if (-not (Test-ProductionHealth $context -Attempts 3)) { throw "Health endpoint is not ready." }
     Write-Output "Production verification passed."

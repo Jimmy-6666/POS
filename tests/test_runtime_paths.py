@@ -71,6 +71,24 @@ class RuntimePathTests(unittest.TestCase):
         self.assertEqual(report["repairable"], [])
         self.assertNotIn("existing-secret", json.dumps(report))
 
+    def test_runtime_validation_rejects_invalid_backup_schedule(self):
+        root = Path(self.folder.name) / "invalid-schedule"
+        paths = RuntimePaths.from_root(root)
+        paths.create_directories()
+        paths.ensure_secret_key()
+        connection = sqlite3.connect(paths.database)
+        connection.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.executemany(
+            "INSERT INTO settings(key,value) VALUES (?,?)",
+            [("backup_schedule_enabled", "1"), ("backup_schedule_time", "25:00")],
+        )
+        connection.commit()
+        connection.close()
+        config = RuntimeConfig(paths, "127.0.0.1", 8000, 0, "store-1", "3.0.0", True, None)
+        report = validate_runtime(config)
+        self.assertFalse(report["ok"])
+        self.assertFalse(report["checks"]["backup_schedule"]["ok"])
+
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
 

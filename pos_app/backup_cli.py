@@ -9,7 +9,14 @@ import tempfile
 from pathlib import Path
 
 from .runtime_paths import load_runtime_config
-from .services.backup import BackupError, create_local_backup, record_remote_backup_status, restore_backup_to_runtime, verify_backup
+from .services.backup import (
+    BackupError,
+    create_local_backup,
+    create_local_recovery_bundle,
+    record_remote_backup_status,
+    restore_backup_to_runtime,
+    verify_backup,
+)
 from .services.file_sync import sync_files
 from .services.remote_backup import SftpTransport, load_remote_config
 
@@ -32,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Saengngam POS maintenance backup tool")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("backup")
+    sub.add_parser("recovery-bundle")
     sub.add_parser("backup-and-sync")
     sub.add_parser("sync")
     verify_parser = sub.add_parser("verify")
@@ -53,6 +61,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "backup":
             artifact = create_local_backup(config.paths, config, retention=retention)
             print(json.dumps({"status": "complete", "backup": str(artifact.path), "sha256": artifact.archive_sha256}, ensure_ascii=False))
+            return 0
+        if args.command == "recovery-bundle":
+            artifact = create_local_recovery_bundle(config.paths, config)
+            print(json.dumps({
+                "status": "complete",
+                "recovery_bundle": str(artifact.path),
+                "sha256": artifact.archive_sha256,
+            }, ensure_ascii=False))
             return 0
         if args.command == "sync":
             transport = _remote(config)

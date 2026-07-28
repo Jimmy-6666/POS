@@ -17,8 +17,9 @@ from typing import Mapping
 
 
 DEFAULT_MIN_FREE_SPACE_MB = 512
-DEFAULT_APP_VERSION = "2.4.2"
+DEFAULT_APP_VERSION = "3.0.0"
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_BACKUP_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 class RuntimePathError(ValueError):
@@ -319,9 +320,25 @@ def validate_runtime(
             connection = sqlite3.connect(config.paths.database)
             integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
             foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
+            has_settings = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='settings'"
+            ).fetchone()
+            settings = {}
+            if has_settings:
+                settings = dict(connection.execute(
+                    "SELECT key,value FROM settings "
+                    "WHERE key IN ('backup_schedule_enabled','backup_schedule_time')"
+                ).fetchall())
             connection.close()
             check("database_integrity", integrity == "ok", "SQLite integrity check failed.")
             check("foreign_keys", not foreign_keys, "SQLite foreign-key check failed.")
+            schedule_enabled = settings.get("backup_schedule_enabled", "1")
+            schedule_time = settings.get("backup_schedule_time", "02:00")
+            check(
+                "backup_schedule",
+                schedule_enabled in {"0", "1"} and bool(_BACKUP_TIME_RE.fullmatch(schedule_time)),
+                "In-process backup schedule must use enabled 0/1 and a 24-hour HH:MM time.",
+            )
         except (OSError, sqlite3.DatabaseError) as exc:
             check("database_integrity", False, f"Cannot validate the SQLite database: {exc}")
 

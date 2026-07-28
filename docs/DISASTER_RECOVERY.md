@@ -7,8 +7,9 @@
    installer. Do not run from a ZIP.
 3. Configure the same store ID and the new machine's SFTP private key and
    known-hosts file. Never reuse a copied Flask secret as a VPS credential.
-4. List or download a verified archive from the VPS SFTP account. The archive
-   must have a matching `.complete` status marker.
+4. Use an owner-retained `recovery-*.zip` bundle when product images must be
+   restored with the database. A database-only VPS archive must have a matching
+   `.complete` marker; restore its image snapshot separately before go-live.
 5. Run the recovery script into a new runtime directory:
 
        .\scripts\recover-production.ps1 `
@@ -26,7 +27,8 @@
    replacement is accepted.
 8. Create a new local backup after the replacement starts successfully.
 
-The recovery archive excludes the local Flask secret by design. The clean
+The recovery archive excludes the local Flask secret by design. A full
+recovery bundle includes current product images but no credentials. The clean
 installation generates a new local secret; staff PIN hashes and business data
 remain in the restored SQLite database.
 
@@ -38,9 +40,10 @@ Use a temporary target, never the active runtime:
       -TargetRuntimeRoot 'C:\Temp\SaengngamPOS-Recovery-Drill'
     .\scripts\verify-recovery.ps1 -RuntimeRoot 'C:\Temp\SaengngamPOS-Recovery-Drill'
 
-The target must be empty. The drill verifies archive checksums, SQLite
-integrity, foreign keys, and restoration of uploads without modifying current
-production data.
+The target must be empty. A full recovery bundle drill verifies archive
+checksums, SQLite integrity, foreign keys, and restoration of product images
+without modifying current production data. A routine database archive does not
+contain images.
 
 ## What is deliberately not automated
 
