@@ -16,7 +16,7 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- Release 2.4.1 desktop launcher uses port `8002` and `runtime/`.
+- Release 2.4.2 desktop launcher uses port `8002` and `runtime/`.
 - UAT launcher uses port `8001` and `uat_runtime/`.
 - Legacy launcher uses port `8000` and the repository root runtime.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
@@ -43,7 +43,7 @@ must not be treated as production-ready without barcode and price approval.
 
 ## Current health
 
-On 2026-07-28, `python -m unittest discover -s tests -v` completed 121 tests
+On 2026-07-28, `python -m unittest discover -s tests -v` completed 122 tests
 successfully, including customer contact UI, delivery payment-method confirmation,
 receipt-only print-agent behavior, stock-sheet print-preview isolation, and the
 online ordering lifecycle. LINE LIFF verifies customer identity before the POS
@@ -76,12 +76,14 @@ No new product scope should be invented. Follow the user's next feature
 priority. If catalog deployment is selected, first complete owner approval of
 selling prices and real barcodes and make the import input path portable.
 
-Version 2.4.1 is the current published baseline. It retains Version 2.4's
+Version 2.4.2 is the current published baseline. It retains Version 2.4's
 product camera capture, Manager-authorized POS item voids, reconciliation void
 totals, current/latest cost pricing, customer/staff online-order workflow
 improvements, and submitted-order sound/badge alerts. It also restores direct
 selling-price entry at product creation and fixes the product image controls
-and existing-image preview. Sprint 1 production foundation
+and existing-image preview. It limits order-alert polling/audio to POS and
+the online-order list, adds the list badge, and refreshes it for new orders.
+Sprint 1 production foundation
 and Sprint 2 backup/recovery foundation are
 implemented: canonical runtime paths, startup validation, migration history,
 deterministic dependency locking, verified database-only SQLite online backups,

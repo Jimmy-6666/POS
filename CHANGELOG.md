@@ -1,3 +1,15 @@
+# Version 2.4.2 — Released 2026-07-28
+
+## Online-order notifications
+
+- Added the submitted-order circular/pulsing badge beside `ออเดอร์ออนไลน์` on
+  the staff online-order list.
+- Restricted summary polling and local looping audio to `/pos` and
+  `/online-orders`. Sidebar navigation to either page carries a recent gesture
+  marker so alert playback retries immediately on arrival.
+- The online-order list now refreshes its current filtered view when polling
+  detects a newly submitted order, with the alert attempt retained.
+
 # Version 2.4.1 — Released 2026-07-28
 
 ## Product form hotfix

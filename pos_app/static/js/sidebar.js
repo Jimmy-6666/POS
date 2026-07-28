@@ -13,6 +13,14 @@
   if (toggle) toggle.onclick = () => { body.classList.toggle('sidebar-collapsed'); localStorage.setItem('sidebar-collapsed-v2', body.classList.contains('sidebar-collapsed') ? '1' : '0'); sync(); };
   if (mobile) mobile.onclick = () => { body.classList.toggle('sidebar-open'); sync(); };
   if (overlay) overlay.onclick = closeMobile;
-  document.querySelectorAll('.sidebar-nav a').forEach((link) => link.addEventListener('click', closeMobile));
+  document.querySelectorAll('.sidebar-nav a').forEach((link) => {
+    link.addEventListener('pointerdown', () => {
+      const path = new URL(link.href, window.location.origin).pathname;
+      if (path === '/pos' || path === '/online-orders') {
+        sessionStorage.setItem('onlineOrderAlertNavigationGesture', String(Date.now()));
+      }
+    }, { passive: true });
+    link.addEventListener('click', closeMobile);
+  });
   sync();
 })();

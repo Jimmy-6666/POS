@@ -21,6 +21,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 2.3 product UUID, admin TOTP, admin XLSX | Released 2026-07-28 | 103-test baseline |
 | Version 2.4 product, POS, reconciliation, and online-order updates | Released 2026-07-28 | V2.4 plus online phases, 121-test full suite |
 | Version 2.4.1 product-form hotfix | Released 2026-07-28 | direct price, product-image layout/current preview, touch camera control |
+| Version 2.4.2 online-alert update | Released 2026-07-28 | list badge, scoped sound/polling, sidebar gesture retry, auto-refresh |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6 |
 | Makro catalog enrichment/import tooling | UAT only; production approval incomplete | manifest and `verify-uat.mjs` |
 
@@ -33,18 +34,16 @@ and detailed verification remain in their linked version documents and tests.
 
 ## Version 2.4 release baseline — 2026-07-28
 
-- Published product-camera capture, Manager-authorized POS voids, item-void
-  reconciliation totals, current/latest cost pricing, customer order-detail
-  improvements, Thai staff workflow labels, online-order alerts, and Cashier
-  pre-delivery cancellation.
-- Full suite: 121 passed. UAT health was `ok` with database `ready`; LIFF was
-  confirmed through `/api/auth/config`.
+- Camera/void/cost/online workflow release; 121 tests, UAT/LIFF verified.
 
 ## Version 2.4.1 release baseline — 2026-07-28
 
-- Direct create price, image layout/current preview, and touch camera fixed;
-  no migration. Full suite: 122 passed; UAT health `ok`/database `ready` and
-  LIFF confirmed through `/api/auth/config`.
+- Direct product price/image hotfix; no migration; 122 tests, UAT/LIFF verified.
+
+## Version 2.4.2 release baseline — 2026-07-28
+
+- Online-order list badge, scoped audio/polling, sidebar gesture retry, and
+  new-order refresh; no migration. Full suite: 122 passed; UAT/LIFF verified.
 
 ## Approved online sprint 1 verification — 2026-07-28
 

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b3d2a">
   <title>{% block title %}ระบบ POS{% endblock %}</title>
   <link rel="stylesheet" href="{{url_for('static',filename='css/app.css',v=16)}}">
-  <link rel="stylesheet" href="{{url_for('static',filename='css/v2.css',v=12)}}">
+  <link rel="stylesheet" href="{{url_for('static',filename='css/v2.css',v=13)}}">
   {% block extra_head %}{% endblock %}
 </head>
 <body class="{% if current_staff %}has-sidebar{% endif %}" data-endpoint="{{request.endpoint or ''}}">
@@ -54,7 +54,7 @@
     <form class="sidebar-logout" method="post" action="{{url_for('auth.logout')}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button type="submit"><i>↪</i><span>ออกจากระบบ</span></button></form>
   </div>
 </aside>
-<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R2.4.1</span></header>
+<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R2.4.2</span></header>
 <div id="sidebarOverlay" class="sidebar-overlay"></div>
 {% endif %}
 <main id="mainContent" class="shell {% block shell_class %}{% endblock %}">
@@ -71,7 +71,7 @@
 </nav>
 <script src="{{url_for('static',filename='js/sidebar.js',v=2)}}"></script>
 <script src="{{url_for('static',filename='js/receipt-popup.js',v=1)}}"></script>
-<script src="{{url_for('static',filename='js/online-order-alerts.js',v=2)}}"></script>
+<script src="{{url_for('static',filename='js/online-order-alerts.js',v=3)}}"></script>
 {% endif %}
 </body>
 </html>
