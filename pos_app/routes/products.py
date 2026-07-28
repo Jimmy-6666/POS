@@ -69,6 +69,7 @@ def parse_product_form():
         "category_id": int(request.form.get("category_id", 0)),
         "unit_id": int(request.form.get("unit_id", 0)),
         "cost_satang": baht_to_satang(request.form.get("cost")),
+        "price_satang": baht_to_satang(request.form.get("price")),
         "minimum_stock": float(request.form.get("minimum_stock") or 0),
         "is_active": 1 if request.form.get("is_active") else 0,
         "is_favorite": 1 if request.form.get("is_favorite") else 0,
@@ -176,7 +177,6 @@ def create():
         try:
             data = parse_product_form()
             data["product_uuid"] = new_product_uuid()
-            data["price_satang"] = 0
             opening_stock = float(request.form.get("stock_quantity") or 0)
             if opening_stock < 0 or (not data["allow_decimal_quantity"] and not opening_stock.is_integer()):
                 raise ValueError("จำนวนสต็อกเริ่มต้นไม่ถูกต้อง")
@@ -234,11 +234,7 @@ def edit(product_uuid):
             return ("คำขอไม่ถูกต้อง", 400)
         try:
             data = parse_product_form()
-            price_value = request.form.get("price")
-            data["price_satang"] = (
-                product["price_satang"] if price_value is None else baht_to_satang(price_value)
-            )
-            data["image_path"] = save_image(request.files.get("image")) or product["image_path"]
+            data["image_path"] = save_image(submitted_product_image()) or product["image_path"]
             data["id"] = product["id"]
             db.execute(
                 """UPDATE products SET barcode=:barcode,sku=:sku,name_th=:name_th,name_en=:name_en,

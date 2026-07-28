@@ -56,7 +56,7 @@ class Version24Tests(unittest.TestCase):
             unit_id = db.execute("SELECT id FROM units LIMIT 1").fetchone()[0]
         return {
             "csrf_token": csrf, "barcode": barcode, "name_th": "สินค้ารูปภาพ", "category_id": str(category_id),
-            "unit_id": str(unit_id), "cost": "5", "stock_quantity": "0", "minimum_stock": "0",
+            "unit_id": str(unit_id), "cost": "5", "price": "12.50", "stock_quantity": "0", "minimum_stock": "0",
             "is_active": "on", "is_online_available": "on",
         }
 
@@ -90,10 +90,33 @@ class Version24Tests(unittest.TestCase):
         self.assertIn('name="camera_image"', form_html)
         self.assertIn('capture="environment"', form_html)
         self.assertIn('id="productImagePreview"', form_html)
+        self.assertIn('class="secondary-button capture-button" for="productImageCamera"', form_html)
+        form_content = form_html.split('<main id="mainContent"', 1)[1].split('</main>', 1)[0]
+        self.assertIn('name="price"', form_content)
+        self.assertNotIn('href="/products/prices"', form_content)
         with self.app.app_context():
-            images = get_db().execute("SELECT image_path FROM products WHERE barcode IN ('v24-desktop','v24-camera') ORDER BY barcode").fetchall()
+            images = get_db().execute("SELECT image_path,price_satang FROM products WHERE barcode IN ('v24-desktop','v24-camera') ORDER BY barcode").fetchall()
             self.assertEqual(len(images), 2)
             self.assertTrue(all(row["image_path"].endswith(".jpg") for row in images))
+            self.assertTrue(all(row["price_satang"] == 1250 for row in images))
+
+    def test_edit_form_shows_existing_image_and_accepts_camera_replacement(self):
+        admin, csrf = self.client_for(1, "1234")
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE products SET image_path='existing-product.jpg' WHERE id=?", (self.product_id,))
+            db.commit()
+        form_html = admin.get(f"/products/{self.product_uuid}/edit").get_data(as_text=True)
+        self.assertIn('id="currentProductImage"', form_html)
+        self.assertIn('/uploads/products/existing-product.jpg', form_html)
+        self.assertIn('name="camera_image"', form_html)
+        replacement = self.product_form_data(csrf, "v24-1")
+        replacement["camera_image"] = (io.BytesIO(b"replacement image"), "replacement.jpg")
+        self.assertEqual(admin.post(f"/products/{self.product_uuid}/edit", data=replacement, content_type="multipart/form-data").status_code, 302)
+        with self.app.app_context():
+            image_path = get_db().execute("SELECT image_path FROM products WHERE id=?", (self.product_id,)).fetchone()[0]
+            self.assertTrue(image_path.endswith(".jpg"))
+            self.assertNotEqual(image_path, "existing-product.jpg")
 
     def test_product_image_rejects_unsupported_file(self):
         admin, csrf = self.client_for(1, "1234")

@@ -16,7 +16,7 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- Release 2.4 desktop launcher uses port `8002` and `runtime/`.
+- Release 2.4.1 desktop launcher uses port `8002` and `runtime/`.
 - UAT launcher uses port `8001` and `uat_runtime/`.
 - Legacy launcher uses port `8000` and the repository root runtime.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
@@ -76,10 +76,12 @@ No new product scope should be invented. Follow the user's next feature
 priority. If catalog deployment is selected, first complete owner approval of
 selling prices and real barcodes and make the import input path portable.
 
-Version 2.4 is the current published baseline. Version 2.4 adds product camera
-capture, Manager-authorized POS item voids, reconciliation void totals, current
-and latest cost pricing, customer/staff online-order workflow improvements,
-and submitted-order sound/badge alerts. Sprint 1 production foundation
+Version 2.4.1 is the current published baseline. It retains Version 2.4's
+product camera capture, Manager-authorized POS item voids, reconciliation void
+totals, current/latest cost pricing, customer/staff online-order workflow
+improvements, and submitted-order sound/badge alerts. It also restores direct
+selling-price entry at product creation and fixes the product image controls
+and existing-image preview. Sprint 1 production foundation
 and Sprint 2 backup/recovery foundation are
 implemented: canonical runtime paths, startup validation, migration history,
 deterministic dependency locking, verified database-only SQLite online backups,

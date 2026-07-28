@@ -1,7 +1,7 @@
 # แสนงาม มินิมาร์ท POS 1.0
 
 > เอกสารนี้เก็บคู่มือฐานของ Release 1.0 ไว้ตามข้อกำหนดเดิม ปัจจุบันโครงการมี
-> Release 2.4 และ Desktop Launcher/LINE/Backup ล่าสุด โปรดดู `VERSION_2.4.md`
+> Release 2.4.1 และ Desktop Launcher/LINE/Backup ล่าสุด โปรดดู `VERSION_2.4.1.md`
 > สำหรับการเปิดรุ่นปัจจุบัน และดู `AI_CONTEXT.md` สำหรับสถานะการพัฒนาล่าสุด
 > โดยข้อกำหนดเดิมใน `REQUIREMENTS_V1.0.md` ยังมีผลครบถ้วน
 

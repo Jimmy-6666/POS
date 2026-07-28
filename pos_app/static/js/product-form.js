@@ -18,6 +18,7 @@
   const camera = document.querySelector('#productImageCamera');
   const preview = document.querySelector('#productImagePreview');
   const remove = document.querySelector('#removeProductImage');
+  const currentImage = document.querySelector('#currentProductImage');
   if (!browse || !preview) return;
 
   const image = preview.querySelector('img');
@@ -27,12 +28,14 @@
     previewUrl = '';
     image.removeAttribute('src');
     preview.hidden = true;
+    if (currentImage) currentImage.hidden = false;
   }
   function choose(input, otherInput) {
     const file = input.files && input.files[0];
     if (!file) return; // Camera cancellation and denied access leave the current selection intact.
     if (otherInput) otherInput.value = '';
     clearPreview();
+    if (currentImage) currentImage.hidden = true;
     previewUrl = URL.createObjectURL(file);
     image.src = previewUrl;
     preview.hidden = false;

@@ -17,7 +17,7 @@ from typing import Mapping
 
 
 DEFAULT_MIN_FREE_SPACE_MB = 512
-DEFAULT_APP_VERSION = "2.4"
+DEFAULT_APP_VERSION = "2.4.1"
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 

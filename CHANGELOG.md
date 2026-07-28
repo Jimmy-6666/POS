@@ -1,3 +1,18 @@
+# Version 2.4.1 — Released 2026-07-28
+
+## Product form hotfix
+
+- Restored the direct selling-price field on `/products/new`; its value is now
+  converted to satang and saved by the server instead of being overwritten to
+  zero. The product-price shortcut is removed only from this form because the
+  price can be set inline.
+- Moved product-image controls into a full-width area above the barcode field,
+  preventing the minimum-stock input from expanding to the image-control row.
+- Product edit shows the current image before the barcode field and supports
+  previewing a replacement from browse or rear-camera capture. Both controls
+  use touch-friendly shared secondary-button styling; removal clears only an
+  unsubmitted replacement selection.
+
 # Version 2.4 — Released 2026-07-28
 
 ## Approved sprint 1

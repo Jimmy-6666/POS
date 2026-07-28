@@ -104,7 +104,10 @@ class Phase3To5Tests(unittest.TestCase):
         self.assertIn("จัดการออเดอร์ออนไลน์".encode(), pos_page.data)
         self.assertIn(b'css/v2.css', pos_page.data)
         self.assertIn("ตั้งราคาขาย".encode(), self.client.get("/products").data)
-        self.assertIn("ตั้งราคาขาย".encode(), self.client.get("/products/new").data)
+        new_product_page = self.client.get("/products/new").data
+        new_product_content = new_product_page.split(b'<main id="mainContent"', 1)[1].split(b'</main>', 1)[0]
+        self.assertIn(b'name="price"', new_product_content)
+        self.assertNotIn(b'href="/products/prices"', new_product_content)
         dashboard = self.client.get("/")
         self.assertIn("ภาพรวมวันนี้".encode(), dashboard.data)
         self.assertIn("งานด่วน".encode(), dashboard.data)

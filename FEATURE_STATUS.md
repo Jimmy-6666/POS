@@ -20,6 +20,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 2.2 customer lifecycle, compact checkout, maintenance, backup | Released 2026-07-28 | version 2.2 |
 | Release 2.3 product UUID, admin TOTP, admin XLSX | Released 2026-07-28 | 103-test baseline |
 | Version 2.4 product, POS, reconciliation, and online-order updates | Released 2026-07-28 | V2.4 plus online phases, 121-test full suite |
+| Version 2.4.1 product-form hotfix | Released 2026-07-28 | direct price, product-image layout/current preview, touch camera control |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6 |
 | Makro catalog enrichment/import tooling | UAT only; production approval incomplete | manifest and `verify-uat.mjs` |
 
@@ -30,13 +31,6 @@ and detailed verification remain in their linked version documents and tests.
 - Migrations 23 (product UUID) and 24 (admin TOTP) are additive and preserve
   existing business records.
 
-## V2.4 sprint 1 verification — 2026-07-28
-
-- Dedicated V2.4 tests cover image upload/camera markup, invalid image input,
-  Manager authorization/PIN rejection, audit linkage, void totals, latest cost,
-  query count, and shared product action styles.
-- `.venv\Scripts\python.exe -m unittest discover -s tests -v`: 114 passed.
-
 ## Version 2.4 release baseline — 2026-07-28
 
 - Published product-camera capture, Manager-authorized POS voids, item-void
@@ -45,6 +39,12 @@ and detailed verification remain in their linked version documents and tests.
   pre-delivery cancellation.
 - Full suite: 121 passed. UAT health was `ok` with database `ready`; LIFF was
   confirmed through `/api/auth/config`.
+
+## Version 2.4.1 release baseline — 2026-07-28
+
+- Direct create price, image layout/current preview, and touch camera fixed;
+  no migration. Full suite: 122 passed; UAT health `ok`/database `ready` and
+  LIFF confirmed through `/api/auth/config`.
 
 ## Approved online sprint 1 verification — 2026-07-28
 
