@@ -13,7 +13,7 @@ Release 2.2 server. Batch files select the port and runtime root.
 | Area | Primary files |
 |---|---|
 | App/config | `app.py`, `pos_app/__init__.py` |
-| Authentication, sessions, CSRF, permissions | `pos_app/auth.py`, `pos_app/routes/auth.py` |
+| Authentication, sessions, CSRF, permissions, public-host isolation | `pos_app/auth.py`, `pos_app/routes/auth.py`, `pos_app/public_host_access.py`, `pos_app/web_security.py` |
 | Database bootstrap/migrations | `pos_app/database.py`, `pos_app/schema.sql` |
 | Dashboard/health | `pos_app/routes/main.py`, `index.html` |
 | Product/catalog/price control | `pos_app/product_identity.py`, `pos_app/services/product_spreadsheet.py`, `pos_app/routes/products.py`, product/reference/price templates, `product-form.js` |
@@ -34,7 +34,7 @@ Release 2.2 server. Batch files select the port and runtime root.
 | VPS provisioning | `deploy/vps/*.sh` |
 | UAT fixtures | `seed_uat.py`, `start-uat.bat`, `install-uat.bat`, `uat_runtime/` (generated) |
 | Makro catalog preparation | `work/makro-pos-import/*.mjs`, `imports/makro-products/` inputs/artifacts, `outputs/` review workbooks |
-| Automated verification | `tests/test_phase1.py`, `test_phase2.py`, `test_phase3_5.py`, `test_phase6_10.py`, `test_inventory.py`, `test_billing.py`, `test_version_2_1.py`, `test_version_2_2.py`, `test_release_3_transactions.py` |
+| Automated verification | `tests/test_phase1.py`, `test_phase2.py`, `test_phase3_5.py`, `test_phase6_10.py`, `test_inventory.py`, `test_billing.py`, `test_version_2_1.py`, `test_version_2_2.py`, `test_release_3_transactions.py`, `test_public_host_access.py`, `test_sprint3_maintenance.py` |
 
 Templates are under `pos_app/templates/`; static files are under
 `pos_app/static/`. Runtime databases, browser profiles, uploads, backups,

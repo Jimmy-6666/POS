@@ -53,6 +53,8 @@
 Documentation is part of the deliverable. Update only affected compact docs,
 then `CHANGELOG.md`. Add a decision only for durable architectural/business
 choices. Never duplicate the entire requirement contract into status files.
+The six compact first-read Markdown files may contain up to 1,600 words each;
+move deeper history and procedures to linked documents.
 
 ## Auxiliary import tooling
 

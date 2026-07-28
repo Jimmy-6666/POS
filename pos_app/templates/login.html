@@ -7,6 +7,7 @@
   <h1>เข้าสู่ระบบ</h1>
   <p class="muted">{% if remote_admin %}การเข้าใช้จากภายนอกสำหรับผู้ดูแลระบบเท่านั้น และต้องยืนยันสองชั้น{% else %}เลือกชื่อพนักงานและกรอกรหัส PIN{% endif %}</p>
   <form method="post" class="form-stack" autocomplete="off">
+    <input type="hidden" name="login_csrf_token" value="{{ login_csrf_token }}">
     <input type="hidden" name="next" value="{{ next_url }}">
     <label>พนักงาน
       <select name="staff_id" required autofocus>

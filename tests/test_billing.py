@@ -5,6 +5,7 @@ from pathlib import Path
 from pos_app import create_app
 from pos_app.database import get_db
 from pos_app.services.sales import complete_sale
+from tests.staff_helpers import staff_login
 
 
 class BillingTests(unittest.TestCase):
@@ -30,7 +31,7 @@ class BillingTests(unittest.TestCase):
             self.assertEqual(billed["status"], "outstanding")
 
         client = self.app.test_client()
-        self.assertEqual(client.post("/login", data={"staff_id": 1, "pin": "1234"}).status_code, 302)
+        self.assertEqual(staff_login(client).status_code, 302)
         with self.app.app_context():
             db = get_db()
             db.execute("UPDATE staff SET must_change_pin=0 WHERE id=1")

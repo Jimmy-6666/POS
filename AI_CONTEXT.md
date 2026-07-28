@@ -44,11 +44,15 @@ production-ready without barcode and price approval.
 
 ## Current health
 
-On 2026-07-28, `python -m unittest discover -s tests -q` completed 129 tests
+On 2026-07-28, `python -m unittest discover -s tests -q` completed 148 tests
 successfully, including customer contact UI, delivery payment-method confirmation,
 receipt-only print-agent behavior, stock-sheet print-preview isolation, and the
 online ordering lifecycle. Release 3 transaction regressions cover concurrent
-checkout, void, expiry, and idempotent order submission. LINE LIFF verifies customer identity before the POS
+checkout, void, expiry, and idempotent order submission. Sprint 3 security
+regressions cover pre-login CSRF, localhost-only staff access, remote Admin
+host isolation and 2FA, signed-update reauthentication, and structured support
+redaction. Flask 3.1.3 is installed and the dependency set passes `pip check`.
+LINE LIFF verifies customer identity before the POS
 creates a customer session and delivery profile. Staff can add or reduce order items before picking;
 price/total changes retain the customer's confirmed price snapshot and show a
 customer-confirmation warning. Product price, receiving, and stock-adjustment pages

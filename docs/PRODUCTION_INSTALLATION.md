@@ -86,8 +86,9 @@ When configured, `online.raisanngam.com` serves only customer `/order` and
 LINE-authentication routes. `admin.raisanngam.com` serves staff features only
 to Admin accounts; Manager and Cashier accounts are rejected even if they know
 the address and PIN. Customer ordering, LINE authentication, health, and the
-print agent are not available on the Admin hostname. The LAN host continues to
-use its existing role permissions.
+print agent are not available on the Admin hostname. Manager and Cashier login
+and authenticated staff sessions are accepted only from localhost. A remote
+Admin must pass both Cloudflare Access and the application's second factor.
 
 When the later Cloudflare sprint is approved, configure the host allow-list as
 well. Include both public hostnames and each genuine LAN hostname or IP address
@@ -102,8 +103,8 @@ then accepts `X-Forwarded-*` data only from that connector. The application
 will refuse to start with public hosts configured if their names are missing
 from `POS_TRUSTED_HOSTS`.
 
-Do not set either value or add a public tunnel route until the Cloudflare,
-mandatory Admin 2FA, and release-validation sprints are complete.
+Do not set either value or add a public tunnel route until Cloudflare Access,
+Admin enrollment, and the customer release-validation gate are complete.
 
 Before the Admin hostname is enabled, each Admin must sign in through the LAN,
 open **ความปลอดภัยบัญชี**, set up an authenticator app, save the recovery

@@ -26,7 +26,8 @@ the publisher certificate thumbprint in `runtime\config\production.json`:
 `POS_UPDATE_SIGNER_THUMBPRINT` is an allowed environment override. No private
 signing key belongs on the shop machine. The page checks the manifest, script
 hash, signature status, and exact thumbprint. Applying needs the current admin
-PIN, starts a detached Windows runner, re-checks the same signature/thumbprint,
+PIN read from the current active staff record, starts a detached Windows
+runner, re-checks the same signature/thumbprint,
 and records the request in the audit log. The signed script receives only
 `-InstallRoot`, `-RuntimeRoot`, and `-Port`; it is responsible for its own
 backup, atomic replacement, and restart. Check `runtime\logs\signed-update-*.log`
@@ -39,3 +40,5 @@ only through the agreed support channel. It includes runtime validation, the
 latest redacted application logs, and backup status. It excludes the database,
 uploads, production configuration, secret key, and browser profiles. The POS
 does not open a remote-control connection or transmit a bundle automatically.
+Redaction covers plain and quoted/JSON credential, authorization, cookie,
+session, token, LINE identity, phone, PIN, and password fields.

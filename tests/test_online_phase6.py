@@ -6,6 +6,7 @@ from pos_app import create_app
 from pos_app.database import get_db
 from pos_app.services.online_orders import OnlineOrderError, complete_online_order_sale
 from tests.online_helpers import register_customer
+from tests.staff_helpers import staff_login
 
 
 class OnlinePhase6Tests(unittest.TestCase):
@@ -23,7 +24,7 @@ class OnlinePhase6Tests(unittest.TestCase):
             db=get_db(); customer_csrf = db.execute("SELECT csrf_token FROM customer_sessions").fetchone()[0]; self.product_uuid=db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
         customer.post("/order/api/orders", json={"items": [{"product_uuid": self.product_uuid, "quantity": 2}], "delivery_location_id": 1,
             "room_reference": "A1", "payment_method": "cash", "idempotency_key": "complete-123456"}, headers={"X-CSRF-Token": customer_csrf})
-        self.staff = self.app.test_client(); self.staff.post("/login", data={"staff_id": "1", "pin": "1234"})
+        self.staff = self.app.test_client(); staff_login(self.staff)
         with self.app.app_context(): self.csrf = get_db().execute("SELECT csrf_token FROM staff_sessions").fetchone()[0]
         self.staff.post("/online-orders/1/accept", data={"csrf_token": self.csrf, "staff_id": "1"}); self.staff.post("/online-orders/1/preparation/start", data={"csrf_token": self.csrf})
         self.staff.post("/online-orders/1/preparation", data={"csrf_token": self.csrf, "prepared_1": "2", "complete": "1"})

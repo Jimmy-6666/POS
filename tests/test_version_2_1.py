@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pos_app import create_app
 from pos_app.database import get_db
+from tests.staff_helpers import staff_login
 
 
 class Version21DisplayTests(unittest.TestCase):
@@ -29,7 +30,7 @@ class Version21DisplayTests(unittest.TestCase):
         self.folder.cleanup()
 
     def test_login_and_logout_signal_window_mode(self):
-        response = self.client.post("/login", data={"staff_id": "1", "pin": "1234"})
+        response = staff_login(self.client)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(json.loads(self.state_file.read_text(encoding="utf-8"))["mode"], "fullscreen")
         with self.app.app_context():
@@ -39,7 +40,7 @@ class Version21DisplayTests(unittest.TestCase):
         self.assertEqual(json.loads(self.state_file.read_text(encoding="utf-8"))["mode"], "normal")
 
     def test_register_has_no_discount_controls_and_shows_item_count(self):
-        self.client.post("/login", data={"staff_id": "1", "pin": "1234"})
+        staff_login(self.client)
         page = self.client.get("/pos").get_data(as_text=True)
         self.assertNotIn("ส่วนลด", page)
         self.assertIn('id="paymentItemCount"', page)
@@ -55,7 +56,7 @@ class Version21DisplayTests(unittest.TestCase):
         self.assertNotIn("--kiosk-printing", main_args)
         self.assertIn("--kiosk-printing", print_args)
         self.assertIn("POS_PRINT_AGENT_TOKEN", source)
-        self.client.post("/login", data={"staff_id": "1", "pin": "1234"})
+        staff_login(self.client)
         manual_sheet = self.client.get("/stock-counts/manual-sheet").get_data(as_text=True)
         self.assertIn('onclick="window.print()"', manual_sheet)
 

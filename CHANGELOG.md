@@ -21,6 +21,21 @@
   checkout, voids, decimal quantities, expiry, reservations, and idempotency.
 - Verification: 30 focused tests and the 129-test full suite passed.
 
+## Sprint 3 approval hardening
+
+- Restricted Manager/Cashier login and authenticated staff sessions to
+  localhost. The configured remote Admin hostname remains Admin-only and
+  requires a second factor in addition to the external Cloudflare Access gate.
+- Added a signed pre-session CSRF token to staff login because Cloudflare does
+  not protect browser requests sent directly to localhost.
+- Fixed signed-update Admin PIN reauthentication to read the current active
+  staff record rather than an absent session-principal field.
+- Redacted quoted JSON credentials, authorization values, cookies, sessions,
+  tokens, and phone numbers from generated support bundles.
+- Upgraded Flask from 3.1.1 to 3.1.3; the lock and local environment match and
+  `pip check` passes.
+- Verification: 30 focused security tests and the 148-test full suite passed.
+
 ## Public internet security — Sprint 3
 
 - Made Admin two-factor authentication compulsory for `admin.raisanngam.com`:
@@ -50,7 +65,7 @@
   ordering and LINE-authentication routes; the Admin host rejects customer,
   health, and print-agent routes and permits staff sessions only for Admins.
 - Added remote-login filtering and server-side Admin-role enforcement so
-  Manager and Cashier accounts remain LAN-only even when a pre-existing session
+  Manager and Cashier accounts remain localhost-only even when a pre-existing session
   cookie is presented to the Admin host.
 
 

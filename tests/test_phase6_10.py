@@ -7,6 +7,7 @@ from pathlib import Path
 from pos_app import create_app
 from pos_app.database import get_db
 from pos_app.services.sales import complete_sale
+from tests.staff_helpers import staff_login
 from werkzeug.security import generate_password_hash
 
 
@@ -17,7 +18,7 @@ class Phase6To10Tests(unittest.TestCase):
         with self.app.app_context():
             db=get_db();db.execute("UPDATE staff SET must_change_pin=0 WHERE id=1");cat=db.execute("SELECT id FROM categories LIMIT 1").fetchone()[0];unit=db.execute("SELECT id FROM units LIMIT 1").fetchone()[0]
             db.execute("INSERT INTO products(barcode,name_th,category_id,unit_id,cost_satang,price_satang,stock_quantity) VALUES('20001','สินค้าครบระบบ',?,?,1000,2000,10)",(cat,unit));db.commit()
-        self.client=self.app.test_client();self.client.post('/login',data={'staff_id':1,'pin':'1234'})
+        self.client=self.app.test_client();staff_login(self.client)
         with self.app.app_context():
             db=get_db();self.csrf=db.execute("SELECT csrf_token FROM staff_sessions").fetchone()[0];self.product_uuid=db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
     def tearDown(self):self.folder.cleanup()
@@ -106,7 +107,7 @@ class Phase6To10Tests(unittest.TestCase):
         self.client.post(f'/stock-counts/{session_id}',data={'csrf_token':self.csrf,'product_uuid':self.product_uuid,'counted_quantity':'8'})
         with self.app.app_context():
             db=get_db();cashier_role=db.execute("SELECT id FROM roles WHERE code='cashier'").fetchone()[0];db.execute("INSERT INTO staff(display_name,pin_hash,role_id,must_change_pin) VALUES(?,?,?,0)",('Cashier Test',generate_password_hash('2468'),cashier_role));cashier_id=db.execute("SELECT last_insert_rowid()").fetchone()[0];admin_attempt=db.execute("SELECT id FROM stock_count_attempts WHERE session_id=?",(session_id,)).fetchone()[0];db.commit()
-        cashier=self.app.test_client();self.assertEqual(cashier.post('/login',data={'staff_id':cashier_id,'pin':'2468'}).status_code,302)
+        cashier=self.app.test_client();self.assertEqual(staff_login(cashier,cashier_id,'2468').status_code,302)
         with self.app.app_context():cashier_csrf=get_db().execute("SELECT csrf_token FROM staff_sessions WHERE staff_id=?",(cashier_id,)).fetchone()[0]
         with self.app.app_context():get_db().execute("UPDATE staff_sessions SET created_at='2026-07-21T15:00:00+00:00' WHERE staff_id=?",(cashier_id,));get_db().commit()
         self.assertEqual(cashier.post('/reconciliations',data={'csrf_token':cashier_csrf,'business_date':'2026-07-22','opening_float':'0','actual_cash':'0'}).status_code,302)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from ipaddress import ip_address
 from datetime import datetime, timezone
 
 from flask import abort, current_app, g, request
@@ -42,6 +43,13 @@ def public_surface() -> str | None:
 
 def is_remote_admin_request() -> bool:
     return public_surface() == "admin"
+
+
+def is_local_request() -> bool:
+    try:
+        return ip_address(request.remote_addr or "").is_loopback
+    except ValueError:
+        return False
 
 
 def _is_customer_endpoint(endpoint: str | None) -> bool:
@@ -94,7 +102,9 @@ def enforce_public_host_access():
         if not _is_customer_endpoint(request.endpoint):
             abort(404)
         return None
-    if surface != "admin":
+    if surface is None:
+        if not is_local_request() and (request.endpoint == "auth.login" or getattr(g, "staff", None)):
+            abort(403)
         return None
     if _is_admin_blocked_endpoint(request.endpoint):
         abort(404)

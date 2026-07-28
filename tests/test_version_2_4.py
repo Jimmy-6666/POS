@@ -11,6 +11,7 @@ from pos_app import create_app
 from pos_app.database import get_db
 from pos_app.routes.products import price_rows
 from pos_app.services.sales import complete_sale, void_sale
+from tests.staff_helpers import staff_login
 
 
 class Version24Tests(unittest.TestCase):
@@ -44,7 +45,7 @@ class Version24Tests(unittest.TestCase):
 
     def client_for(self, staff_id, pin):
         client = self.app.test_client()
-        self.assertEqual(client.post("/login", data={"staff_id": staff_id, "pin": pin}).status_code, 302)
+        self.assertEqual(staff_login(client, staff_id, pin).status_code, 302)
         with self.app.app_context():
             csrf = get_db().execute("SELECT csrf_token FROM staff_sessions WHERE staff_id=? ORDER BY id DESC LIMIT 1", (staff_id,)).fetchone()[0]
         return client, csrf

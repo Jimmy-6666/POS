@@ -5,6 +5,7 @@ from pathlib import Path
 from pos_app import create_app
 from pos_app.database import get_db
 from tests.online_helpers import register_customer
+from tests.staff_helpers import staff_login
 
 
 class OnlinePhase4Tests(unittest.TestCase):
@@ -33,7 +34,7 @@ class OnlinePhase4Tests(unittest.TestCase):
             "delivery_location_id": 1, "room_reference": "A1", "payment_method": "cash", "idempotency_key": "staff-test-123456"},
             headers={"X-CSRF-Token": csrf}).get_json()
         self.staff = self.app.test_client()
-        self.staff.post("/login", data={"staff_id": "1", "pin": "1234"})
+        staff_login(self.staff)
         with self.app.app_context():
             self.csrf = get_db().execute("SELECT csrf_token FROM staff_sessions").fetchone()[0]
 

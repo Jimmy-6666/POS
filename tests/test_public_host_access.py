@@ -11,6 +11,7 @@ from pos_app.auth import create_session
 from pos_app.database import get_db
 from pos_app.launcher import waitress_options
 from pos_app.services.admin_two_factor import encrypt_secret
+from tests.staff_helpers import staff_login
 
 
 ORDER_HOST = "online.raisanngam.com"
@@ -70,8 +71,8 @@ class PublicHostAccessTests(unittest.TestCase):
         return secret
 
     def complete_remote_admin_login(self, secret):
-        start = self.admin.post(
-            "/login", data={"staff_id": "1", "pin": "1234"}, headers=self.host(ADMIN_HOST),
+        start = staff_login(
+            self.admin, headers=self.host(ADMIN_HOST),
             base_url=self.remote_base_url(),
         )
         self.assertEqual(start.status_code, 302)
@@ -109,14 +110,15 @@ class PublicHostAccessTests(unittest.TestCase):
         login_page = self.admin.get("/login", headers=self.host(ADMIN_HOST)).get_data(as_text=True)
         self.assertNotIn("Remote Manager", login_page)
 
-        manager_login = self.admin.post(
-            "/login", data={"staff_id": str(manager_id), "pin": "5678"}, headers=self.host(ADMIN_HOST)
+        manager_login = staff_login(
+            self.admin, manager_id, "5678", headers=self.host(ADMIN_HOST),
+            base_url=self.remote_base_url(),
         )
         self.assertEqual(manager_login.status_code, 200)
         self.assertNotIn("pos_session=", manager_login.headers.get("Set-Cookie", ""))
 
-        unenrolled_login = self.admin.post(
-            "/login", data={"staff_id": "1", "pin": "1234"}, headers=self.host(ADMIN_HOST)
+        unenrolled_login = staff_login(
+            self.admin, headers=self.host(ADMIN_HOST), base_url=self.remote_base_url(),
         )
         self.assertEqual(unenrolled_login.status_code, 403)
         self.assertNotIn("pos_session=", unenrolled_login.headers.get("Set-Cookie", ""))
@@ -170,10 +172,51 @@ class PublicHostAccessTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(get_db().execute("SELECT is_enabled FROM staff_two_factor WHERE staff_id=1").fetchone()[0], 1)
 
-    def test_lan_requests_keep_existing_route_access(self):
-        self.assertEqual(self.lan.get("/login", headers=self.host("lan.raisanngam.local")).status_code, 200)
-        self.assertEqual(self.lan.get("/order", headers=self.host("lan.raisanngam.local")).status_code, 200)
-        self.assertEqual(self.lan.get("/health", headers=self.host("lan.raisanngam.local")).status_code, 200)
+    def test_nonlocal_staff_login_is_blocked_while_customer_and_health_remain_available(self):
+        remote = {"REMOTE_ADDR": "192.168.1.50"}
+        self.assertEqual(
+            self.lan.get(
+                "/login", headers=self.host("lan.raisanngam.local"), environ_overrides=remote,
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.lan.get(
+                "/order", headers=self.host("lan.raisanngam.local"), environ_overrides=remote,
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.lan.get(
+                "/health", headers=self.host("lan.raisanngam.local"), environ_overrides=remote,
+            ).status_code,
+            200,
+        )
+
+    def test_staff_login_requires_a_pre_session_csrf_token(self):
+        missing = self.lan.post(
+            "/login",
+            data={"staff_id": "1", "pin": "1234"},
+            headers=self.host("lan.raisanngam.local"),
+        )
+        self.assertEqual(missing.status_code, 400)
+        with self.app.app_context():
+            self.assertEqual(get_db().execute("SELECT COUNT(*) FROM staff_sessions").fetchone()[0], 0)
+        self.assertEqual(
+            staff_login(self.lan, headers=self.host("lan.raisanngam.local")).status_code,
+            302,
+        )
+
+    def test_nonlocal_request_cannot_reuse_a_staff_session(self):
+        with self.app.test_request_context("/", base_url="http://lan.raisanngam.local"):
+            token = create_session(1)
+        self.lan.set_cookie("pos_session", token, domain="lan.raisanngam.local")
+        response = self.lan.get(
+            "/pos",
+            headers=self.host("lan.raisanngam.local"),
+            environ_overrides={"REMOTE_ADDR": "192.168.1.50"},
+        )
+        self.assertEqual(response.status_code, 403)
 
     def test_public_hosts_must_be_distinct(self):
         with self.assertRaisesRegex(RuntimeError, "must be different"):

@@ -32,17 +32,37 @@ installer before customer-site VPS, LINE LIFF, and Cloudflare configuration.
   unexpected unique-key conflict recovers the already-created order instead of
   returning a server error.
 
+## Sprint 3 — authentication, privacy, and dependency hardening
+
+- Integrated the disabled-by-default public-host isolation package. Customer
+  and Admin hostnames have separate route allow-lists, trusted-host/proxy
+  validation, secure public cookies, security headers, and no-store responses.
+- Manager and Cashier login and authenticated staff sessions are restricted to
+  loopback requests. The configured remote Admin hostname permits only Admins
+  who complete application TOTP or a recovery code after Cloudflare Access.
+- Added a signed pre-session CSRF token to the staff login form. Cloudflare
+  protects the remote hostname but cannot protect a browser POST to localhost.
+- Fixed signed-update PIN reauthentication to read the current active Admin
+  hash from the database before verifying the staged manifest and signer.
+- Extended support-bundle redaction to quoted JSON credentials, authorization
+  values, cookies, sessions, tokens, phone numbers, and plain key/value logs.
+- Upgraded Flask from 3.1.1 to 3.1.3 and regenerated the matching direct/frozen
+  dependency records. `pip check` reports no broken requirements.
+- Public host settings and provider configuration remain disabled and deferred
+  until the customer Cloudflare/LINE gate is executed.
+
 ## Verification
 
 - Focused Release 3 transaction, sales, and online-order suites: 30 passed.
+- Focused Sprint 3 public-host, maintenance, Admin 2FA, and auth suites:
+  30 passed.
 - Seven deterministic regressions cover concurrent checkout, concurrent void,
   decimal void, concurrent idempotency, expiry lock order, expiry versus staff
   transition, and the fresh schema.
-- Full suite: 129 passed in 55.385 seconds.
+- Full suite: 148 passed in 60.401 seconds on Flask 3.1.3.
 
 ## Remaining release gates
 
-- Sprint 3: maintenance, authentication, privacy, and dependency hardening.
 - Sprint 4: installer, production verification, packaging, and backup state.
 - Sprint 5: version 3.0.0 identity and clean-machine Windows acceptance.
 - Sprint 6: final audit, merge, tag, checksums, and customer delivery artifact.

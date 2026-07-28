@@ -83,7 +83,11 @@ def download_bundle(filename):
 def apply_update(manifest_name):
     if not valid_csrf(request.form.get("csrf_token")):
         return ("คำขอไม่ถูกต้อง", 400)
-    if not check_password_hash(g.staff["pin_hash"], request.form.get("admin_pin", "")):
+    staff = get_db().execute(
+        "SELECT pin_hash FROM staff WHERE id=? AND is_active=1",
+        (g.staff["id"],),
+    ).fetchone()
+    if not staff or not check_password_hash(staff["pin_hash"], request.form.get("admin_pin", "")):
         flash("PIN ผู้ดูแลระบบไม่ถูกต้อง จึงยังไม่เริ่มอัปเดต", "error")
         return redirect(url_for("maintenance.index"))
     try:

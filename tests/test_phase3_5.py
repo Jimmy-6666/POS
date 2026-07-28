@@ -6,6 +6,7 @@ from pos_app import create_app
 from pos_app.database import get_db
 from pos_app.services.money import baht_to_satang, change_breakdown
 from pos_app.services.sales import SaleError, calculate_cart, complete_sale, void_sale
+from tests.staff_helpers import staff_login
 
 
 class Phase3To5Tests(unittest.TestCase):
@@ -30,7 +31,7 @@ class Phase3To5Tests(unittest.TestCase):
             db.commit()
             self.product_uuid = db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
         self.client = self.app.test_client()
-        self.client.post("/login", data={"staff_id": "1", "pin": "1234"})
+        staff_login(self.client)
         with self.app.app_context():
             self.csrf = get_db().execute("SELECT csrf_token FROM staff_sessions").fetchone()[0]
 

@@ -7,9 +7,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from datetime import timedelta
 
-from ..auth import (COOKIE_NAME, admin_required, create_session, delete_session,
-                    iso_time, login_required, session_cookie_options, token_hash,
-                    utc_now, valid_csrf)
+from ..auth import (COOKIE_NAME, admin_required, clear_login_csrf, create_session,
+                    delete_session, iso_time, login_csrf_token, login_required,
+                    session_cookie_options, token_hash, utc_now, valid_csrf,
+                    valid_login_csrf)
 from ..database import get_db
 from ..display_state import signal_display
 from ..public_host_access import is_remote_admin_request
@@ -129,7 +130,10 @@ def login():
            FROM staff st JOIN roles r ON r.id = st.role_id
            WHERE st.is_active = 1""" + (" AND r.code = 'admin'" if remote_admin else "") + " ORDER BY st.display_name"
     ).fetchall()
+    login_csrf = login_csrf_token()
     if request.method == "POST":
+        if not valid_login_csrf(request.form.get("login_csrf_token")):
+            return ("คำขอเข้าสู่ระบบไม่ถูกต้อง กรุณาโหลดหน้าเข้าสู่ระบบใหม่", 400)
         recent_failures = db.execute(
             """SELECT COUNT(*) FROM login_events
                WHERE event_type = 'login_failed' AND ip_address IS ? AND created_at >= ?""",
@@ -137,7 +141,10 @@ def login():
         ).fetchone()[0]
         if recent_failures >= 5:
             flash("ลองรหัสผิดหลายครั้ง กรุณารอ 5 นาทีแล้วลองใหม่", "error")
-            return render_template("login.html", staff_list=staff_list, next_url=""), 429
+            return render_template(
+                "login.html", staff_list=staff_list, next_url="", remote_admin=remote_admin,
+                login_csrf_token=login_csrf,
+            ), 429
         staff_id = request.form.get("staff_id", type=int)
         pin = request.form.get("pin", "")
         staff = db.execute(
@@ -159,10 +166,14 @@ def login():
                 _audit_two_factor(db, staff["id"], "remote_admin_two_factor_enrollment_required")
                 db.commit()
                 flash("การเข้าใช้จากภายนอกต้องเปิดการยืนยันสองชั้นก่อน กรุณาเข้าสู่ระบบจากเครือข่ายร้านเพื่อตั้งค่า", "error")
-                return render_template("login.html", staff_list=staff_list, next_url="", remote_admin=True), 403
+                return render_template(
+                    "login.html", staff_list=staff_list, next_url="", remote_admin=True,
+                    login_csrf_token=login_csrf,
+                ), 403
             if two_factor:
                 challenge = _create_two_factor_challenge(db, staff["id"], request.form.get("next"))
                 db.commit()
+                clear_login_csrf()
                 response = make_response(redirect(url_for("auth.verify_two_factor")))
                 response.set_cookie(TWO_FACTOR_COOKIE_NAME, challenge, **session_cookie_options())
                 return response
@@ -172,6 +183,7 @@ def login():
                 (staff["id"], request.remote_addr, iso_time(utc_now())),
             )
             db.commit()
+            clear_login_csrf()
             response = make_response(redirect(safe_next_url(request.form.get("next")) or url_for("pos.index")))
             response.set_cookie(COOKIE_NAME, token, **session_cookie_options())
             signal_display("fullscreen")
@@ -179,6 +191,7 @@ def login():
     return render_template(
         "login.html", staff_list=staff_list,
         next_url=safe_next_url(request.args.get("next")) or "", remote_admin=remote_admin,
+        login_csrf_token=login_csrf,
     )
 
 

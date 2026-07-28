@@ -8,6 +8,7 @@ from werkzeug.security import check_password_hash
 from pos_app import create_app
 from pos_app.auth import iso_time, permission_required, utc_now
 from pos_app.database import get_db
+from tests.staff_helpers import staff_login
 
 
 class Phase2Tests(unittest.TestCase):
@@ -24,7 +25,7 @@ class Phase2Tests(unittest.TestCase):
         self.folder.cleanup()
 
     def login(self, pin="1234"):
-        return self.client.post("/login", data={"staff_id": "1", "pin": pin}, follow_redirects=False)
+        return staff_login(self.client, 1, pin)
 
     def csrf(self):
         with self.app.app_context():

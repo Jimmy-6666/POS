@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
-from flask import current_app, g, redirect, request, url_for
+from flask import current_app, g, redirect, request, session, url_for
 from werkzeug.security import check_password_hash
 
 from .database import get_db
@@ -12,6 +12,7 @@ from .public_host_access import public_surface
 
 
 COOKIE_NAME = "pos_session"
+LOGIN_CSRF_SESSION_KEY = "_login_csrf"
 
 
 def session_cookie_options():
@@ -30,6 +31,23 @@ def iso_time(value):
 
 def token_hash(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def login_csrf_token():
+    token = session.get(LOGIN_CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session[LOGIN_CSRF_SESSION_KEY] = token
+    return token
+
+
+def valid_login_csrf(value):
+    expected = session.get(LOGIN_CSRF_SESSION_KEY)
+    return bool(expected and value and hmac.compare_digest(value, expected))
+
+
+def clear_login_csrf():
+    session.pop(LOGIN_CSRF_SESSION_KEY, None)
 
 
 def create_session(staff_id, *, two_factor_verified=False):

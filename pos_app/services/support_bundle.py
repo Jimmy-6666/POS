@@ -15,13 +15,30 @@ from ..runtime_paths import validate_runtime
 
 SUPPORT_FORMAT_VERSION = 1
 _MAX_LOG_BYTES = 256 * 1024
-_SENSITIVE = re.compile(r"(?i)(authorization|bearer|token|secret|password|pin|line_user_id|phone)\s*([:=])\s*([^\s,;\"}]+)")
+_SENSITIVE = re.compile(
+    r"""(?ix)
+    (?P<prefix>
+        (?P<key_quote>["']?)
+        (?:authorization|bearer|(?:access_|refresh_|id_)?token|secret|password|pin|line_user_id|phone|(?:set-)?cookie|session(?:_id)?)
+        (?P=key_quote)\s*[:=]\s*
+    )
+    (?:
+        (?P<value_quote>["'])(?P<quoted_value>.*?)(?P=value_quote)
+        |
+        (?P<bare_value>[^\s,;}]+)
+    )
+    """
+)
 _PHONE = re.compile(r"(?<!\d)(?:0\d[\d -]{7,13}\d)(?!\d)")
 _LONG_TOKEN = re.compile(r"\b[A-Za-z0-9_-]{28,}\b")
 
 
 def _redact(value: str) -> str:
-    value = _SENSITIVE.sub(lambda match: f"{match.group(1)}{match.group(2)} [redacted]", value)
+    def replace_sensitive(match):
+        quote = match.group("value_quote") or ""
+        return f"{match.group('prefix')}{quote}[redacted]{quote}"
+
+    value = _SENSITIVE.sub(replace_sensitive, value)
     value = _PHONE.sub("[phone redacted]", value)
     return _LONG_TOKEN.sub("[token redacted]", value)
 

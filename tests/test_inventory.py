@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pos_app import create_app
 from pos_app.database import get_db
+from tests.staff_helpers import staff_login
 
 
 class InventoryTests(unittest.TestCase):
@@ -21,7 +22,7 @@ class InventoryTests(unittest.TestCase):
             db.commit()
             self.product_uuid = db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
         self.client = self.app.test_client()
-        self.client.post("/login", data={"staff_id": 1, "pin": "1234"})
+        staff_login(self.client)
         with self.app.app_context():
             self.csrf = get_db().execute("SELECT csrf_token FROM staff_sessions").fetchone()[0]
 

@@ -5,6 +5,7 @@ from pathlib import Path
 from pos_app import create_app
 from pos_app.database import get_db
 from tests.online_helpers import register_customer
+from tests.staff_helpers import staff_login
 
 
 class OnlinePhase1Tests(unittest.TestCase):
@@ -76,7 +77,7 @@ class OnlinePhase1Tests(unittest.TestCase):
     def test_admin_can_manage_locations_and_delete_customer_with_admin_pin(self):
         register_customer(self.client)
         staff_client = self.app.test_client()
-        staff_client.post("/login", data={"staff_id": "1", "pin": "1234"})
+        staff_login(staff_client)
         with self.app.app_context():
             db = get_db()
             db.execute("UPDATE staff SET must_change_pin=0 WHERE id=1")
@@ -108,7 +109,7 @@ class OnlinePhase1Tests(unittest.TestCase):
             db = get_db()
             db.execute("UPDATE staff SET must_change_pin=0 WHERE id=1")
             db.commit()
-        staff_client.post("/login", data={"staff_id": "1", "pin": "1234"})
+        staff_login(staff_client)
         with self.app.app_context():
             csrf = get_db().execute("SELECT csrf_token FROM staff_sessions ORDER BY id DESC LIMIT 1").fetchone()[0]
         page = staff_client.get("/online-admin/settings?section=payment").get_data(as_text=True)

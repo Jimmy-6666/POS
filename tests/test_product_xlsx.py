@@ -16,6 +16,7 @@ from pos_app.services.product_spreadsheet import (
     apply_import,
     parse_import,
 )
+from tests.staff_helpers import staff_login
 
 
 def workbook_bytes(rows):
@@ -59,7 +60,7 @@ class ProductXlsxTests(unittest.TestCase):
             db.commit()
             self.product_uuid = db.execute("SELECT product_uuid FROM products WHERE barcode='00123'").fetchone()[0]
         self.client = self.app.test_client()
-        self.client.post("/login", data={"staff_id": 1, "pin": "1234"})
+        staff_login(self.client)
 
     def tearDown(self):
         self.folder.cleanup()
@@ -107,7 +108,7 @@ class ProductXlsxTests(unittest.TestCase):
 
         self.client.post("/logout", data={"csrf_token": self.csrf()})
         manager = self.app.test_client()
-        manager.post("/login", data={"staff_id": 2, "pin": "2222"})
+        staff_login(manager, 2, "2222")
         self.assertEqual(manager.get("/products/xlsx/export").status_code, 403)
         self.assertEqual(manager.post("/products/xlsx/import", data={}).status_code, 403)
 

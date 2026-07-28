@@ -7,7 +7,7 @@ and detailed verification remain in their linked version documents and tests.
 | Capability | State | Main verification |
 |---|---|---|
 | Offline Flask/SQLite/Windows/LAN foundation | Implemented | phase 1 |
-| Staff auth | PIN plus admin TOTP | phase 2, 2FA |
+| Staff auth | Pre-login CSRF; Manager/Cashier localhost-only; remote Admin host requires Admin role plus TOTP/recovery code | phase 2, 2FA, public host |
 | Product/catalog/images/pricing | Implemented; immutable UUID/XLSX flow, camera capture, shared menu actions, current/last receiving cost | product, XLSX, V2.4 |
 | POS, sales, receipts, void/refund | Implemented; cashier initiation requires active Manager/Admin server PIN authorization with touch Void controls | phase 3–5, V2.4 |
 | Billing customers and payment | Implemented | billing |
@@ -22,7 +22,7 @@ and detailed verification remain in their linked version documents and tests.
 | Version 2.4 product, POS, reconciliation, and online-order updates | Released 2026-07-28 | V2.4 plus online phases, 121-test full suite |
 | Version 2.4.1 product-form hotfix | Released 2026-07-28 | direct price, product-image layout/current preview, touch camera control |
 | Version 2.4.2 online-alert update | Released 2026-07-28 | list badge, scoped sound/polling, sidebar gesture retry, auto-refresh |
-| Release 3.0 transactions | 129 passed | `RELEASE_3.0.md` |
+| Release 3.0 transaction and Sprint 3 security hardening | 148 passed | `RELEASE_3.0.md` |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6 |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
