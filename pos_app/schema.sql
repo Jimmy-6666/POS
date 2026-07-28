@@ -259,7 +259,8 @@ CREATE TABLE IF NOT EXISTS sale_items (
     unit_price_satang INTEGER NOT NULL,
     discount_satang INTEGER NOT NULL DEFAULT 0,
     cost_satang INTEGER NOT NULL,
-    line_total_satang INTEGER NOT NULL
+    line_total_satang INTEGER NOT NULL,
+    voided_quantity REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS stock_movements (

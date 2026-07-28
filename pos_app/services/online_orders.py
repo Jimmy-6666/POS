@@ -1,5 +1,6 @@
 import json
 import secrets
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from flask import request
@@ -44,25 +45,36 @@ def release_reservations(order_id, reason, *, status="released"):
 
 def expire_pending_orders():
     db = get_db()
-    enabled = db.execute("SELECT value FROM settings WHERE key='online_auto_expiry'").fetchone()
-    if not enabled or enabled[0] != "1":
-        return 0
-    rows = db.execute(
-        """SELECT id,status FROM online_orders WHERE status IN ('submitted','accepted')
-           AND expires_at IS NOT NULL AND expires_at<=?""",
-        (iso_time(utc_now()),),
-    ).fetchall()
-    if not rows:
-        return 0
-    db.execute("BEGIN IMMEDIATE")
-    for row in rows:
-        release_reservations(row["id"], "order_expired")
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        enabled = db.execute("SELECT value FROM settings WHERE key='online_auto_expiry'").fetchone()
+        if not enabled or enabled[0] != "1":
+            db.rollback()
+            return 0
         now = iso_time(utc_now())
-        db.execute("UPDATE online_orders SET status='expired',cancelled_at=?,updated_at=? WHERE id=?", (now, now, row["id"]))
-        record_history(row["id"], row["status"], "expired", "system", reason="หมดเวลารอการดำเนินการ")
-        audit_order("online_order_expired", row["id"])
-    db.commit()
-    return len(rows)
+        rows = db.execute(
+            """SELECT id,status FROM online_orders WHERE status IN ('submitted','accepted')
+               AND expires_at IS NOT NULL AND expires_at<=?""",
+            (now,),
+        ).fetchall()
+        expired = 0
+        for row in rows:
+            updated = db.execute(
+                """UPDATE online_orders SET status='expired',cancelled_at=?,updated_at=?
+                   WHERE id=? AND status=? AND expires_at IS NOT NULL AND expires_at<=?""",
+                (now, now, row["id"], row["status"], now),
+            )
+            if updated.rowcount != 1:
+                continue
+            release_reservations(row["id"], "order_expired")
+            record_history(row["id"], row["status"], "expired", "system", reason="หมดเวลารอการดำเนินการ")
+            audit_order("online_order_expired", row["id"])
+            expired += 1
+        db.commit()
+        return expired
+    except Exception:
+        db.rollback()
+        raise
 
 
 def create_order(customer_id, payload, validate_cart, settings, location):
@@ -70,12 +82,6 @@ def create_order(customer_id, payload, validate_cart, settings, location):
     idempotency_key = str(payload.get("idempotency_key") or "").strip()
     if len(idempotency_key) < 12 or len(idempotency_key) > 100:
         raise OnlineOrderError("คำขอยืนยันออเดอร์ไม่ถูกต้อง กรุณาลองใหม่")
-    existing = db.execute(
-        "SELECT public_id,order_number FROM online_orders WHERE customer_id=? AND idempotency_key=?",
-        (customer_id, idempotency_key),
-    ).fetchone()
-    if existing:
-        return existing, True
     method = payload.get("payment_method")
     if method not in {"cash", "transfer"}:
         raise OnlineOrderError("วิธีชำระเงินไม่พร้อมใช้งาน")
@@ -86,6 +92,13 @@ def create_order(customer_id, payload, validate_cart, settings, location):
     try:
         if not db.in_transaction:
             db.execute("BEGIN IMMEDIATE")
+        existing = db.execute(
+            "SELECT public_id,order_number FROM online_orders WHERE customer_id=? AND idempotency_key=?",
+            (customer_id, idempotency_key),
+        ).fetchone()
+        if existing:
+            db.commit()
+            return existing, True
         items = validate_cart(payload.get("items"))
         subtotal = sum(item["line_total_satang"] for item in items)
         minimum = max(int(settings.get("online_minimum_order_satang") or 0), location["minimum_order_satang"])
@@ -131,6 +144,15 @@ def create_order(customer_id, payload, validate_cart, settings, location):
         audit_order("stock_reserved", order_id, detail={"items": len(items)})
         db.commit()
         return {"public_id": public_id, "order_number": order_number}, False
+    except sqlite3.IntegrityError:
+        db.rollback()
+        existing = db.execute(
+            "SELECT public_id,order_number FROM online_orders WHERE customer_id=? AND idempotency_key=?",
+            (customer_id, idempotency_key),
+        ).fetchone()
+        if existing:
+            return existing, True
+        raise
     except Exception:
         db.rollback()
         raise

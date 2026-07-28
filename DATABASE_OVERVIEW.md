@@ -26,6 +26,10 @@ it does not alter historic sales, refund, or stock records.
 SQLite is the single local source of truth. `pos_app/schema.sql` defines new
 databases; `pos_app/database.py` initializes seed data and applies idempotent,
 data-preserving startup migrations. Current seeded `schema_version` is 19.
+Release 3.0 adds no migration in Sprints 1–2: the fresh-database
+`sale_items` shape now declares `voided_quantity`, while the existing
+idempotent compatibility initializer continues adding that column to older
+databases.
 
 ## Domains and tables
 
@@ -62,6 +66,10 @@ data-preserving startup migrations. Current seeded `schema_version` is 19.
   and the authorizing active Manager/Admin through `sale_voids.voided_by`.
   Item-level records retain product identity, quantity, and the refund amount;
   the audit payload additionally snapshots the product name and unit price.
+- Authoritative sale calculation occurs after the sale write lock is acquired.
+  Void eligibility and remaining quantity are also read under the void write
+  lock, and the item update is conditional on total voided quantity not
+  exceeding sold quantity. Decimal quantities remain valid for weighted sales.
 - `reconciliations.void_total_satang` is calculated from `sale_void_items` for
   the applicable cashier and closing window, then stored with the close so
   historical reconciliation summaries remain stable.
@@ -84,6 +92,10 @@ data-preserving startup migrations. Current seeded `schema_version` is 19.
   price identifies a product added by staff after customer submission.
 - Reservations become `released` on cancellation/expiry or `converted` in the
   transaction that creates the sale and stock movements.
+- Expiry selects candidates and conditionally changes their state under one
+  write transaction before releasing reservations. Customer idempotency lookup
+  and order creation share one write transaction, so concurrent retries
+  resolve to the same order.
 - `sales.delivery_fee_satang` records the explicit receipt delivery charge.
 - `settings.allow_negative_stock` controls POS sales and
   `settings.online_allow_negative_stock` independently controls online

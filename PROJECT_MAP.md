@@ -34,7 +34,7 @@ Release 2.2 server. Batch files select the port and runtime root.
 | VPS provisioning | `deploy/vps/*.sh` |
 | UAT fixtures | `seed_uat.py`, `start-uat.bat`, `install-uat.bat`, `uat_runtime/` (generated) |
 | Makro catalog preparation | `work/makro-pos-import/*.mjs`, `imports/makro-products/` inputs/artifacts, `outputs/` review workbooks |
-| Automated verification | `tests/test_phase1.py`, `test_phase2.py`, `test_phase3_5.py`, `test_phase6_10.py`, `test_inventory.py`, `test_billing.py`, `test_version_2_1.py`, `test_version_2_2.py` |
+| Automated verification | `tests/test_phase1.py`, `test_phase2.py`, `test_phase3_5.py`, `test_phase6_10.py`, `test_inventory.py`, `test_billing.py`, `test_version_2_1.py`, `test_version_2_2.py`, `test_release_3_transactions.py` |
 
 Templates are under `pos_app/templates/`; static files are under
 `pos_app/static/`. Runtime databases, browser profiles, uploads, backups,

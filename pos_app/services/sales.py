@@ -84,35 +84,42 @@ def calculate_cart(items, bill_discount_satang=0, *, unit_price_overrides=None, 
 
 def complete_sale(payload, staff_id, *, manage_transaction=True, online_order_id=None, unit_price_overrides=None):
     db = get_db()
-    cart = calculate_cart(
-        payload.get("items"), payload.get("bill_discount_satang"),
-        unit_price_overrides=unit_price_overrides, reservation_order_id=online_order_id,
-    )
-    delivery_fee_satang = int(payload.get("delivery_fee_satang") or 0)
-    if delivery_fee_satang < 0 or (delivery_fee_satang and online_order_id is None):
-        raise SaleError("ค่าจัดส่งไม่ถูกต้อง")
-    cart["delivery_fee_satang"] = delivery_fee_satang
-    cart["total_satang"] += delivery_fee_satang
-    cart["gross_profit_satang"] += delivery_fee_satang
-    method = payload.get("payment_method")
-    if method not in {"cash", "scan", "transfer", "billing"}:
-        raise SaleError("วิธีชำระเงินไม่ถูกต้อง")
-    try:
-        received = int(payload.get("amount_received_satang") or 0)
-    except (TypeError, ValueError) as exc:
-        raise SaleError("จำนวนเงินที่รับไม่ถูกต้อง") from exc
-    if method == "cash" and received < cart["total_satang"]:
-        raise SaleError("จำนวนเงินที่รับน้อยกว่ายอดชำระ")
-    if method in {"scan", "transfer"} and not payload.get("payment_confirmed"):
-        raise SaleError("กรุณายืนยันว่าได้รับเงินแล้ว")
-    if method != "cash":
-        received = 0 if method == "billing" else cart["total_satang"]
-    change = received - cart["total_satang"] if method == "cash" else 0
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    local_date = datetime.now(timezone(timedelta(hours=7))).strftime("%Y%m%d")
     try:
         if manage_transaction:
             db.execute("BEGIN IMMEDIATE")
+        elif not db.in_transaction:
+            raise RuntimeError("complete_sale(manage_transaction=False) requires an active transaction")
+        cart = calculate_cart(
+            payload.get("items"), payload.get("bill_discount_satang"),
+            unit_price_overrides=unit_price_overrides, reservation_order_id=online_order_id,
+        )
+        delivery_fee_satang = int(payload.get("delivery_fee_satang") or 0)
+        if delivery_fee_satang < 0 or (delivery_fee_satang and online_order_id is None):
+            raise SaleError("ค่าจัดส่งไม่ถูกต้อง")
+        cart["delivery_fee_satang"] = delivery_fee_satang
+        cart["total_satang"] += delivery_fee_satang
+        cart["gross_profit_satang"] += delivery_fee_satang
+        method = payload.get("payment_method")
+        if method not in {"cash", "scan", "transfer", "billing"}:
+            raise SaleError("วิธีชำระเงินไม่ถูกต้อง")
+        try:
+            received = int(payload.get("amount_received_satang") or 0)
+        except (TypeError, ValueError) as exc:
+            raise SaleError("จำนวนเงินที่รับไม่ถูกต้อง") from exc
+        if method == "cash" and received < cart["total_satang"]:
+            raise SaleError("จำนวนเงินที่รับน้อยกว่ายอดชำระ")
+        if method in {"scan", "transfer"} and not payload.get("payment_confirmed"):
+            raise SaleError("กรุณายืนยันว่าได้รับเงินแล้ว")
+        if method != "cash":
+            received = 0 if method == "billing" else cart["total_satang"]
+        change = received - cart["total_satang"] if method == "cash" else 0
+    except Exception:
+        if manage_transaction:
+            db.rollback()
+        raise
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    local_date = datetime.now(timezone(timedelta(hours=7))).strftime("%Y%m%d")
+    try:
         row = db.execute("SELECT last_number FROM receipt_sequences WHERE sale_date = ?", (local_date,)).fetchone()
         sequence = (row[0] if row else 0) + 1
         db.execute(
@@ -179,38 +186,9 @@ def complete_sale(payload, staff_id, *, manage_transaction=True, online_order_id
 def void_sale(sale_id, payload, authorizer_id):
     """Void selected quantities with an active manager/admin authorizer in one transaction."""
     db = get_db()
-    sale = db.execute("SELECT * FROM sales WHERE id=?", (sale_id,)).fetchone()
-    if not sale or sale["status"] != "completed":
-        raise SaleError("ใบเสร็จนี้ไม่สามารถ Void ได้")
     reason = str(payload.get("reason") or "").strip()
     full = payload.get("void_type") == "full"
-    rows = db.execute("SELECT * FROM sale_items WHERE sale_id=? ORDER BY id", (sale_id,)).fetchall()
-    requested = {}
-    if full:
-        requested = {row["id"]: row["quantity"] - row["voided_quantity"] for row in rows}
-    else:
-        for raw in payload.get("items") or []:
-            try:
-                requested[int(raw.get("sale_item_id"))] = float(raw.get("quantity") or 0)
-            except (TypeError, ValueError):
-                raise SaleError("จำนวนสินค้าที่ Void ไม่ถูกต้อง")
-    selected = []
-    for row in rows:
-        quantity = requested.get(row["id"], 0)
-        remaining = row["quantity"] - row["voided_quantity"]
-        if quantity < 0 or quantity > remaining or (quantity and quantity != int(quantity)):
-            raise SaleError(f"จำนวน Void ของ {row['product_name']} ไม่ถูกต้อง")
-        if quantity:
-            selected.append((row, quantity))
-    if not selected:
-        raise SaleError("กรุณาเลือกรายการที่จะ Void")
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    current_net = sum(
-        round(row["line_total_satang"] * (row["quantity"] - row["voided_quantity"]) / row["quantity"])
-        for row in rows
-    )
-    refund_total = cost_total = subtotal_refund = item_discount_refund = bill_discount_refund = 0
-    audit_items = []
+    tolerance = Decimal("0.000001")
     try:
         db.execute("BEGIN IMMEDIATE")
         authorizer = db.execute(
@@ -220,6 +198,61 @@ def void_sale(sale_id, payload, authorizer_id):
         ).fetchone()
         if not authorizer:
             raise SaleError("ผู้อนุมัติไม่พร้อมใช้งานหรือไม่มีสิทธิ์อนุมัติ Void")
+        sale = db.execute("SELECT * FROM sales WHERE id=?", (sale_id,)).fetchone()
+        if not sale or sale["status"] != "completed":
+            raise SaleError("ใบเสร็จนี้ไม่สามารถ Void ได้")
+        rows = db.execute(
+            """SELECT si.*,p.allow_decimal_quantity
+               FROM sale_items si JOIN products p ON p.id=si.product_id
+               WHERE si.sale_id=? ORDER BY si.id""",
+            (sale_id,),
+        ).fetchall()
+        rows_by_id = {row["id"]: row for row in rows}
+        requested = {}
+        if full:
+            for row in rows:
+                remaining = Decimal(str(row["quantity"])) - Decimal(str(row["voided_quantity"]))
+                if remaining > tolerance:
+                    requested[row["id"]] = remaining
+        else:
+            for raw in payload.get("items") or []:
+                try:
+                    item_id = int(raw.get("sale_item_id"))
+                    raw_quantity = Decimal(str(raw.get("quantity") or 0))
+                except (InvalidOperation, TypeError, ValueError) as exc:
+                    raise SaleError("จำนวนสินค้าที่ Void ไม่ถูกต้อง") from exc
+                if raw_quantity == 0:
+                    continue
+                row = rows_by_id.get(item_id)
+                if not row or item_id in requested:
+                    raise SaleError("รายการสินค้าที่ Void ไม่ถูกต้อง")
+                sold_quantity = Decimal(str(row["quantity"]))
+                allow_decimal = bool(row["allow_decimal_quantity"]) or sold_quantity != sold_quantity.to_integral_value()
+                requested[item_id] = _quantity(raw_quantity, allow_decimal)
+        selected = []
+        for row in rows:
+            quantity = requested.get(row["id"], Decimal("0"))
+            remaining = Decimal(str(row["quantity"])) - Decimal(str(row["voided_quantity"]))
+            if quantity > remaining:
+                if quantity - remaining <= tolerance:
+                    quantity = remaining
+                else:
+                    raise SaleError(f"จำนวน Void ของ {row['product_name']} ไม่ถูกต้อง")
+            if quantity > tolerance:
+                selected.append((row, quantity))
+        if not selected:
+            raise SaleError("กรุณาเลือกรายการที่จะ Void")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        current_net = sum(
+            round(
+                row["line_total_satang"]
+                * float(Decimal(str(row["quantity"])) - Decimal(str(row["voided_quantity"])))
+                / row["quantity"]
+            )
+            for row in rows
+        )
+        refund_total = cost_total = subtotal_refund = item_discount_refund = bill_discount_refund = 0
+        audit_items = []
         cursor = db.execute(
             "INSERT INTO sale_voids (sale_id,void_type,reason,voided_by,created_at) VALUES (?,?,?,?,?)",
             (sale_id, "full" if full else "partial", reason, authorizer_id, now),
@@ -229,29 +262,40 @@ def void_sale(sale_id, payload, authorizer_id):
             ratio = Decimal(str(quantity)) / Decimal(str(row["quantity"]))
             line_refund = int((Decimal(row["line_total_satang"]) * ratio).quantize(Decimal("1")))
             item_discount = int((Decimal(row["discount_satang"]) * ratio).quantize(Decimal("1")))
-            subtotal = int((Decimal(row["unit_price_satang"]) * Decimal(str(quantity))).quantize(Decimal("1")))
-            cost = int((Decimal(row["cost_satang"]) * Decimal(str(quantity))).quantize(Decimal("1")))
+            subtotal = int((Decimal(row["unit_price_satang"]) * quantity).quantize(Decimal("1")))
+            cost = int((Decimal(row["cost_satang"]) * quantity).quantize(Decimal("1")))
             bill_share = round(sale["bill_discount_satang"] * line_refund / current_net) if current_net else 0
             refund = max(0, line_refund - bill_share)
             product = db.execute("SELECT stock_quantity,cost_satang FROM products WHERE id=?", (row["product_id"],)).fetchone()
-            new_stock = product["stock_quantity"] + quantity
-            db.execute("UPDATE products SET stock_quantity=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_stock, row["product_id"]))
-            db.execute("UPDATE sale_items SET voided_quantity=voided_quantity+? WHERE id=?", (quantity, row["id"]))
+            quantity_value = int(quantity) if quantity == quantity.to_integral_value() else float(quantity)
+            new_stock_decimal = Decimal(str(product["stock_quantity"])) + quantity
+            new_stock = int(new_stock_decimal) if new_stock_decimal == new_stock_decimal.to_integral_value() else float(new_stock_decimal)
+            db.execute(
+                "UPDATE products SET stock_quantity=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (new_stock, row["product_id"]),
+            )
+            updated = db.execute(
+                """UPDATE sale_items SET voided_quantity=voided_quantity+?
+                   WHERE id=? AND voided_quantity+?<=quantity+0.000001""",
+                (quantity_value, row["id"], quantity_value),
+            )
+            if updated.rowcount != 1:
+                raise SaleError(f"จำนวน Void ของ {row['product_name']} ไม่ถูกต้อง")
             db.execute(
                 "INSERT INTO sale_void_items (void_id,sale_item_id,product_id,quantity,refund_satang,cost_satang) VALUES (?,?,?,?,?,?)",
-                (void_id, row["id"], row["product_id"], quantity, refund, cost),
+                (void_id, row["id"], row["product_id"], quantity_value, refund, cost),
             )
             db.execute(
                 """INSERT INTO stock_movements
                    (product_id,movement_type,previous_quantity,changed_quantity,new_quantity,unit_cost_satang,
                     reference_type,reference_number,staff_id,note,created_at)
                    VALUES (?,'sale_void',?,?,?,?, 'sale_void',?,?,?,?)""",
-                (row["product_id"], product["stock_quantity"], quantity, new_stock, product["cost_satang"],
+                (row["product_id"], product["stock_quantity"], quantity_value, new_stock, product["cost_satang"],
                  sale["receipt_number"], authorizer_id, reason, now),
             )
             audit_items.append({
                 "sale_item_id": row["id"], "product_id": row["product_id"], "product_name": row["product_name"],
-                "quantity": quantity, "unit_price_satang": row["unit_price_satang"], "void_amount_satang": refund,
+                "quantity": quantity_value, "unit_price_satang": row["unit_price_satang"], "void_amount_satang": refund,
             })
             refund_total += refund
             cost_total += cost

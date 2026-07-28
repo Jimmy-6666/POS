@@ -1,3 +1,26 @@
+# Unreleased — Release 3.0
+
+## Sprints 1–2 — transaction correctness
+
+- Moved authoritative POS cart, stock, reservation, price, cost, and payment
+  validation under the same `BEGIN IMMEDIATE` transaction that records the
+  sale. Concurrent devices can no longer both validate the same stock before
+  either stock mutation commits.
+- Moved sale/void-item reads under the void write lock, added a guarded
+  `voided_quantity` update, and allowed partial/full decimal voids for weighted
+  products. Concurrent requests cannot over-refund or over-restock a sale.
+- Synchronized the desired fresh-database `sale_items` definition with the
+  existing additive `voided_quantity` compatibility migration.
+- Moved online-order expiry selection under its write lock and made each state
+  transition conditional on the selected status and expiry time before
+  releasing reservations.
+- Moved customer idempotency lookup inside the order-creation write
+  transaction and recover the existing order after an unexpected unique-key
+  conflict, so concurrent retries return one order instead of an HTTP 500.
+- Added deterministic transaction-order and real concurrency regressions for
+  checkout, voids, decimal quantities, expiry, reservations, and idempotency.
+- Verification: 30 focused tests and the 129-test full suite passed.
+
 # Version 2.4.2 — Released 2026-07-28
 
 ## Online-order notifications
