@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}บันทึกรหัสกู้คืน{% endblock %}
+{% block content %}
+<section class="panel form-stack" style="max-width:34rem">
+  <span class="eyebrow">สำคัญ</span>
+  <h1>บันทึกรหัสกู้คืนตอนนี้</h1>
+  <p class="flash flash-error" role="alert">รหัสเหล่านี้จะแสดงเพียงครั้งเดียว เก็บไว้ในที่ปลอดภัย และใช้ได้ครั้งละหนึ่งรหัส</p>
+  <ul>{% for code in codes %}<li><code>{{code}}</code></li>{% endfor %}</ul>
+  <a class="primary-button" href="{{url_for('auth.account_security')}}">ฉันบันทึกรหัสแล้ว</a>
+</section>
+{% endblock %}

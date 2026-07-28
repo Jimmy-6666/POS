@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}ยืนยันตัวตนผู้ดูแลระบบ{% endblock %}
+{% block shell_class %}auth-shell{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <span class="eyebrow dark">ผู้ดูแลระบบ</span>
+  <h1>ยืนยันตัวตนสองชั้น</h1>
+  <p class="muted">กรอกรหัส 6 หลักจากแอป Authenticator หรือ recovery code ของ {{challenge.display_name}}</p>
+  <form method="post" class="form-stack" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{challenge.csrf_token}}">
+    <label>รหัสยืนยัน
+      <input name="code" inputmode="text" autocomplete="one-time-code" maxlength="12" required autofocus placeholder="123456 หรือ ABCD-EFGH">
+    </label>
+    <button class="primary-button login-submit" type="submit">ยืนยันและเข้าสู่ระบบ</button>
+  </form>
+</section>
+{% endblock %}

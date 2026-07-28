@@ -25,6 +25,7 @@ class OnlinePhase2Tests(unittest.TestCase):
                           VALUES('000','สินค้าราคา UAT',?,?,0,5,1)""", (category, unit))
             db.execute("INSERT INTO delivery_locations(name,room_required) VALUES('จุดทดสอบ',0)")
             db.commit()
+            self.product_uuid = db.execute("SELECT product_uuid FROM products WHERE barcode='111'").fetchone()[0]
         self.client = self.app.test_client()
 
     def tearDown(self):
@@ -38,10 +39,10 @@ class OnlinePhase2Tests(unittest.TestCase):
         self.assertIn("สินค้าราคา UAT", html)
 
     def test_cart_uses_server_price_and_validates_stock(self):
-        response = self.client.post("/order/api/cart/validate", json={"items": [{"product_id": 1, "quantity": 2, "price_satang": 1}]})
+        response = self.client.post("/order/api/cart/validate", json={"items": [{"product_uuid": self.product_uuid, "quantity": 2, "price_satang": 1}]})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["subtotal_satang"], 5000)
-        response = self.client.post("/order/api/cart/validate", json={"items": [{"product_id": 1, "quantity": 6}]})
+        response = self.client.post("/order/api/cart/validate", json={"items": [{"product_uuid": self.product_uuid, "quantity": 6}]})
         self.assertEqual(response.status_code, 400)
         self.assertIn("ไม่เพียงพอ", response.get_json()["error"])
 
@@ -66,7 +67,7 @@ class OnlinePhase2Tests(unittest.TestCase):
         self.assertIn("สั่งสินค้าเพิ่ม", cart.get_data(as_text=True))
 
     def test_guest_order_submission_is_rejected(self):
-        response = self.client.post("/order/api/orders", json={"items": [{"product_id": 1, "quantity": 1}]})
+        response = self.client.post("/order/api/orders", json={"items": [{"product_uuid": self.product_uuid, "quantity": 1}]})
         self.assertEqual(response.status_code, 401)
 
 

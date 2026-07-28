@@ -8,7 +8,9 @@ runner for future additive migrations.
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
+from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Iterable
@@ -74,10 +76,114 @@ def _add_customer_lifecycle_fields(db: sqlite3.Connection) -> None:
             db.execute(f"ALTER TABLE customers ADD COLUMN {name} {definition}")
 
 
+def _add_product_uuid(db: sqlite3.Connection) -> None:
+    """Backfill public product identity without disturbing numeric foreign keys."""
+
+    columns = {row[1] for row in db.execute("PRAGMA table_info(products)")}
+    if "product_uuid" not in columns:
+        db.execute("ALTER TABLE products ADD COLUMN product_uuid TEXT")
+    rows = db.execute("SELECT id,product_uuid FROM products").fetchall()
+    for row in rows:
+        if not row["product_uuid"]:
+            db.execute("UPDATE products SET product_uuid=? WHERE id=?", (str(uuid4()), row["id"]))
+    duplicates = db.execute(
+        "SELECT product_uuid FROM products GROUP BY product_uuid HAVING COUNT(*) > 1"
+    ).fetchall()
+    if duplicates:
+        raise MigrationError("Duplicate product UUIDs prevent migration.")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_products_product_uuid ON products(product_uuid)")
+    db.execute(
+        """CREATE TRIGGER IF NOT EXISTS products_product_uuid_required_insert
+           BEFORE INSERT ON products
+           WHEN NEW.product_uuid IS NULL OR TRIM(NEW.product_uuid) = ''
+           BEGIN SELECT RAISE(ABORT, 'product_uuid is required'); END"""
+    )
+    db.execute(
+        """CREATE TRIGGER IF NOT EXISTS products_product_uuid_required_update
+           BEFORE UPDATE OF product_uuid ON products
+           WHEN NEW.product_uuid IS NULL OR TRIM(NEW.product_uuid) = ''
+           BEGIN SELECT RAISE(ABORT, 'product_uuid is required'); END"""
+    )
+    db.execute(
+        """CREATE TRIGGER IF NOT EXISTS products_product_uuid_immutable
+           BEFORE UPDATE OF product_uuid ON products
+           WHEN NEW.product_uuid <> OLD.product_uuid
+           BEGIN SELECT RAISE(ABORT, 'product_uuid is immutable'); END"""
+    )
+
+    product_uuids = {
+        row["id"]: row["product_uuid"]
+        for row in db.execute("SELECT id,product_uuid FROM products")
+    }
+    for row in db.execute("SELECT id,cart_json FROM held_bills").fetchall():
+        try:
+            cart = json.loads(row["cart_json"])
+            items = cart.get("items", [])
+            changed = False
+            for item in items:
+                if not isinstance(item, dict) or item.get("product_uuid"):
+                    continue
+                legacy_id = item.get("product_id")
+                if isinstance(legacy_id, int) and legacy_id in product_uuids:
+                    item["product_uuid"] = product_uuids[legacy_id]
+                    item.pop("product_id", None)
+                    changed = True
+            if changed:
+                db.execute(
+                    "UPDATE held_bills SET cart_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (json.dumps(cart, ensure_ascii=False), row["id"]),
+                )
+        except (TypeError, ValueError, json.JSONDecodeError):
+            # Historical malformed held bills remain intact and will be rejected on use.
+            continue
+
+
+def _add_admin_two_factor(db: sqlite3.Connection) -> None:
+    """Add isolated encrypted-admin-TOTP state without changing staff sessions."""
+
+    db.executescript(
+        """CREATE TABLE IF NOT EXISTS staff_two_factor (
+            staff_id INTEGER PRIMARY KEY REFERENCES staff(id) ON DELETE CASCADE,
+            secret_encrypted TEXT,
+            pending_secret_encrypted TEXT,
+            is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0,1)),
+            last_totp_counter INTEGER,
+            enabled_at TEXT,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CHECK ((is_enabled=0) OR secret_encrypted IS NOT NULL)
+        );
+        CREATE TABLE IF NOT EXISTS staff_two_factor_recovery_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+            code_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            used_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_staff_two_factor_recovery_codes_staff
+        ON staff_two_factor_recovery_codes(staff_id,used_at);
+        CREATE TABLE IF NOT EXISTS staff_two_factor_challenges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            csrf_token TEXT NOT NULL,
+            next_url TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_staff_two_factor_challenges_expiry
+        ON staff_two_factor_challenges(expires_at);"""
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(20, "enable configured negative stock", _enable_configured_negative_stock),
     Migration(21, "add LINE customer identity", _add_line_customer_identity),
     Migration(22, "add customer lifecycle fields", _add_customer_lifecycle_fields),
+    Migration(23, "add immutable product UUIDs", _add_product_uuid),
+    Migration(24, "add admin TOTP two-factor authentication", _add_admin_two_factor),
 )
 
 

@@ -1,12 +1,12 @@
 (() => {
-  const key="onlineCartV1",host=document.querySelector("#cartItems");
+  const key="onlineCartV2",host=document.querySelector("#cartItems");
   const read=()=>{try{return JSON.parse(localStorage.getItem(key)||"[]")}catch{return[]}};
   const write=cart=>{localStorage.setItem(key,JSON.stringify(cart));render()};
   const escapeHtml=value=>{const node=document.createElement("div");node.textContent=value;return node.innerHTML};
   function add(product,button){
-    const cart=read(),item=cart.find(row=>row.product_id===product.id),step=product.allow_decimal_quantity?0.001:1,max=Math.min(product.available_quantity,product.online_max_quantity||Infinity);
+    const cart=read(),item=cart.find(row=>row.product_uuid===product.product_uuid),step=product.allow_decimal_quantity?0.001:1,max=Math.min(product.available_quantity,product.online_max_quantity||Infinity);
     if((item?.quantity||0)+step>max)return;
-    if(item)item.quantity+=step;else cart.push({product_id:product.id,name_th:product.name_th,image_path:product.image_path||"",price_satang:product.price_satang,quantity:step,max,allow_decimal_quantity:product.allow_decimal_quantity});
+    if(item)item.quantity+=step;else cart.push({product_uuid:product.product_uuid,name_th:product.name_th,image_path:product.image_path||"",price_satang:product.price_satang,quantity:step,max,allow_decimal_quantity:product.allow_decimal_quantity});
     write(cart);button.classList.add("added");setTimeout(()=>button.classList.remove("added"),450)
   }
   function render(){
@@ -19,10 +19,10 @@
   async function hydrate(){
     const cart=read();if(!cart.length)return render();
     try{
-      const response=await fetch("/order/api/cart/validate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:cart.map(item=>({product_id:item.product_id,quantity:item.quantity}))})}),data=await response.json();
+      const response=await fetch("/order/api/cart/validate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:cart.map(item=>({product_uuid:item.product_uuid,quantity:item.quantity}))})}),data=await response.json();
       if(!response.ok)return render();
-      const current=new Map(data.items.map(item=>[item.product_id,item]));
-      cart.forEach(item=>{const product=current.get(item.product_id);if(!product)return;item.image_path=product.image_path||item.image_path;item.price_satang=product.unit_price_satang;item.max=product.available_quantity});
+      const current=new Map(data.items.map(item=>[item.product_uuid,item]));
+      cart.forEach(item=>{const product=current.get(item.product_uuid);if(!product)return;item.image_path=product.image_path||item.image_path;item.price_satang=product.unit_price_satang;item.max=product.available_quantity});
       localStorage.setItem(key,JSON.stringify(cart));render()
     }catch{render()}
   }

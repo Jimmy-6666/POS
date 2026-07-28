@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b3d2a">
   <title>{% block title %}ระบบ POS{% endblock %}</title>
   <link rel="stylesheet" href="{{url_for('static',filename='css/app.css',v=15)}}">
-  <link rel="stylesheet" href="{{url_for('static',filename='css/v2.css',v=10)}}">
+  <link rel="stylesheet" href="{{url_for('static',filename='css/v2.css',v=11)}}">
   {% block extra_head %}{% endblock %}
 </head>
 <body class="{% if current_staff %}has-sidebar{% endif %}" data-endpoint="{{request.endpoint or ''}}">
@@ -50,11 +50,11 @@
     {% endif %}
   </nav>
   <div class="sidebar-footer">
-    <div class="sidebar-user"><strong>{{current_staff.display_name}}</strong><small>{{current_staff.role_name}}</small><a href="{{url_for('auth.change_pin')}}">เปลี่ยน PIN</a></div>
+    <div class="sidebar-user"><strong>{{current_staff.display_name}}</strong><small>{{current_staff.role_name}}</small><a href="{{url_for('auth.change_pin')}}">เปลี่ยน PIN</a>{% if current_staff.role_code=='admin' %}<a href="{{url_for('auth.account_security')}}">ความปลอดภัยบัญชี</a>{% endif %}</div>
     <form class="sidebar-logout" method="post" action="{{url_for('auth.logout')}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button type="submit"><i>↪</i><span>ออกจากระบบ</span></button></form>
   </div>
 </aside>
-<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R2.2</span></header>
+<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R2.3</span></header>
 <div id="sidebarOverlay" class="sidebar-overlay"></div>
 {% endif %}
 <main id="mainContent" class="shell {% block shell_class %}{% endblock %}">

@@ -133,6 +133,18 @@ def permission_required(permission_code):
     return decorator
 
 
+def admin_required(view):
+    """Restrict an account-security action to an authenticated administrator."""
+
+    @wraps(view)
+    @login_required
+    def wrapped(**kwargs):
+        if g.staff["role_code"] != "admin":
+            return ("เฉพาะผู้ดูแลระบบเท่านั้น", 403)
+        return view(**kwargs)
+    return wrapped
+
+
 def valid_csrf(value):
     return bool(g.session_row and value and hmac.compare_digest(value, g.session_row["csrf_token"]))
 

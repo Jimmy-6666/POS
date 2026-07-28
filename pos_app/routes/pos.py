@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, g, jsonify, render_template, request, 
 
 from ..auth import login_required, permission_required, valid_csrf
 from ..database import get_db
+from ..product_identity import ProductIdentityError, canonical_product_uuid
 from ..services.money import change_breakdown
 from ..services.print_jobs import enqueue_print
 from ..services.sales import SaleError, calculate_cart, complete_sale, void_sale
@@ -49,7 +50,7 @@ def products_api():
         where.append("p.category_id=?")
         params.append(category_id)
     rows = get_db().execute(
-        f"""SELECT p.id,p.barcode,p.name_th,p.price_satang,p.stock_quantity,p.image_path,
+        f"""SELECT p.product_uuid,p.barcode,p.name_th,p.price_satang,p.stock_quantity,p.image_path,
                    p.allow_decimal_quantity,p.is_favorite,u.name_th AS unit_name
             FROM products p JOIN units u ON u.id=p.unit_id
             WHERE {' AND '.join(where)} ORDER BY p.is_favorite DESC,p.name_th LIMIT 100""", params
@@ -119,6 +120,14 @@ def held_bills_api():
     data = request.get_json(silent=True) or {}
     if not valid_csrf(request.headers.get("X-CSRF-Token")) or not data.get("cart"):
         return jsonify(error="คำขอไม่ถูกต้อง"), 400
+    try:
+        items = data["cart"].get("items", [])
+        if not items:
+            raise ProductIdentityError("ไม่พบสินค้าในบิลพัก")
+        for item in items:
+            canonical_product_uuid(item.get("product_uuid"))
+    except (AttributeError, ProductIdentityError) as exc:
+        return jsonify(error=str(exc)), 400
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     cursor = db.execute(
         "INSERT INTO held_bills (staff_id,label,cart_json,created_at,updated_at) VALUES (?,?,?,?,?)",

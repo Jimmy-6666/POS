@@ -23,8 +23,9 @@ class OnlinePhase5Tests(unittest.TestCase):
             db.execute("INSERT INTO products(barcode,name_th,category_id,unit_id,price_satang,stock_quantity,is_online_available) VALUES('111','สินค้า',?,?,1000,5,1)", (category, unit))
             db.execute("INSERT INTO delivery_locations(name,room_required) VALUES('รีสอร์ต',1)"); db.commit()
         customer = self.app.test_client(); register_customer(customer)
-        with self.app.app_context(): customer_csrf = get_db().execute("SELECT csrf_token FROM customer_sessions").fetchone()[0]
-        customer.post("/order/api/orders", json={"items": [{"product_id": 1, "quantity": 2}], "delivery_location_id": 1,
+        with self.app.app_context():
+            db=get_db(); customer_csrf = db.execute("SELECT csrf_token FROM customer_sessions").fetchone()[0]; self.product_uuid=db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
+        customer.post("/order/api/orders", json={"items": [{"product_uuid": self.product_uuid, "quantity": 2}], "delivery_location_id": 1,
             "room_reference": "A1", "payment_method": "cash", "idempotency_key": "reconcile-123456"}, headers={"X-CSRF-Token": customer_csrf})
         self.staff = self.app.test_client(); self.staff.post("/login", data={"staff_id": "1", "pin": "1234"})
         with self.app.app_context(): self.csrf = get_db().execute("SELECT csrf_token FROM staff_sessions").fetchone()[0]

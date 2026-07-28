@@ -1,3 +1,43 @@
+# Version 2.3 — Released 2026-07-28
+
+## Release summary
+
+- Published immutable `product_uuid` product identity across product-facing
+  routes, browser payloads, held carts, inventory and online-order boundaries.
+  The legacy numeric `products.id` remains private relational storage; SKU and
+  barcode remain mutable unique business fields.
+- Published admin-only Google Authenticator-compatible TOTP login, encrypted
+  secrets, one-time hashed recovery codes, pre-session verification challenges,
+  throttling/replay protection, and non-sensitive security audit events.
+- Published admin-only product XLSX export/template and previewed, explicitly
+  confirmed atomic import. Import uses UUID-only updates, protects existing
+  stock ledgers, and reports safe row-level validation results.
+- Published cache-aligned POS product selection after the UUID client migration,
+  so current browsers use the matching touch-to-cart handler.
+
+## Product XLSX details
+
+- Added admin-only product XLSX export, upload preview, and explicit atomic
+  import confirmation. The workbook has stable headers, a frozen header row,
+  text SKU/barcode cells, active category/unit/status dropdowns, and an
+  instructions sheet.
+- `product_uuid` is the only import update key. Blank UUID creates a new
+  system-identified product; unknown, invalid, or duplicated UUIDs are
+  rejected. SKU and barcode remain mutable unique business values and cannot
+  match existing products.
+- Existing stock is read-only in XLSX; a new product's initial stock creates an
+  audited opening-balance ledger movement. Import/export audits retain only the
+  actor, filename, time, and summary counts.
+- Prevented a no-op XLSX round trip from reporting product changes solely
+  because historical text has trailing whitespace. Preview details now list
+  only created/updated rows, with Thai name plus final cost and selling prices.
+- Bumped the POS client asset version after switching cart identity to
+  `product_uuid`, ensuring cached browsers load the matching tap-to-add handler.
+- XLSX confirmation now revalidates update targets, active references, and
+  business-key uniqueness after acquiring `BEGIN IMMEDIATE`; a changed target
+  rolls back the whole batch. Each created or updated product also receives a
+  non-sensitive per-product audit entry that records only changed field names.
+
 # Version 2.2 — Released 2026-07-28
 
 ## Release summary
@@ -251,3 +291,25 @@
   hash, Windows Authenticode status, and pinned publisher thumbprint are all
   required. Applying requires the current admin PIN and the detached runner
   checks the signature/thumbprint again before handing off to the signed script.
+
+## Version 2.3 scope — Product UUID foundation (approved Sprints 1–2)
+
+- Added migration 23 to create, backfill, uniquely index, and make immutable
+  `products.product_uuid`. The migration preserves all numeric foreign-key
+  history and safely converts valid held-bill carts to UUID references.
+- Switched product-facing POS, inventory, stock-count, product-management, and
+  online-order boundaries to UUID-only identity. SKU and barcode remain mutable
+  and unique business fields; they are not matching keys.
+- Added regression coverage for legacy migration/backfill, immutability,
+  UUID-only public payloads, and SKU/barcode changes retaining product identity.
+
+## Version 2.3 scope — Admin two-factor authentication (approved Sprint 3)
+
+- Added migration 24 and an admin-only Google Authenticator-compatible TOTP
+  login step. PIN/password verification creates no staff session until the
+  second factor succeeds; manager and cashier login remains unchanged.
+- Added encrypted TOTP secrets, QR setup/fallback secret display, one-time
+  hashed recovery codes, replay protection, failed-factor rate limiting, and
+  audited enable/disable/recovery-code/login events without sensitive values.
+- Added a verified second-admin recovery reset which invalidates the target
+  administrator's pending challenges and active sessions before re-enrollment.

@@ -28,6 +28,7 @@ class Phase3To5Tests(unittest.TestCase):
                 (category, unit),
             )
             db.commit()
+            self.product_uuid = db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
         self.client = self.app.test_client()
         self.client.post("/login", data={"staff_id": "1", "pin": "1234"})
         with self.app.app_context():
@@ -38,7 +39,7 @@ class Phase3To5Tests(unittest.TestCase):
 
     def payload(self, **updates):
         data = {
-            "items": [{"product_id": 1, "quantity": 2, "discount_satang": 100}],
+            "items": [{"product_uuid": self.product_uuid, "quantity": 2, "discount_satang": 100}],
             "bill_discount_satang": 100,
             "payment_method": "cash",
             "amount_received_satang": 3000,
@@ -78,10 +79,10 @@ class Phase3To5Tests(unittest.TestCase):
             get_db().execute("UPDATE settings SET value='0' WHERE key='allow_negative_stock'")
             get_db().commit()
             with self.assertRaisesRegex(SaleError, "สต็อกไม่เพียงพอ"):
-                complete_sale(self.payload(items=[{"product_id": 1, "quantity": 99}], amount_received_satang=100000), 1)
+                complete_sale(self.payload(items=[{"product_uuid": self.product_uuid, "quantity": 99}], amount_received_satang=100000), 1)
             get_db().execute("UPDATE settings SET value='1' WHERE key='allow_negative_stock'")
             get_db().commit()
-            sale_id, _, _, _ = complete_sale(self.payload(items=[{"product_id": 1, "quantity": 99}], amount_received_satang=100000), 1)
+            sale_id, _, _, _ = complete_sale(self.payload(items=[{"product_uuid": self.product_uuid, "quantity": 99}], amount_received_satang=100000), 1)
             db = get_db()
             self.assertGreater(sale_id, 0)
             self.assertEqual(db.execute("SELECT stock_quantity FROM products WHERE id=1").fetchone()[0], -89)
@@ -99,6 +100,7 @@ class Phase3To5Tests(unittest.TestCase):
         self.assertEqual(pos_page.status_code, 200)
         self.assertIn(b'id="productLookup"', pos_page.data)
         self.assertIn(b'id="mobileCartBar"', pos_page.data)
+        self.assertIn(b'js/pos.js?v=26', pos_page.data)
         self.assertIn("จัดการออเดอร์ออนไลน์".encode(), pos_page.data)
         self.assertIn(b'css/v2.css', pos_page.data)
         self.assertIn("ตั้งราคาขาย".encode(), self.client.get("/products").data)

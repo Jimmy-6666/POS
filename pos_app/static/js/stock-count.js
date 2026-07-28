@@ -5,7 +5,7 @@
   const message = document.querySelector('#cameraMessage');
   const barcodeInput = document.querySelector('#countBarcode');
   const quantityInput = document.querySelector('#countQuantity');
-  const productSelect = document.querySelector('select[name="product_id"]');
+  const productSelect = document.querySelector('select[name="product_uuid"]');
   const scannedProduct = document.querySelector('#scannedProduct');
   if (!button || !photo || !quantityInput) return;
 

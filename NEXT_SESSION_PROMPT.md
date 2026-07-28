@@ -1,45 +1,57 @@
-# Hands-on Prompt for the Next Session
+# Thai Minishop POS — Version 2.3 next-session hands-on prompt
 
-Copy the prompt below into the next Codex session:
+Continue from the published Version 2.3 baseline in this workspace. Work
+hands-on only after the owner gives a specific approved fix or sprint. Do not
+start a new sprint or broaden product scope on your own.
 
-```text
-Continue the Thai Minishop POS from the published Version 2.2 baseline.
+## Required opening checks
 
-Workspace:
-C:\Users\Zekken\Documents\Codex\2026-07-22\files-mentioned-by-the-user-you\outputs\thai-minimart-pos-v2.1
-
-Start hands-on:
-1. Read AGENTS.md, then read only AI_CONTEXT.md, PROJECT_MAP.md,
-   FEATURE_STATUS.md, DECISIONS.md, CODING_RULES.md, and DESIGN_RULES.md.
-2. Confirm git branch/tag and run `git status --short`. Preserve all existing
-   data and do not discard uncommitted user work.
-3. Read VERSION_2.2.md and the newest CHANGELOG.md section before changing
+1. Read `AGENTS.md`, then read only `AI_CONTEXT.md`, `PROJECT_MAP.md`,
+   `FEATURE_STATUS.md`, `DECISIONS.md`, `CODING_RULES.md`, and
+   `DESIGN_RULES.md`.
+2. Confirm the branch/tag and run `git status --short`. Preserve all existing
+   data and uncommitted work; never reset, clean, or overwrite it.
+3. Read `VERSION_2.3.md` and the newest `CHANGELOG.md` section before changing
    release behavior.
-4. Verify UAT at http://127.0.0.1:8001/health and confirm LIFF config through
-   /api/auth/config if the current task touches customer ordering.
-5. For backup work, inspect the Backup page status and
-   uat_runtime/support/remote-backup-status.json. Do not copy secrets, private
-   keys, passwords, databases, or runtime files into Git or support output.
-6. Run focused tests for every change and the full suite for shared logic,
+4. If the task touches customer ordering, verify UAT at
+   `http://127.0.0.1:8001/health` and check LIFF configuration through
+   `/api/auth/config`.
+5. If the task touches backup, inspect the Backup page status and
+   `uat_runtime/support/remote-backup-status.json`. Never copy secrets,
+   private keys, passwords, databases, or runtime files into Git or support
+   output.
+6. Run focused tests for every change. Run the full suite for shared logic,
    schema, auth, sales, inventory, reconciliation, backup, or release work.
 
-Current Version 2.2 facts:
-- LINE LIFF customer auth is active at https://online.raisanngam.com/order.
-- UAT runs on port 8001; desktop release defaults to port 8002.
-- POS and online negative-stock settings are independent.
-- Customer deletion is an audited anonymizing tombstone and permits
-  re-registration with the same LINE/phone.
-- Checkout is compact and can reuse five recent delivery snapshots.
-- Database ZIPs exclude product images. Product images sync by delta to the
-  VPS; replaced/deleted remote snapshots move to file-backups/.
-- The UAT VPS image baseline contains 385 product images.
-- Daily backup time is configured in the Backup page and runs only while the
-  POS is open during that minute.
-- The latest release suite count is recorded in FEATURE_STATUS.md.
-- Production catalog still requires owner-approved real barcodes and prices;
-  UAT mock values are not production approval.
+## Version 2.3 facts
 
-Do not start a new sprint or broaden product scope until the owner explicitly
-approves it. If the owner gives a specific fix within Version 2.2, implement
-and verify that fix without inventing a new sprint.
-```
+- UAT runs on port 8001; the desktop release defaults to port 8002.
+- LINE LIFF customer authentication is active at
+  `https://online.raisanngam.com/order`.
+- POS and online negative-stock permissions are separate.
+- Customer deletion is audited anonymization and permits re-registration with
+  the same former LINE identity/phone.
+- Product identity is exclusively immutable `product_uuid`. SKU, barcode, and
+  name are mutable business fields and must never be used to match products.
+- Admin TOTP is the only optional second factor, applies only after a valid
+  admin password, and must never create the authenticated session early.
+- XLSX product import/export is admin-only. Import previews do not mutate the
+  database; confirmed updates match by `product_uuid` only; existing stock is
+  read-only; import records only safe audit metadata.
+- Database ZIPs exclude product images. Product images sync by delta to the
+  VPS; replaced/deleted remote snapshots move to `file-backups/`.
+- The UAT VPS image baseline contains 385 product images. Production catalog
+  still needs owner-approved real barcodes and prices; UAT mock values are not
+  production approval.
+- Daily backup time is set on the Backup page and runs only while the POS is
+  open during that minute.
+- Version 2.3 verification baseline: 103 tests passed on 2026-07-28. Rerun
+  rather than carrying this count forward.
+
+## Safe task process
+
+Classify the task through `PROJECT_MAP.md`, then open only the smallest route,
+service, template/JS/CSS, schema, and test scope needed. State affected
+modules, migration impact, and risk before changing code. Use additive,
+data-preserving migrations; preserve audit history; enforce permissions on the
+backend; and update only relevant documentation plus `CHANGELOG.md`.

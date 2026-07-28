@@ -29,15 +29,15 @@
   function renderProducts() {
     $('#resultCount').textContent = `${products.length} สินค้า`;
     $('#productGrid').innerHTML = products.map((product) => `
-      <button class="product-card-v2" type="button" data-id="${product.id}" aria-label="เพิ่ม ${escapeHtml(product.name_th)} ราคา ${money(product.price_satang)}">
+      <button class="product-card-v2" type="button" data-product-uuid="${product.product_uuid}" aria-label="เพิ่ม ${escapeHtml(product.name_th)} ราคา ${money(product.price_satang)}">
         ${product.image_path ? `<img src="/uploads/products/${encodeURIComponent(product.image_path)}" alt="">` : '<span class="product-placeholder-v2" aria-hidden="true">□</span>'}
         <span class="product-info-v2"><strong>${escapeHtml(product.name_th)}</strong><b>${money(product.price_satang)}</b></span>
       </button>`).join('') || '<div class="empty-state"><span>⌕</span><strong>ไม่พบสินค้า</strong><p>ลองค้นหาด้วยชื่อ บาร์โค้ด หรือเลือกหมวดอื่น</p></div>';
   }
   function addProduct(product) {
-    const item = cart.find((row) => row.product_id === product.id);
+    const item = cart.find((row) => row.product_uuid === product.product_uuid);
     if (item) item.quantity += 1;
-    else cart.push({ product_id: product.id, name: product.name_th, price_satang: product.price_satang, quantity: 1, discount_satang: 0, allow_decimal: product.allow_decimal_quantity });
+    else cart.push({ product_uuid: product.product_uuid, name: product.name_th, price_satang: product.price_satang, quantity: 1, discount_satang: 0, allow_decimal: product.allow_decimal_quantity });
     renderCart();
     message(`เพิ่ม ${product.name_th} แล้ว`);
     $('#productLookup').select();
@@ -170,7 +170,7 @@
   function openMobileCart() { document.body.classList.add('mobile-cart-open'); $('#cartPanel').setAttribute('aria-hidden', 'false'); }
   function closeMobileCart() { document.body.classList.remove('mobile-cart-open'); }
 
-  $('#productGrid').addEventListener('click', (event) => { const button = event.target.closest('[data-id]'); if (button) addProduct(products.find((product) => product.id === Number(button.dataset.id))); });
+  $('#productGrid').addEventListener('click', (event) => { const button = event.target.closest('[data-product-uuid]'); if (button) addProduct(products.find((product) => product.product_uuid === button.dataset.productUuid)); });
   $('#categoryBoxes').addEventListener('click', (event) => { const button = event.target.closest('[data-category]'); if (!button) return; activeCategory = button.dataset.category; document.querySelectorAll('.category-chip').forEach((chip) => chip.classList.toggle('active', chip === button)); loadProducts(); });
   $('#cartItems').addEventListener('change', (event) => { const index = Number(event.target.dataset.i); if (event.target.dataset.action === 'qty') cart[index].quantity = Math.max(Number(event.target.min), Number(event.target.value) || 1); renderCart(); });
   $('#cartItems').addEventListener('click', (event) => { const button = event.target.closest('[data-action]'); if (!button || button.tagName === 'INPUT') return; const index = Number(button.dataset.i); if (button.dataset.action === 'plus') cart[index].quantity += 1; if (button.dataset.action === 'minus') cart[index].quantity -= 1; if (button.dataset.action === 'remove' || cart[index]?.quantity <= 0) cart.splice(index, 1); renderCart(); });

@@ -16,7 +16,7 @@ Release 2.2 server. Batch files select the port and runtime root.
 | Authentication, sessions, CSRF, permissions | `pos_app/auth.py`, `pos_app/routes/auth.py` |
 | Database bootstrap/migrations | `pos_app/database.py`, `pos_app/schema.sql` |
 | Dashboard/health | `pos_app/routes/main.py`, `index.html` |
-| Product/catalog/price control | `pos_app/routes/products.py`, product/reference/price templates, `product-form.js` |
+| Product/catalog/price control | `pos_app/product_identity.py`, `pos_app/services/product_spreadsheet.py`, `pos_app/routes/products.py`, product/reference/price templates, `product-form.js` |
 | Register, held bills, sales, receipts, voids | `pos_app/routes/pos.py`, `pos_app/services/sales.py`, POS/sales/receipt templates, `pos.js` |
 | Money conversion/change | `pos_app/services/money.py` |
 | Receiving, adjustments, ledger, suppliers | `pos_app/routes/inventory.py`, inventory templates |
@@ -51,7 +51,7 @@ imports, generated outputs, and UAT data are not source modules.
 - Reporting/closing change: `reporting.py` + affected template/JS + phase 6–10
   or billing tests.
 - Auth/admin change: auth/admin route + relevant template + phase 1/2 tests.
-- Schema change: `schema.sql` + additive migration in `database.py` + affected
+- Schema change: `schema.sql` + additive migration in `migrations.py` + affected
   domain code/tests + `DATABASE_OVERVIEW.md`.
 - Online ordering change: affected customer/staff/admin route +
   `services/online_orders.py` for lifecycle/reservations + online UI +

@@ -92,6 +92,44 @@ CREATE TABLE IF NOT EXISTS staff_sessions (
 CREATE INDEX IF NOT EXISTS idx_staff_sessions_token ON staff_sessions(token_hash);
 CREATE INDEX IF NOT EXISTS idx_staff_sessions_expiry ON staff_sessions(expires_at);
 
+CREATE TABLE IF NOT EXISTS staff_two_factor (
+    staff_id INTEGER PRIMARY KEY REFERENCES staff(id) ON DELETE CASCADE,
+    secret_encrypted TEXT,
+    pending_secret_encrypted TEXT,
+    is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0,1)),
+    last_totp_counter INTEGER,
+    enabled_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK ((is_enabled=0) OR secret_encrypted IS NOT NULL)
+);
+
+CREATE TABLE IF NOT EXISTS staff_two_factor_recovery_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    used_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_staff_two_factor_recovery_codes_staff
+ON staff_two_factor_recovery_codes(staff_id,used_at);
+
+CREATE TABLE IF NOT EXISTS staff_two_factor_challenges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    csrf_token TEXT NOT NULL,
+    next_url TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_staff_two_factor_challenges_expiry
+ON staff_two_factor_challenges(expires_at);
+
 CREATE TABLE IF NOT EXISTS login_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     staff_id INTEGER REFERENCES staff(id) ON DELETE SET NULL,
@@ -114,6 +152,12 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_uuid TEXT NOT NULL UNIQUE DEFAULT (
+        lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
+        substr(lower(hex(randomblob(2))), 2, 3) || '-' ||
+        substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2, 3) || '-' ||
+        lower(hex(randomblob(6)))
+    ),
     barcode TEXT NOT NULL UNIQUE,
     sku TEXT UNIQUE,
     name_th TEXT NOT NULL,

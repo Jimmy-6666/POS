@@ -7,5 +7,5 @@
   <footer class="glass-cart-summary"><div><span>ราคารวม</span><strong id="cartSubtotal">0.00 บาท</strong></div><p id="cartDeliveryHint">สั่งครบ 100 บาท ฟรีค่าส่ง</p><div class="cart-page-actions"><a href="{{url_for('online.catalog')}}" class="secondary">สั่งสินค้าเพิ่ม</a><a id="checkoutLink" href="{{url_for('online.checkout')}}" class="primary">ถัดไป</a></div></footer>
 </section>
 <div id="cartToast" class="customer-popup" aria-live="polite"></div>
-<script>window.ONLINE_ORDERING_OPEN={{'true' if is_open else 'false'}};</script><script src="{{url_for('static',filename='js/online-cart-page.js',v=3)}}"></script>
+<script>window.ONLINE_ORDERING_OPEN={{'true' if is_open else 'false'}};</script><script src="{{url_for('static',filename='js/online-cart-page.js',v=4)}}"></script>
 {% endblock %}

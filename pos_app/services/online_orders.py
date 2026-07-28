@@ -190,9 +190,14 @@ def complete_online_order_sale(order_id, staff_id, staff_role, payload):
         # Delivery staff confirms the actual method at handoff because customers may change it on site.
         if payment_method == "cash" and cash_received < order["total_satang"]:
             raise OnlineOrderError("เงินสดที่รับน้อยกว่ายอดออเดอร์")
-        rows = db.execute("SELECT * FROM online_order_items WHERE order_id=? AND is_removed=0 ORDER BY id", (order_id,)).fetchall()
-        items = [{"product_id": row["product_id"], "quantity": row["ordered_quantity"], "discount_satang": 0} for row in rows]
-        prices = {row["product_id"]: row["unit_price_satang"] for row in rows}
+        rows = db.execute(
+            """SELECT oi.*,p.product_uuid FROM online_order_items oi
+               JOIN products p ON p.id=oi.product_id
+               WHERE oi.order_id=? AND oi.is_removed=0 ORDER BY oi.id""",
+            (order_id,),
+        ).fetchall()
+        items = [{"product_uuid": row["product_uuid"], "quantity": row["ordered_quantity"], "discount_satang": 0} for row in rows]
+        prices = {row["product_uuid"]: row["unit_price_satang"] for row in rows}
         sale_id, receipt, cart, change = complete_sale(
             {"items": items, "bill_discount_satang": 0, "delivery_fee_satang": order["delivery_fee_satang"],
              "payment_method": payment_method, "amount_received_satang": cash_received,

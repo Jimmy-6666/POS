@@ -5,10 +5,11 @@ import sqlite3
 import subprocess
 import tempfile
 import unittest
+from uuid import UUID
 from pathlib import Path
 
 from pos_app import create_app
-from pos_app.migrations import Migration, MigrationError, apply_migrations, ensure_history_table
+from pos_app.migrations import _add_product_uuid, Migration, MigrationError, apply_migrations, ensure_history_table
 from pos_app.runtime_paths import (
     RuntimeConfig,
     RuntimePathError,
@@ -90,11 +91,13 @@ class MigrationHistoryTests(unittest.TestCase):
                 (20, "enable configured negative stock", 1),
                 (21, "add LINE customer identity", 1),
                 (22, "add customer lifecycle fields", 1),
+                (23, "add immutable product UUIDs", 1),
+                (24, "add admin TOTP two-factor authentication", 1),
             ])
             connection.close()
             create_app({"TESTING": True, "DATABASE": str(database)})
             connection = sqlite3.connect(database)
-            self.assertEqual(connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 4)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 6)
             connection.close()
         finally:
             folder.cleanup()
@@ -119,6 +122,34 @@ class MigrationHistoryTests(unittest.TestCase):
         self.assertEqual(connection.execute("SELECT success FROM schema_migrations WHERE version=20").fetchone()[0], 0)
         with self.assertRaises(MigrationError):
             apply_migrations(connection, [migration], "test")
+        connection.close()
+
+    def test_product_uuid_migration_backfills_held_bills_and_locks_identity(self):
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        connection.executescript(
+            """CREATE TABLE products (id INTEGER PRIMARY KEY, name_th TEXT NOT NULL);
+               CREATE TABLE held_bills (id INTEGER PRIMARY KEY, cart_json TEXT NOT NULL, updated_at TEXT);"""
+        )
+        connection.execute("INSERT INTO products(id,name_th) VALUES(1,'first'),(2,'second')")
+        connection.execute(
+            "INSERT INTO held_bills(id,cart_json) VALUES(1,?)",
+            (json.dumps({"items": [{"product_id": 1, "quantity": 2}]}),),
+        )
+
+        _add_product_uuid(connection)
+
+        products = connection.execute("SELECT id,product_uuid FROM products ORDER BY id").fetchall()
+        self.assertEqual(len({row["product_uuid"] for row in products}), 2)
+        for row in products:
+            self.assertEqual(str(UUID(row["product_uuid"])), row["product_uuid"])
+        held_cart = json.loads(connection.execute("SELECT cart_json FROM held_bills WHERE id=1").fetchone()[0])
+        self.assertEqual(held_cart["items"][0]["product_uuid"], products[0]["product_uuid"])
+        self.assertNotIn("product_id", held_cart["items"][0])
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("UPDATE products SET product_uuid=? WHERE id=1", (products[1]["product_uuid"],))
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("INSERT INTO products(id,name_th) VALUES(3,'third')")
         connection.close()
 
     def test_power_shell_scripts_parse_when_available(self):

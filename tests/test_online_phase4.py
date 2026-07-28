@@ -23,11 +23,13 @@ class OnlinePhase4Tests(unittest.TestCase):
                           VALUES('222','สินค้าเพิ่ม',?,?,1500,8,1)""", (category, unit))
             db.execute("INSERT INTO delivery_locations(name,room_required) VALUES('รีสอร์ต',1)")
             db.commit()
+            self.first_product_uuid = db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
+            self.second_product_uuid = db.execute("SELECT product_uuid FROM products WHERE id=2").fetchone()[0]
         customer = self.app.test_client()
         register_customer(customer)
         with self.app.app_context():
             csrf = get_db().execute("SELECT csrf_token FROM customer_sessions").fetchone()[0]
-        result = customer.post("/order/api/orders", json={"items": [{"product_id": 1, "quantity": 2}],
+        result = customer.post("/order/api/orders", json={"items": [{"product_uuid": self.first_product_uuid, "quantity": 2}],
             "delivery_location_id": 1, "room_reference": "A1", "payment_method": "cash", "idempotency_key": "staff-test-123456"},
             headers={"X-CSRF-Token": csrf}).get_json()
         self.staff = self.app.test_client()
@@ -65,7 +67,7 @@ class OnlinePhase4Tests(unittest.TestCase):
             "reason": "ลูกค้าขอแก้จำนวน กรุณายืนยันราคาใหม่",
         })
         response = self.staff.post("/online-orders/1/items", data={
-            "csrf_token": self.csrf, "product_id": "2", "quantity": "2",
+            "csrf_token": self.csrf, "product_uuid": self.second_product_uuid, "quantity": "2",
             "reason": "ลูกค้าขอเพิ่มสินค้า กรุณายืนยันราคาใหม่",
         }, follow_redirects=True)
         page = response.get_data(as_text=True)

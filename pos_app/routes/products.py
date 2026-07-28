@@ -1,14 +1,27 @@
 import json
 import secrets
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 
-from flask import Blueprint, current_app, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, g, redirect, render_template, request, send_file, url_for
 from werkzeug.utils import secure_filename
 
-from ..auth import permission_required, valid_csrf
+from ..auth import admin_required, permission_required, valid_csrf
 from ..database import get_db
+from ..product_identity import ProductIdentityError, new_product_uuid, product_by_uuid
 from ..services.money import baht_to_satang
+from ..services.product_spreadsheet import (
+    MAX_IMPORT_BYTES,
+    SpreadsheetError,
+    apply_import,
+    build_export_workbook,
+    export_audit_payload,
+    parse_import,
+    remember_preview,
+    safe_filename,
+    take_preview,
+)
 
 
 bp = Blueprint("products", __name__, url_prefix="/products")
@@ -82,6 +95,70 @@ def index():
     return render_template("products.html", products=products, query=query, low_only=low_only)
 
 
+@bp.get("/xlsx/export")
+@admin_required
+def export_xlsx():
+    """Download the current catalog as the only supported XLSX import template."""
+
+    filename = f"products-export-{datetime.now().strftime('%Y%m%d-%H%M%S')}.xlsx"
+    db = get_db()
+    workbook = build_export_workbook(db)
+    export_audit_payload(db, g.staff["id"], filename, request.remote_addr)
+    return send_file(
+        BytesIO(workbook),
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        max_age=0,
+    )
+
+
+@bp.post("/xlsx/import")
+@admin_required
+def import_xlsx_preview():
+    if not valid_csrf(request.form.get("csrf_token")):
+        return ("คำขอไม่ถูกต้อง", 400)
+    uploaded = request.files.get("file")
+    filename = safe_filename(uploaded.filename if uploaded else None)
+    if not uploaded or not uploaded.filename or Path(filename).suffix.lower() != ".xlsx":
+        flash("กรุณาเลือกไฟล์ .xlsx", "error")
+        return redirect(url_for("products.index"))
+    content = uploaded.read(MAX_IMPORT_BYTES + 1)
+    if len(content) > MAX_IMPORT_BYTES:
+        flash("ไฟล์ XLSX ต้องมีขนาดไม่เกิน 2 MB", "error")
+        return redirect(url_for("products.index"))
+    try:
+        preview = parse_import(get_db(), content)
+    except SpreadsheetError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("products.index"))
+    token = remember_preview(g.staff["id"], filename, preview)
+    return render_template("product_import_preview.html", preview=preview, preview_token=token, filename=filename)
+
+
+@bp.post("/xlsx/import/confirm")
+@admin_required
+def confirm_xlsx_import():
+    if not valid_csrf(request.form.get("csrf_token")):
+        return ("คำขอไม่ถูกต้อง", 400)
+    try:
+        stored = take_preview(g.staff["id"], request.form.get("preview_token", ""))
+        summary = apply_import(get_db(), g.staff["id"], stored.filename, stored.preview, request.remote_addr)
+    except SpreadsheetError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("products.index"))
+    except Exception:
+        current_app.logger.exception("Product XLSX import failed")
+        flash("นำเข้าไม่สำเร็จและไม่มีรายการใดถูกบันทึก", "error")
+        return redirect(url_for("products.index"))
+    flash(
+        f"นำเข้าสินค้าเรียบร้อย: เพิ่ม {summary['created']} รายการ, แก้ไข {summary['updated']} รายการ, "
+        f"ไม่เปลี่ยนแปลง {summary['unchanged']} รายการ",
+        "success",
+    )
+    return redirect(url_for("products.index"))
+
+
 @bp.route("/new", methods=("GET", "POST"))
 @permission_required("products.manage")
 def create():
@@ -91,6 +168,7 @@ def create():
             return ("คำขอไม่ถูกต้อง", 400)
         try:
             data = parse_product_form()
+            data["product_uuid"] = new_product_uuid()
             data["price_satang"] = 0
             opening_stock = float(request.form.get("stock_quantity") or 0)
             if opening_stock < 0 or (not data["allow_decimal_quantity"] and not opening_stock.is_integer()):
@@ -100,10 +178,10 @@ def create():
             db.execute("BEGIN IMMEDIATE")
             cursor = db.execute(
                 """INSERT INTO products
-                   (barcode, sku, name_th, name_en, category_id, unit_id, cost_satang, price_satang,
+                   (product_uuid, barcode, sku, name_th, name_en, category_id, unit_id, cost_satang, price_satang,
                     stock_quantity, minimum_stock, image_path, is_active, is_favorite, allow_decimal_quantity,
                     is_online_available,online_sort_order,online_max_quantity)
-                   VALUES (:barcode,:sku,:name_th,:name_en,:category_id,:unit_id,:cost_satang,:price_satang,
+                   VALUES (:product_uuid,:barcode,:sku,:name_th,:name_en,:category_id,:unit_id,:cost_satang,:price_satang,
                            :stock_quantity,:minimum_stock,:image_path,:is_active,:is_favorite,:allow_decimal_quantity,
                            :is_online_available,:online_sort_order,:online_max_quantity)""",
                 {**data, "stock_quantity": opening_stock},
@@ -116,12 +194,12 @@ def create():
                        (product_id,movement_type,previous_quantity,changed_quantity,new_quantity,unit_cost_satang,
                         reference_type,reference_number,staff_id,note,created_at)
                        VALUES (?, 'opening_balance', 0, ?, ?, ?, 'product', ?, ?, 'ยอดเริ่มต้น', ?)""",
-                    (product_id, opening_stock, opening_stock, data["cost_satang"], str(product_id), g.staff["id"], now),
+                    (product_id, opening_stock, opening_stock, data["cost_satang"], data["product_uuid"], g.staff["id"], now),
                 )
             db.execute(
                 """INSERT INTO audit_logs (staff_id,action,entity_type,entity_id,new_value,ip_address,created_at)
                    VALUES (?, 'create_product', 'product', ?, ?, ?, ?)""",
-                (g.staff["id"], str(product_id), json.dumps({"barcode": data["barcode"], "name": data["name_th"]}, ensure_ascii=False), request.remote_addr, now),
+                (g.staff["id"], data["product_uuid"], json.dumps({"barcode": data["barcode"], "name": data["name_th"]}, ensure_ascii=False), request.remote_addr, now),
             )
             db.commit()
             flash("เพิ่มสินค้าเรียบร้อยแล้ว", "success")
@@ -133,11 +211,14 @@ def create():
     return render_template("product_form.html", product=None, categories=categories, units=units)
 
 
-@bp.route("/<int:product_id>/edit", methods=("GET", "POST"))
+@bp.route("/<product_uuid>/edit", methods=("GET", "POST"))
 @permission_required("products.manage")
-def edit(product_id):
+def edit(product_uuid):
     db = get_db()
-    product = db.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+    try:
+        product = product_by_uuid(db, product_uuid)
+    except ProductIdentityError:
+        product = None
     if not product:
         return ("ไม่พบสินค้า", 404)
     categories, units = reference_data()
@@ -151,7 +232,7 @@ def edit(product_id):
                 product["price_satang"] if price_value is None else baht_to_satang(price_value)
             )
             data["image_path"] = save_image(request.files.get("image")) or product["image_path"]
-            data["id"] = product_id
+            data["id"] = product["id"]
             db.execute(
                 """UPDATE products SET barcode=:barcode,sku=:sku,name_th=:name_th,name_en=:name_en,
                    category_id=:category_id,unit_id=:unit_id,cost_satang=:cost_satang,price_satang=:price_satang,
@@ -164,14 +245,14 @@ def edit(product_id):
             db.execute(
                 """INSERT INTO audit_logs (staff_id,action,entity_type,entity_id,old_value,new_value,ip_address,created_at)
                    VALUES (?, 'edit_product', 'product', ?, ?, ?, ?, ?)""",
-                (g.staff["id"], str(product_id), json.dumps(dict(product), ensure_ascii=False), json.dumps(data, ensure_ascii=False), request.remote_addr, now),
+                (g.staff["id"], product["product_uuid"], json.dumps(dict(product), ensure_ascii=False), json.dumps(data, ensure_ascii=False), request.remote_addr, now),
             )
             if product["price_satang"] != data["price_satang"]:
                 db.execute(
                     """INSERT INTO audit_logs (staff_id,action,entity_type,entity_id,old_value,new_value,ip_address,created_at)
                        VALUES (?, 'change_price', 'product', ?, ?, ?, ?, ?)""",
                     (
-                        g.staff["id"], str(product_id), str(product["price_satang"]),
+                        g.staff["id"], product["product_uuid"], str(product["price_satang"]),
                         str(data["price_satang"]), request.remote_addr, now,
                     ),
                 )
@@ -247,21 +328,21 @@ def prices():
             return ("คำขอไม่ถูกต้อง", 400)
         changes=[]
         try:
-            for product_id in request.form.getlist("product_id"):
-                price = baht_to_satang(request.form.get(f"price_{product_id}"))
-                old = db.execute("SELECT id,name_th,barcode,price_satang FROM products WHERE id=?", (product_id,)).fetchone()
-                if old and old["price_satang"] != price:changes.append({"id":old["id"],"name":old["name_th"],"barcode":old["barcode"],"old":old["price_satang"],"new":price})
+            for product_uuid in request.form.getlist("product_uuid"):
+                price = baht_to_satang(request.form.get(f"price_{product_uuid}"))
+                old = product_by_uuid(db, product_uuid)
+                if old and old["price_satang"] != price:changes.append({"product_uuid":old["product_uuid"],"name":old["name_th"],"barcode":old["barcode"],"old":old["price_satang"],"new":price})
             if request.form.get("action")!="confirm":
                 return render_template("product_price_confirm.html",changes=changes)
             db.execute("BEGIN IMMEDIATE")
             for change in changes:
-                current=db.execute("SELECT price_satang FROM products WHERE id=?",(change["id"],)).fetchone()
+                current=db.execute("SELECT price_satang FROM products WHERE product_uuid=?",(change["product_uuid"],)).fetchone()
                 if current and current[0] != change["new"]:
-                    db.execute("UPDATE products SET price_satang=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (change["new"], change["id"]))
+                    db.execute("UPDATE products SET price_satang=?,updated_at=CURRENT_TIMESTAMP WHERE product_uuid=?", (change["new"], change["product_uuid"]))
                     db.execute(
                         """INSERT INTO audit_logs (staff_id,action,entity_type,entity_id,old_value,new_value,ip_address,created_at)
                            VALUES (?, 'change_price', 'product', ?, ?, ?, ?, ?)""",
-                        (g.staff["id"], change["id"], str(current[0]), str(change["new"]), request.remote_addr, datetime.now(timezone.utc).isoformat(timespec="seconds")),
+                        (g.staff["id"], change["product_uuid"], str(current[0]), str(change["new"]), request.remote_addr, datetime.now(timezone.utc).isoformat(timespec="seconds")),
                     )
             db.commit()
             flash(f"บันทึกราคาขาย {len(changes)} รายการเรียบร้อยแล้ว", "success")
@@ -286,13 +367,13 @@ def prices():
         params.extend([term] * 4)
     filter_sql = "".join(f" AND {condition}" for condition in filters)
     rows = db.execute(
-        f"""SELECT p.id,p.barcode,p.sku,p.name_th,p.price_satang,c.name_th AS category_name
+        f"""SELECT p.product_uuid,p.barcode,p.sku,p.name_th,p.price_satang,c.name_th AS category_name
             FROM products p JOIN categories c ON c.id=p.category_id
             WHERE p.is_active=1 {filter_sql} ORDER BY c.name_th,p.name_th""", params
     ).fetchall()
     categories = db.execute("SELECT id,name_th FROM categories WHERE is_active=1 ORDER BY sort_order,name_th").fetchall()
-    exact_barcode_id = next((row["id"] for row in rows if row["barcode"] == query), None) if query else None
+    exact_barcode_uuid = next((row["product_uuid"] for row in rows if row["barcode"] == query), None) if query else None
     return render_template(
         "product_prices.html", products=rows, categories=categories,
-        selected_category=category_id, query=query, exact_barcode_id=exact_barcode_id,
+        selected_category=category_id, query=query, exact_barcode_uuid=exact_barcode_uuid,
     )

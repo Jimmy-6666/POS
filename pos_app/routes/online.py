@@ -15,6 +15,7 @@ from ..customer_auth import (
     valid_customer_csrf,
 )
 from ..database import get_db
+from ..product_identity import ProductIdentityError, canonical_product_uuid
 from ..services.online_orders import (
     OnlineOrderError, audit_order, cancel_customer_order, create_order, expire_pending_orders,
 )
@@ -77,7 +78,7 @@ def online_product_availability(rows, settings):
 
 def customer_repeat_products(customer_id, settings):
     rows = get_db().execute(
-        """SELECT p.id,p.name_th,p.price_satang,p.image_path,p.allow_decimal_quantity,p.online_max_quantity,
+        """SELECT p.product_uuid,p.name_th,p.price_satang,p.image_path,p.allow_decimal_quantity,p.online_max_quantity,
                   MAX(0,p.stock_quantity-COALESCE((SELECT SUM(sr.quantity) FROM stock_reservations sr
                     WHERE sr.product_id=p.id AND sr.status='active'),0)) AS available_quantity
            FROM online_order_items oi JOIN online_orders o ON o.id=oi.order_id
@@ -112,7 +113,7 @@ def available_products(query="", category_id=None):
         where.append("p.category_id=?")
         params.append(category_id)
     rows = get_db().execute(
-        f"""SELECT p.id,p.name_th,p.barcode,p.price_satang,p.image_path,p.allow_decimal_quantity,
+        f"""SELECT p.product_uuid,p.name_th,p.barcode,p.price_satang,p.image_path,p.allow_decimal_quantity,
                    p.online_max_quantity,c.id AS category_id,c.name_th AS category_name,
                    MAX(0,p.stock_quantity-COALESCE((SELECT SUM(sr.quantity) FROM stock_reservations sr
                      WHERE sr.product_id=p.id AND sr.status='active'),0)) AS available_quantity
@@ -134,18 +135,18 @@ def validate_cart(raw_items):
     seen = set()
     for raw in raw_items:
         try:
-            product_id = int(raw.get("product_id"))
+            product_uuid = canonical_product_uuid(raw.get("product_uuid"))
             quantity = Decimal(str(raw.get("quantity")))
-        except (TypeError, ValueError, InvalidOperation) as exc:
+        except (ProductIdentityError, TypeError, ValueError, InvalidOperation) as exc:
             raise ValueError("จำนวนสินค้าไม่ถูกต้อง") from exc
-        if product_id in seen or quantity <= 0:
+        if product_uuid in seen or quantity <= 0:
             raise ValueError("รายการสินค้าไม่ถูกต้อง")
-        seen.add(product_id)
+        seen.add(product_uuid)
         row = get_db().execute(
             """SELECT p.*,MAX(0,p.stock_quantity-COALESCE((SELECT SUM(sr.quantity) FROM stock_reservations sr
                  WHERE sr.product_id=p.id AND sr.status='active'),0)) AS available_quantity
-               FROM products p WHERE p.id=? AND p.is_active=1 AND p.is_online_available=1""",
-            (product_id,),
+               FROM products p WHERE p.product_uuid=? AND p.is_active=1 AND p.is_online_available=1""",
+            (product_uuid,),
         ).fetchone()
         if not row:
             raise ValueError("มีสินค้าที่ปิดขายออนไลน์ กรุณาตรวจสอบตะกร้าอีกครั้ง")
@@ -161,7 +162,7 @@ def validate_cart(raw_items):
         line_total = int(Decimal(row["price_satang"]) * quantity)
         browser_available = online_quantity_limit(row, settings) if negative_stock_allowed(settings) else float(available)
         validated.append({
-            "product_id": row["id"], "name_th": row["name_th"], "barcode": row["barcode"],
+            "product_id": row["id"], "product_uuid": row["product_uuid"], "name_th": row["name_th"], "barcode": row["barcode"],
             "image_path": row["image_path"], "quantity": float(quantity), "unit_price_satang": row["price_satang"],
             "line_total_satang": line_total, "available_quantity": browser_available,
         })
@@ -362,7 +363,8 @@ def customer_products_api():
 def validate_cart_api():
     try:
         items = validate_cart((request.get_json(silent=True) or {}).get("items"))
-        return jsonify(items=items, subtotal_satang=sum(item["line_total_satang"] for item in items))
+        public_items = [{key: value for key, value in item.items() if key != "product_id"} for item in items]
+        return jsonify(items=public_items, subtotal_satang=sum(item["line_total_satang"] for item in items))
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
 
@@ -621,17 +623,18 @@ def repeat_order(public_id):
     if not order:
         return jsonify(error="ไม่พบออเดอร์"), 404
     old_items = get_db().execute(
-        "SELECT product_id,ordered_quantity,unit_price_satang FROM online_order_items WHERE order_id=?", (order["id"],)
+        """SELECT p.product_uuid,oi.ordered_quantity,oi.unit_price_satang
+           FROM online_order_items oi JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?""", (order["id"],)
     ).fetchall()
-    available = {row["id"]: row for row in available_products()}
+    available = {row["product_uuid"]: row for row in available_products()}
     cart, notices = [], []
     for old in old_items:
-        current = available.get(old["product_id"])
+        current = available.get(old["product_uuid"])
         if not current or current["available_quantity"] <= 0:
-            notices.append(f"นำสินค้ารหัส {old['product_id']} ออก เพราะไม่พร้อมขาย")
+            notices.append("นำสินค้าที่ไม่พร้อมขายออกจากตะกร้าแล้ว")
             continue
         quantity = min(old["ordered_quantity"], current["available_quantity"], current["online_max_quantity"] or old["ordered_quantity"])
-        cart.append({"product_id": current["id"], "name_th": current["name_th"], "price_satang": current["price_satang"],
+        cart.append({"product_uuid": current["product_uuid"], "name_th": current["name_th"], "price_satang": current["price_satang"],
                      "quantity": quantity, "max": current["available_quantity"], "allow_decimal_quantity": current["allow_decimal_quantity"]})
         if current["price_satang"] != old["unit_price_satang"]:
             notices.append(f"{current['name_th']} ใช้ราคาปัจจุบัน")

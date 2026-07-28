@@ -23,7 +23,8 @@ class BillingTests(unittest.TestCase):
             db.execute("INSERT INTO billing_customers(name,credit_limit_satang) VALUES('โรงเรียนทดสอบ',100000)")
             customer_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
             db.commit()
-            sale_id, _, cart, _ = complete_sale({"items": [{"product_id": 1, "quantity": 1}], "payment_method": "billing", "billing_customer_id": customer_id}, 1)
+            product_uuid = db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
+            sale_id, _, cart, _ = complete_sale({"items": [{"product_uuid": product_uuid, "quantity": 1}], "payment_method": "billing", "billing_customer_id": customer_id}, 1)
             billed = db.execute("SELECT * FROM billed_sales WHERE sale_id=?", (sale_id,)).fetchone()
             self.assertEqual(billed["original_satang"], cart["total_satang"])
             self.assertEqual(billed["status"], "outstanding")

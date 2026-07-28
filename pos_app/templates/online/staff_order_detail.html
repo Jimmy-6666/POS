@@ -40,10 +40,10 @@
     <h2>เพิ่มสินค้าให้ออเดอร์ลูกค้า</h2>
     <p class="muted">ระบบใช้ราคาขายปัจจุบันและปรับยอดจองสต๊อกให้ทันที</p>
     <label>สินค้า
-      <select name="product_id" required>
+      <select name="product_uuid" required>
         <option value="">— เลือกสินค้า —</option>
         {% for product in product_rows %}
-        <option value="{{product.id}}">{{product.name_th}} · {{product.barcode or 'ไม่มีบาร์โค้ด'}} · {{'%.2f'|format(product.price_satang/100)}} บาท · คงเหลือ {{product.stock_quantity}}</option>
+        <option value="{{product.product_uuid}}">{{product.name_th}} · {{product.barcode or 'ไม่มีบาร์โค้ด'}} · {{'%.2f'|format(product.price_satang/100)}} บาท · คงเหลือ {{product.stock_quantity}}</option>
         {% endfor %}
       </select>
     </label>

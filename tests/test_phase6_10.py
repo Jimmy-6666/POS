@@ -18,26 +18,27 @@ class Phase6To10Tests(unittest.TestCase):
             db=get_db();db.execute("UPDATE staff SET must_change_pin=0 WHERE id=1");cat=db.execute("SELECT id FROM categories LIMIT 1").fetchone()[0];unit=db.execute("SELECT id FROM units LIMIT 1").fetchone()[0]
             db.execute("INSERT INTO products(barcode,name_th,category_id,unit_id,cost_satang,price_satang,stock_quantity) VALUES('20001','สินค้าครบระบบ',?,?,1000,2000,10)",(cat,unit));db.commit()
         self.client=self.app.test_client();self.client.post('/login',data={'staff_id':1,'pin':'1234'})
-        with self.app.app_context():self.csrf=get_db().execute("SELECT csrf_token FROM staff_sessions").fetchone()[0]
+        with self.app.app_context():
+            db=get_db();self.csrf=db.execute("SELECT csrf_token FROM staff_sessions").fetchone()[0];self.product_uuid=db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
     def tearDown(self):self.folder.cleanup()
     def test_adjustment_and_stock_count_finalization(self):
         reason=None
         with self.app.app_context():reason=get_db().execute("SELECT id FROM adjustment_reasons LIMIT 1").fetchone()[0]
-        self.assertEqual(self.client.post('/inventory/adjust',data={'csrf_token':self.csrf,'product_id':1,'adjustment_type':'increase','quantity':'2','reason_id':reason}).status_code,302)
+        self.assertEqual(self.client.post('/inventory/adjust',data={'csrf_token':self.csrf,'product_uuid':self.product_uuid,'adjustment_type':'increase','quantity':'2','reason_id':reason}).status_code,302)
         response=self.client.post('/stock-counts',data={'csrf_token':self.csrf,'name':'รอบทดสอบ'});session_id=int(response.headers['Location'].rstrip('/').split('/')[-1])
-        self.client.post(f'/stock-counts/{session_id}',data={'csrf_token':self.csrf,'product_id':1,'counted_quantity':'9'})
-        self.client.post(f'/stock-counts/{session_id}',data={'csrf_token':self.csrf,'product_id':1,'counted_quantity':'10'})
+        self.client.post(f'/stock-counts/{session_id}',data={'csrf_token':self.csrf,'product_uuid':self.product_uuid,'counted_quantity':'9'})
+        self.client.post(f'/stock-counts/{session_id}',data={'csrf_token':self.csrf,'product_uuid':self.product_uuid,'counted_quantity':'10'})
         active_page=self.client.get(f'/stock-counts/{session_id}').get_data(as_text=True)
         self.assertNotIn('name="system_quantity"',active_page)
         self.client.post(f'/stock-counts/{session_id}/finalize',data={'csrf_token':self.csrf})
         with self.app.app_context():
             db=get_db();self.assertEqual(db.execute("SELECT stock_quantity FROM products WHERE id=1").fetchone()[0],12);self.assertEqual(db.execute("SELECT status FROM stock_count_sessions").fetchone()[0],'finalized');self.assertEqual(db.execute("SELECT COUNT(*) FROM stock_count_attempts WHERE session_id=?",(session_id,)).fetchone()[0],2)
-        self.assertEqual(self.client.post(f'/stock-counts/{session_id}/apply',data={'csrf_token':self.csrf,'quantity_1':'9'}).status_code,302)
+        self.assertEqual(self.client.post(f'/stock-counts/{session_id}/apply',data={'csrf_token':self.csrf,f'quantity_{self.product_uuid}':'9'}).status_code,302)
         with self.app.app_context():
             db=get_db();self.assertEqual(db.execute("SELECT stock_quantity FROM products WHERE id=1").fetchone()[0],9);self.assertEqual(db.execute("SELECT COUNT(*) FROM stock_count_applications WHERE session_id=?",(session_id,)).fetchone()[0],1)
     def test_reconciliation_reports_and_backup(self):
         business_date=datetime.now(timezone(timedelta(hours=7))).date().isoformat()
-        with self.app.app_context():sale_id=complete_sale({'items':[{'product_id':1,'quantity':1}],'payment_method':'cash','amount_received_satang':2000},1)[0]
+        with self.app.app_context():sale_id=complete_sale({'items':[{'product_uuid':self.product_uuid,'quantity':1}],'payment_method':'cash','amount_received_satang':2000},1)[0]
         response=self.client.post('/reconciliations',data={'csrf_token':self.csrf,'business_date':business_date,'cashier_id':1,'opening_float':'500','actual_cash':'520'})
         self.assertEqual(response.status_code,302)
         response=self.client.post('/reconciliations',data={'csrf_token':self.csrf,'business_date':business_date,'cashier_id':1,'opening_float':'500','actual_cash':'500'})
@@ -66,20 +67,20 @@ class Phase6To10Tests(unittest.TestCase):
         self.assertIn('.mobile-bottom-nav',print_css)
         price_page=self.client.get('/products/prices?q=20001').get_data(as_text=True)
         self.assertIn('ค้นหา / สแกนบาร์โค้ด',price_page)
-        self.assertIn('name="price_1"',price_page)
+        self.assertIn(f'name="price_{self.product_uuid}"',price_page)
         self.assertIn('autofocus onfocus="this.select()"',price_page)
-        save=self.client.post('/products/prices',data={'csrf_token':self.csrf,'action':'confirm','product_id':'1','price_1':'25','return_q':'20001'});self.assertEqual(save.status_code,302)
+        save=self.client.post('/products/prices',data={'csrf_token':self.csrf,'action':'confirm','product_uuid':self.product_uuid,f'price_{self.product_uuid}':'25','return_q':'20001'});self.assertEqual(save.status_code,302)
         self.assertIn('q=20001',save.headers['Location'])
         with self.app.app_context():self.assertEqual(get_db().execute("SELECT price_satang FROM products WHERE id=1").fetchone()[0],2500)
 
     def test_product_edit_can_change_price_without_price_shortcut(self):
-        edit_page=self.client.get('/products/1/edit').get_data(as_text=True)
+        edit_page=self.client.get(f'/products/{self.product_uuid}/edit').get_data(as_text=True)
         self.assertIn('name="price"',edit_page)
         edit_content=edit_page.split('<main id="mainContent"',1)[1].split('</main>',1)[0]
         self.assertNotIn('href="/products/prices"',edit_content)
         with self.app.app_context():
             db=get_db();product=db.execute("SELECT category_id,unit_id FROM products WHERE id=1").fetchone()
-        response=self.client.post('/products/1/edit',data={
+        response=self.client.post(f'/products/{self.product_uuid}/edit',data={
             'csrf_token':self.csrf,'barcode':'20001','name_th':'สินค้าครบระบบ',
             'category_id':product['category_id'],'unit_id':product['unit_id'],'cost':'10',
             'price':'30','minimum_stock':'0','is_active':'on','is_online_available':'on',
@@ -93,16 +94,16 @@ class Phase6To10Tests(unittest.TestCase):
     def test_inventory_pages_search_and_select_exact_barcode(self):
         receive=self.client.get('/inventory/receive?q=20001').get_data(as_text=True)
         self.assertIn('ค้นหา / สแกนบาร์โค้ด',receive)
-        self.assertIn('value="1" selected',receive)
+        self.assertIn(f'value="{self.product_uuid}" selected',receive)
         self.assertIn('name="quantity" type="number" min="0.001" step="0.001" required autofocus',receive)
         adjust=self.client.get('/inventory/adjust?q=20001').get_data(as_text=True)
         self.assertIn('ค้นหา / สแกนบาร์โค้ด',adjust)
-        self.assertIn('value="1" selected',adjust)
+        self.assertIn(f'value="{self.product_uuid}" selected',adjust)
         self.assertIn('name="quantity" type="number" min="0" step="0.001" required autofocus',adjust)
 
     def test_cashier_can_join_and_delete_only_own_attempt(self):
         response=self.client.post('/stock-counts',data={'csrf_token':self.csrf,'name':'รอบหลายคน'});session_id=int(response.headers['Location'].rstrip('/').split('/')[-1])
-        self.client.post(f'/stock-counts/{session_id}',data={'csrf_token':self.csrf,'product_id':1,'counted_quantity':'8'})
+        self.client.post(f'/stock-counts/{session_id}',data={'csrf_token':self.csrf,'product_uuid':self.product_uuid,'counted_quantity':'8'})
         with self.app.app_context():
             db=get_db();cashier_role=db.execute("SELECT id FROM roles WHERE code='cashier'").fetchone()[0];db.execute("INSERT INTO staff(display_name,pin_hash,role_id,must_change_pin) VALUES(?,?,?,0)",('Cashier Test',generate_password_hash('2468'),cashier_role));cashier_id=db.execute("SELECT last_insert_rowid()").fetchone()[0];admin_attempt=db.execute("SELECT id FROM stock_count_attempts WHERE session_id=?",(session_id,)).fetchone()[0];db.commit()
         cashier=self.app.test_client();self.assertEqual(cashier.post('/login',data={'staff_id':cashier_id,'pin':'2468'}).status_code,302)
@@ -112,7 +113,7 @@ class Phase6To10Tests(unittest.TestCase):
         with self.app.app_context():self.assertEqual(get_db().execute("SELECT business_date FROM reconciliations WHERE cashier_id=?",(cashier_id,)).fetchone()[0],'2026-07-21')
         self.assertEqual(cashier.get('/stock-counts').status_code,200)
         self.assertEqual(cashier.post('/stock-counts',data={'csrf_token':cashier_csrf,'name':'ห้ามสร้าง'}).status_code,403)
-        cashier.post(f'/stock-counts/{session_id}',data={'csrf_token':cashier_csrf,'product_id':1,'counted_quantity':'7'})
+        cashier.post(f'/stock-counts/{session_id}',data={'csrf_token':cashier_csrf,'product_uuid':self.product_uuid,'counted_quantity':'7'})
         with self.app.app_context():own_attempt=get_db().execute("SELECT id FROM stock_count_attempts WHERE session_id=? AND counter_id=?",(session_id,cashier_id)).fetchone()[0]
         self.assertEqual(cashier.post(f'/stock-counts/{session_id}/attempts/{admin_attempt}/delete',data={'csrf_token':cashier_csrf}).status_code,403)
         self.assertEqual(cashier.post(f'/stock-counts/{session_id}/attempts/{own_attempt}/delete',data={'csrf_token':cashier_csrf}).status_code,302)

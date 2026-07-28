@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}ตั้งค่าแอปยืนยันตัวตน{% endblock %}
+{% block content %}
+<section class="panel form-stack" style="max-width:34rem">
+  <span class="eyebrow">ความปลอดภัยบัญชีผู้ดูแล</span>
+  <h1>เชื่อมต่อแอป Authenticator</h1>
+  <p>สแกน QR นี้ด้วย Google Authenticator, Microsoft Authenticator หรือ Authy แล้วกรอกรหัส 6 หลักเพื่อเปิดใช้งาน</p>
+  <img src="{{qr_data_uri}}" alt="QR code สำหรับ {{issuer}}" width="240" height="240">
+  <label>คีย์สำรองสำหรับเพิ่มด้วยตนเอง
+    <input value="{{secret}}" readonly aria-label="คีย์สำรอง Authenticator">
+  </label>
+  <form method="post" action="{{url_for('auth.enable_two_factor')}}" class="form-stack" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <label>รหัส 6 หลักจากแอป
+      <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required autofocus>
+    </label>
+    <button class="primary-button" type="submit">เปิดใช้การยืนยันสองชั้น</button>
+  </form>
+  <a class="secondary-button" href="{{url_for('auth.account_security')}}">กลับ</a>
+</section>
+{% endblock %}

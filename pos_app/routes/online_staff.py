@@ -4,6 +4,7 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 
 from ..auth import permission_required, valid_csrf
 from ..database import get_db
+from ..product_identity import ProductIdentityError, product_by_uuid
 from ..services.online_orders import (
     OnlineOrderError, audit_order, complete_online_order_sale, expire_pending_orders,
     record_history, release_reservations,
@@ -110,7 +111,7 @@ def detail(order_id):
         return ("ไม่พบออเดอร์", 404)
     db = get_db()
     items = db.execute(
-        """SELECT oi.*,p.stock_quantity,p.image_path,p.price_satang AS current_price_satang,
+        """SELECT oi.*,p.product_uuid,p.stock_quantity,p.image_path,p.price_satang AS current_price_satang,
                   p.allow_decimal_quantity
            FROM online_order_items oi
            JOIN products p ON p.id=oi.product_id WHERE oi.order_id=? ORDER BY oi.id""", (order_id,)
@@ -121,7 +122,7 @@ def detail(order_id):
     ).fetchall()
     staff = db.execute("SELECT id,display_name FROM staff WHERE is_active=1 ORDER BY display_name").fetchall()
     product_rows = db.execute(
-        """SELECT id,name_th,barcode,price_satang,stock_quantity,allow_decimal_quantity
+        """SELECT product_uuid,name_th,barcode,price_satang,stock_quantity,allow_decimal_quantity
            FROM products WHERE is_active=1 ORDER BY name_th"""
     ).fetchall()
     confirmed_subtotal = sum(
@@ -264,7 +265,7 @@ def add_item(order_id):
     if not valid_csrf(request.form.get("csrf_token")):
         return ("คำขอไม่ถูกต้อง", 400)
     order = load_order(order_id)
-    product_id = request.form.get("product_id", type=int)
+    product_uuid = request.form.get("product_uuid", "")
     reason = request.form.get("reason", "").strip()
     try:
         quantity = float(request.form.get("quantity") or 0)
@@ -276,23 +277,19 @@ def add_item(order_id):
     db = get_db()
     try:
         db.execute("BEGIN IMMEDIATE")
-        product = db.execute(
-            """SELECT id,name_th,barcode,price_satang,stock_quantity,allow_decimal_quantity
-               FROM products WHERE id=? AND is_active=1""",
-            (product_id,),
-        ).fetchone()
+        product = product_by_uuid(db, product_uuid, active_only=True)
         if not product or (not product["allow_decimal_quantity"] and quantity != int(quantity)):
             raise ValueError("สินค้าและจำนวนไม่ถูกต้อง")
         existing = db.execute(
             "SELECT id,is_removed FROM online_order_items WHERE order_id=? AND product_id=?",
-            (order_id, product_id),
+            (order_id, product["id"]),
         ).fetchone()
         if existing and not existing["is_removed"]:
             raise ValueError("สินค้านี้อยู่ในออเดอร์แล้ว กรุณาแก้จำนวนที่รายการเดิม")
         reserved_elsewhere = db.execute(
             """SELECT COALESCE(SUM(quantity),0) FROM stock_reservations
                WHERE product_id=? AND status='active' AND order_id<>?""",
-            (product_id, order_id),
+            (product["id"], order_id),
         ).fetchone()[0]
         if not negative_stock_allowed() and quantity > product["stock_quantity"] - reserved_elsewhere:
             raise ValueError("สินค้าไม่เพียงพอ")
@@ -313,7 +310,7 @@ def add_item(order_id):
                    (order_id,product_id,product_name_snapshot,barcode_snapshot,unit_price_satang,
                     customer_confirmed_unit_price_satang,original_quantity,ordered_quantity,line_total_satang)
                    VALUES(?,?,?,?,?,NULL,?,?,?)""",
-                (order_id, product_id, product["name_th"], product["barcode"], product["price_satang"],
+                (order_id, product["id"], product["name_th"], product["barcode"], product["price_satang"],
                  quantity, quantity, line_total),
             )
             item_id = cursor.lastrowid
@@ -322,7 +319,7 @@ def add_item(order_id):
                VALUES(?,?,?,'active',?)
                ON CONFLICT(order_id,product_id) DO UPDATE SET quantity=excluded.quantity,status='active',
                released_at=NULL,release_reason=NULL""",
-            (order_id, product_id, quantity, now()),
+            (order_id, product["id"], quantity, now()),
         )
         subtotal, total = refresh_order_totals(order_id)
         db.execute(
@@ -333,7 +330,7 @@ def add_item(order_id):
                        staff_id=g.staff["id"], reason=reason)
         audit_order(
             "online_order_item_added", order_id, staff_id=g.staff["id"],
-            detail={"item_id": item_id, "product_id": product_id, "quantity": quantity,
+            detail={"item_id": item_id, "product_uuid": product["product_uuid"], "quantity": quantity,
                     "unit_price_satang": product["price_satang"],
                     "subtotal_satang": subtotal, "total_satang": total, "reason": reason},
         )

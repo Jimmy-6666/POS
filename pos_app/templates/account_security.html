@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}ความปลอดภัยบัญชี{% endblock %}
+{% block content %}
+<section class="panel form-stack" style="max-width:42rem">
+  <span class="eyebrow">ผู้ดูแลระบบเท่านั้น</span>
+  <h1>ความปลอดภัยบัญชี</h1>
+  {% if record and record.is_enabled %}
+  <p class="flash flash-success">เปิดใช้การยืนยันตัวตนสองชั้นแล้ว</p>
+  <h2>สร้างรหัสกู้คืนใหม่</h2>
+  <p class="muted">รหัสกู้คืนเดิมทั้งหมดจะใช้ไม่ได้ทันที</p>
+  <form method="post" action="{{url_for('auth.regenerate_recovery_codes')}}" class="form-stack" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <label>PIN ปัจจุบัน<input name="current_pin" type="password" inputmode="numeric" required></label>
+    <label>รหัสจากแอปหรือรหัสกู้คืน<input name="code" autocomplete="one-time-code" required></label>
+    <button class="secondary-button" type="submit">สร้างรหัสกู้คืนใหม่</button>
+  </form>
+  <h2>ปิดการยืนยันสองชั้น</h2>
+  <form method="post" action="{{url_for('auth.disable_two_factor')}}" class="form-stack" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <label>PIN ปัจจุบัน<input name="current_pin" type="password" inputmode="numeric" required></label>
+    <label>รหัสจากแอปหรือรหัสกู้คืน<input name="code" autocomplete="one-time-code" required></label>
+    <button class="secondary-button" type="submit">ปิดการยืนยันสองชั้น</button>
+  </form>
+  {% if other_admins %}
+  <h2>กู้คืนบัญชีผู้ดูแลระบบอื่น</h2>
+  <p class="muted">ใช้เมื่อผู้ดูแลอีกคนสูญเสียอุปกรณ์และรหัสกู้คืน การกู้คืนจะออกจากระบบบัญชีเป้าหมายและให้ตั้งค่าใหม่</p>
+  <form method="post" action="{{url_for('auth.administrative_two_factor_recovery')}}" class="form-stack" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <label>บัญชีผู้ดูแล<select name="target_staff_id" required>{% for staff in other_admins %}<option value="{{staff.id}}">{{staff.display_name}}{% if staff.is_enabled %} — เปิด 2FA{% endif %}</option>{% endfor %}</select></label>
+    <label>PIN ปัจจุบันของคุณ<input name="current_pin" type="password" inputmode="numeric" required></label>
+    <label>รหัสจากแอปหรือรหัสกู้คืนของคุณ<input name="code" autocomplete="one-time-code" required></label>
+    <button class="danger-button" type="submit">รีเซ็ต 2FA ของบัญชีที่เลือก</button>
+  </form>
+  {% endif %}
+  {% else %}
+  <p>บัญชีนี้ยังไม่ได้เปิดใช้การยืนยันตัวตนสองชั้น</p>
+  <a class="primary-button" href="{{url_for('auth.setup_two_factor')}}">ตั้งค่า Google Authenticator</a>
+  {% endif %}
+</section>
+{% endblock %}

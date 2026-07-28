@@ -8,9 +8,16 @@ version 19 as legacy-ad-hoc-migrations. Version 20 enables the existing
 negative-stock setting because earlier releases displayed it without applying
 it to sales. Version 21 adds verified LINE customer identity/profile and saved
 delivery defaults. Version 22 adds registered customer names and lifecycle
-fields for auditable anonymizing deletion. Future migrations use
+fields for auditable anonymizing deletion. Version 23 backfills immutable
+product UUIDs, adds required/immutable database guards, and converts valid
+held-bill cart identities to UUIDs without rewriting historic relational keys.
+Future migrations use
 pos_app/migrations.py and record version, name, checksum, application version,
 UTC timestamp, and success state. A failed migration prevents startup.
+
+Version 24 adds admin-only encrypted TOTP state, one-way-hashed recovery codes,
+and short-lived pre-session login challenges. No password, TOTP secret, TOTP
+code, or recovery code is recorded in audit data.
 
 SQLite is the single local source of truth. `pos_app/schema.sql` defines new
 databases; `pos_app/database.py` initializes seed data and applies idempotent,
@@ -38,6 +45,10 @@ data-preserving startup migrations. Current seeded `schema_version` is 19.
 - Product stock and count quantities are real values because some products
   allow decimal quantities.
 - Barcodes and receipt numbers are unique.
+- `products.product_uuid` is a globally unique immutable UUID. It is the only
+  product identity exposed to routes, browser payloads, and module boundaries;
+  `products.id` remains a private numeric foreign key for historic tables.
+  SKU and barcode are unique mutable business fields, never identity keys.
 - Historical sale items snapshot product name, price, cost, and quantity.
 - Stock changes have corresponding immutable movement records.
 - Foreign keys are enabled per connection; WAL is enabled for LAN concurrency.

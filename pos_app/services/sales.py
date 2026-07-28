@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from flask import current_app
 
 from ..database import get_db
+from ..product_identity import ProductIdentityError, product_by_uuid
 
 
 class SaleError(ValueError):
@@ -33,7 +34,10 @@ def calculate_cart(items, bill_discount_satang=0, *, unit_price_overrides=None, 
     calculated = []
     subtotal = item_discounts = total_cost = 0
     for raw in items:
-        product = db.execute("SELECT * FROM products WHERE id = ? AND is_active = 1", (raw.get("product_id"),)).fetchone()
+        try:
+            product = product_by_uuid(db, raw.get("product_uuid"), active_only=True)
+        except ProductIdentityError as exc:
+            raise SaleError(str(exc)) from exc
         if not product:
             raise SaleError("ไม่พบสินค้าหรือสินค้าถูกปิดใช้งาน")
         quantity = _quantity(raw.get("quantity"), product["allow_decimal_quantity"])
@@ -52,8 +56,8 @@ def calculate_cart(items, bill_discount_satang=0, *, unit_price_overrides=None, 
                 raise SaleError(f"{product['name_th']} ถูกสำรองไว้สำหรับออเดอร์ออนไลน์")
             raise SaleError(f"{product['name_th']} มีสต็อกไม่เพียงพอ")
         unit_price = product["price_satang"]
-        if unit_price_overrides is not None and product["id"] in unit_price_overrides:
-            unit_price = int(unit_price_overrides[product["id"]])
+        if unit_price_overrides is not None and product["product_uuid"] in unit_price_overrides:
+            unit_price = int(unit_price_overrides[product["product_uuid"]])
         line_subtotal = int((Decimal(unit_price) * quantity).quantize(Decimal("1")))
         discount = int(raw.get("discount_satang") or 0)
         if discount < 0 or discount > line_subtotal:

@@ -19,6 +19,7 @@ class InventoryTests(unittest.TestCase):
                 (barcode,name_th,category_id,unit_id,cost_satang,price_satang,stock_quantity)
                 VALUES ('10001','สินค้ารับเข้า',?,?,1000,2500,10)""", (category, unit))
             db.commit()
+            self.product_uuid = db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
         self.client = self.app.test_client()
         self.client.post("/login", data={"staff_id": 1, "pin": "1234"})
         with self.app.app_context():
@@ -29,7 +30,7 @@ class InventoryTests(unittest.TestCase):
 
     def test_receiving_uses_lot_cost_and_does_not_change_sale_price(self):
         response = self.client.post("/inventory/receive", data={
-            "csrf_token": self.csrf, "product_id": 1, "quantity": "10", "unit_cost": "20.00",
+            "csrf_token": self.csrf, "product_uuid": self.product_uuid, "quantity": "10", "unit_cost": "20.00",
             "supplier_name": "ผู้จำหน่ายทดสอบ",
         })
         self.assertEqual(response.status_code, 302)

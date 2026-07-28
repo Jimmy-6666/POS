@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}ตรวจสอบการนำเข้า XLSX{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>ตรวจสอบการนำเข้า XLSX</h1><p>{{filename}} — ยังไม่มีการเปลี่ยนแปลงข้อมูลจนกว่าจะกดยืนยัน</p></div><a class="secondary-button" href="{{url_for('products.index')}}">ยกเลิก</a></div>
+<section class="form-card">
+  <div class="two-columns">
+    <div><strong>เพิ่มใหม่</strong><p>{{preview.summary.created}} รายการ</p></div>
+    <div><strong>แก้ไข</strong><p>{{preview.summary.updated}} รายการ</p></div>
+    <div><strong>ไม่เปลี่ยนแปลง</strong><p>{{preview.summary.unchanged}} รายการ</p></div>
+    <div><strong>แถวไม่ถูกต้อง</strong><p>{{preview.summary.rejected}} ข้อผิดพลาด</p></div>
+  </div>
+</section>
+
+{% if preview.errors %}
+<section class="form-card">
+  <h2>แก้ไขข้อผิดพลาดก่อนยืนยัน</h2>
+  <div class="table-wrap"><table><thead><tr><th>แถว</th><th>คอลัมน์</th><th>สาเหตุ</th></tr></thead><tbody>{% for error in preview.errors %}<tr><td>{{error.row}}</td><td>{{error.column}}</td><td>{{error.reason}}</td></tr>{% endfor %}</tbody></table></div>
+  <p><a class="secondary-button" href="{{url_for('products.index')}}">กลับไปอัปโหลดไฟล์ใหม่</a></p>
+</section>
+{% else %}
+<section class="form-card">
+  <h2>รายการที่จะเปลี่ยนแปลง</h2>
+  {% if preview.summary.created + preview.summary.updated %}<div class="table-wrap"><table><thead><tr><th>แถว</th><th>ผลลัพธ์</th><th>สินค้า</th><th>ราคาทุน</th><th>ราคาขาย</th><th>Product UUID</th></tr></thead><tbody>
+    {% for item in preview.rows['create'] %}<tr><td>{{item.row}}</td><td>เพิ่มสินค้าใหม่</td><td>{{item.product.name_th}}</td><td>{{item.product.cost_price_baht}} บาท</td><td>{{item.product.selling_price_baht}} บาท</td><td><code>{{item.product_uuid}}</code></td></tr>{% endfor %}
+    {% for item in preview.rows['update'] %}<tr><td>{{item.row}}</td><td>แก้ไขสินค้า</td><td>{{item.product.name_th}}</td><td>{{item.product.cost_price_baht}} บาท</td><td>{{item.product.selling_price_baht}} บาท</td><td><code>{{item.product_uuid}}</code></td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="empty">ไม่มีรายละเอียดแถวด้านล่าง เพราะไม่มีการเปลี่ยนแปลงสินค้า</p>{% endif %}
+  <form method="post" action="{{url_for('products.confirm_xlsx_import')}}" class="actions" style="margin-top:18px"><input type="hidden" name="csrf_token" value="{{g.session_row.csrf_token}}"><input type="hidden" name="preview_token" value="{{preview_token}}"><button class="primary-button" type="submit">ยืนยันนำเข้า {{preview.summary.created + preview.summary.updated}} รายการ</button><a class="secondary-button" href="{{url_for('products.index')}}">ยกเลิก</a></form>
+</section>
+{% endif %}
+{% endblock %}

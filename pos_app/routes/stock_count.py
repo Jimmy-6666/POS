@@ -16,9 +16,9 @@ def now_iso(): return datetime.now(timezone.utc).isoformat(timespec="seconds")
 @permission_required("stock_count.participate")
 def product_lookup():
     barcode=request.args.get("barcode","").strip()
-    product=get_db().execute("SELECT id,barcode,name_th FROM products WHERE barcode=? AND is_active=1",(barcode,)).fetchone()
+    product=get_db().execute("SELECT product_uuid,barcode,name_th FROM products WHERE barcode=? AND is_active=1",(barcode,)).fetchone()
     if not product:return jsonify(error="ไม่พบสินค้าจากบาร์โค้ดนี้"),404
-    return jsonify(id=product["id"],barcode=product["barcode"],name=product["name_th"])
+    return jsonify(product_uuid=product["product_uuid"],barcode=product["barcode"],name=product["name_th"])
 
 
 @bp.get("/manual-sheet")
@@ -55,7 +55,7 @@ def session(session_id):
     db.execute("INSERT OR IGNORE INTO stock_count_participants VALUES(?,?,?)",(session_id,g.staff["id"],now_iso()));db.commit()
     if request.method=="POST":
         if not valid_csrf(request.form.get("csrf_token")):return ("คำขอไม่ถูกต้อง",400)
-        product=db.execute("SELECT * FROM products WHERE barcode=? OR id=?",(request.form.get("barcode","").strip(),request.form.get("product_id",type=int) or 0)).fetchone()
+        product=db.execute("SELECT * FROM products WHERE barcode=? OR product_uuid=?",(request.form.get("barcode","").strip(),request.form.get("product_uuid","").strip())).fetchone()
         try:counted=float(request.form.get("counted_quantity",""))
         except ValueError:counted=-1
         if not product or counted<0:flash("สินค้า หรือจำนวนไม่ถูกต้อง","error")
@@ -64,12 +64,12 @@ def session(session_id):
             if db.execute("SELECT status FROM stock_count_sessions WHERE id=?",(session_id,)).fetchone()[0]!="open":db.rollback();return ("รอบนับปิดแล้ว",400)
             db.execute("INSERT INTO stock_count_attempts(session_id,product_id,counter_id,counted_quantity,created_at) VALUES(?,?,?,?,?)",(session_id,product["id"],g.staff["id"],counted,now_iso()));db.commit();flash("เพิ่มการนับแล้ว สามารถนับสินค้าเดิมซ้ำได้","success")
         return redirect(url_for("stock_count.session",session_id=session_id))
-    products=db.execute("SELECT id,barcode,name_th FROM products WHERE is_active=1 ORDER BY name_th").fetchall()
+    products=db.execute("SELECT product_uuid,barcode,name_th FROM products WHERE is_active=1 ORDER BY name_th").fetchall()
     attempts=db.execute("""SELECT a.id,a.product_id,a.counter_id,a.counted_quantity,a.created_at,p.barcode,p.name_th,st.display_name FROM stock_count_attempts a
         JOIN products p ON p.id=a.product_id JOIN staff st ON st.id=a.counter_id WHERE a.session_id=? ORDER BY a.created_at DESC,a.id DESC""",(session_id,)).fetchall()
     results=[]
     if session_row["status"]=="finalized":
-        for result in db.execute("""SELECT r.*,p.barcode,p.name_th FROM stock_count_results r JOIN products p ON p.id=r.product_id
+        for result in db.execute("""SELECT r.*,p.product_uuid,p.barcode,p.name_th FROM stock_count_results r JOIN products p ON p.id=r.product_id
             WHERE r.session_id=? ORDER BY p.name_th""",(session_id,)).fetchall():
             values=db.execute("SELECT counted_quantity FROM stock_count_attempts WHERE session_id=? AND product_id=? ORDER BY created_at,id",(session_id,result["product_id"])).fetchall()
             item=dict(result);item["attempts"]=[v[0] for v in values];results.append(item)
@@ -117,11 +117,12 @@ def apply_results(session_id):
     if not valid_csrf(request.form.get("csrf_token")):return ("คำขอไม่ถูกต้อง",400)
     db=get_db()
     if db.execute("SELECT 1 FROM stock_count_applications WHERE session_id=?",(session_id,)).fetchone():return ("รอบนี้ปรับสต็อกแล้ว",400)
-    results=db.execute("SELECT * FROM stock_count_results WHERE session_id=?",(session_id,)).fetchall();now=now_iso()
+    results=db.execute("""SELECT r.*,p.product_uuid FROM stock_count_results r
+        JOIN products p ON p.id=r.product_id WHERE r.session_id=?""",(session_id,)).fetchall();now=now_iso()
     try:
         db.execute("BEGIN IMMEDIATE")
         for result in results:
-            selected=float(request.form.get(f"quantity_{result['product_id']}",result["suggested_quantity"]))
+            selected=float(request.form.get(f"quantity_{result['product_uuid']}",result["suggested_quantity"]))
             if selected<0:raise ValueError("จำนวนต้องไม่ติดลบ")
             product=db.execute("SELECT * FROM products WHERE id=?",(result["product_id"],)).fetchone();changed=selected-product["stock_quantity"]
             if changed:

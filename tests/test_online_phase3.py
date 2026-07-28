@@ -23,6 +23,7 @@ class OnlinePhase3Tests(unittest.TestCase):
             db.execute("""INSERT INTO delivery_locations(name,delivery_fee_satang,minimum_order_satang,room_required)
                           VALUES('รีสอร์ต',1000,0,1)""")
             db.commit()
+            self.product_uuid = db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
         self.client = self.app.test_client()
         register_customer(self.client)
         with self.app.app_context():
@@ -32,7 +33,7 @@ class OnlinePhase3Tests(unittest.TestCase):
         self.folder.cleanup()
 
     def payload(self, **changes):
-        data = {"items": [{"product_id": 1, "quantity": 2}], "delivery_location_id": 1,
+        data = {"items": [{"product_uuid": self.product_uuid, "quantity": 2}], "delivery_location_id": 1,
                 "room_reference": "A101", "payment_method": "cash", "idempotency_key": "order-key-123456"}
         data.update(changes)
         return data
@@ -60,7 +61,7 @@ class OnlinePhase3Tests(unittest.TestCase):
             self.assertEqual(get_db().execute("SELECT COUNT(*) FROM online_orders").fetchone()[0], 1)
 
     def test_competing_order_and_customer_cancel_release(self):
-        public_id = self.submit(items=[{"product_id": 1, "quantity": 5}]).get_json()["public_id"]
+        public_id = self.submit(items=[{"product_uuid": self.product_uuid, "quantity": 5}]).get_json()["public_id"]
         other = self.app.test_client()
         register_customer(other, "0899999999")
         with self.app.app_context():
@@ -81,23 +82,23 @@ class OnlinePhase3Tests(unittest.TestCase):
         self.assertEqual(other.get(f"/order/orders/{public_id}").status_code, 404)
 
     def test_negative_stock_setting_controls_online_reservations(self):
-        blocked = self.submit(items=[{"product_id": 1, "quantity": 6}])
+        blocked = self.submit(items=[{"product_uuid": self.product_uuid, "quantity": 6}])
         self.assertEqual(blocked.status_code, 400)
         with self.app.app_context():
             db = get_db()
             db.execute("UPDATE settings SET value='0' WHERE key='allow_negative_stock'")
             db.execute("UPDATE settings SET value='1' WHERE key='online_allow_negative_stock'")
             db.commit()
-        allowed = self.submit(items=[{"product_id": 1, "quantity": 6}], idempotency_key="negative-stock-order-123")
+        allowed = self.submit(items=[{"product_uuid": self.product_uuid, "quantity": 6}], idempotency_key="negative-stock-order-123")
         self.assertEqual(allowed.status_code, 200)
 
     def test_online_negative_stock_returns_a_repeatable_cart_limit(self):
-        self.submit(items=[{"product_id": 1, "quantity": 5}])
+        self.submit(items=[{"product_uuid": self.product_uuid, "quantity": 5}])
         with self.app.app_context():
             db = get_db()
             db.execute("UPDATE settings SET value='1' WHERE key='online_allow_negative_stock'")
             db.commit()
-        response = self.client.post("/order/api/cart/validate", json={"items": [{"product_id": 1, "quantity": 1}]})
+        response = self.client.post("/order/api/cart/validate", json={"items": [{"product_uuid": self.product_uuid, "quantity": 1}]})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["items"][0]["available_quantity"], 50.0)
 
