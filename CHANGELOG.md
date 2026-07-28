@@ -21,6 +21,39 @@
   checkout, voids, decimal quantities, expiry, reservations, and idempotency.
 - Verification: 30 focused tests and the 129-test full suite passed.
 
+## Public internet security — Sprint 3
+
+- Made Admin two-factor authentication compulsory for `admin.raisanngam.com`:
+  only a session created after a successful authenticator or recovery-code
+  check can use that hostname. Old/LAN-only Admin sessions are revoked if
+  presented remotely, and unenrolled Admins must enroll from the LAN first.
+- Prevented two-factor authentication from being disabled through the remote
+  Admin hostname. The server records non-sensitive audit events for required
+  enrollment and revoked remote sessions.
+
+## Public internet security — Sprint 2
+
+- Added explicit trusted-host validation, local-proxy-only forwarded-header
+  handling, HTTPS-only public-session cookies, HSTS, CSP, anti-framing,
+  MIME-sniffing, referrer, permission, and private-cache response protections.
+- Removed customer-facing barcode and exact stock disclosure from catalog and
+  cart validation responses, kept barcode snapshots internal to order creation,
+  and made stock-shortage messages non-enumerating.
+- Restricted customer return URLs to local order paths, reused a verified LINE
+  customer session before starting LIFF, and replaced checkout DOM insertion of
+  customer-controlled data with safe text-node rendering.
+
+## Public internet security — Sprint 1
+
+- Added disabled-by-default, hostname-based separation for the approved
+  customer and Admin public hosts. The customer host permits only customer
+  ordering and LINE-authentication routes; the Admin host rejects customer,
+  health, and print-agent routes and permits staff sessions only for Admins.
+- Added remote-login filtering and server-side Admin-role enforcement so
+  Manager and Cashier accounts remain LAN-only even when a pre-existing session
+  cookie is presented to the Admin host.
+
+
 # Version 2.4.2 — Released 2026-07-28
 
 ## Online-order notifications

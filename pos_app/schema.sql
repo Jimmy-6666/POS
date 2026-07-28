@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS staff_sessions (
     user_agent TEXT,
     created_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL
+    expires_at TEXT NOT NULL,
+    two_factor_verified_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_staff_sessions_token ON staff_sessions(token_hash);

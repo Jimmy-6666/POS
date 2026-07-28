@@ -186,6 +186,14 @@ def _add_reconciliation_void_total(db: sqlite3.Connection) -> None:
         )
 
 
+def _add_staff_session_two_factor_assurance(db: sqlite3.Connection) -> None:
+    """Record which sessions were created only after a second-factor check."""
+
+    columns = {row[1] for row in db.execute("PRAGMA table_info(staff_sessions)")}
+    if "two_factor_verified_at" not in columns:
+        db.execute("ALTER TABLE staff_sessions ADD COLUMN two_factor_verified_at TEXT")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(20, "enable configured negative stock", _enable_configured_negative_stock),
     Migration(21, "add LINE customer identity", _add_line_customer_identity),
@@ -193,6 +201,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(23, "add immutable product UUIDs", _add_product_uuid),
     Migration(24, "add admin TOTP two-factor authentication", _add_admin_two_factor),
     Migration(25, "add reconciliation void total", _add_reconciliation_void_total),
+    Migration(26, "record second-factor verified staff sessions", _add_staff_session_two_factor_assurance),
 )
 
 

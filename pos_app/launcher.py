@@ -1,4 +1,5 @@
 import ctypes
+import ipaddress
 import os
 import signal
 import subprocess
@@ -15,6 +16,27 @@ from .runtime_paths import load_runtime_config
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_CONFIG = load_runtime_config(PROJECT_ROOT)
 PORT = RUNTIME_CONFIG.port
+
+
+def _enabled(value):
+    return str(value or "").lower() in {"1", "true", "yes"}
+
+
+def waitress_options():
+    options = {"host": RUNTIME_CONFIG.host, "port": PORT, "threads": 8}
+    if not _enabled(os.environ.get("POS_TRUST_PROXY")):
+        return options
+    trusted_proxy = os.environ.get("POS_TRUSTED_PROXY", "127.0.0.1").strip()
+    try:
+        ipaddress.ip_address(trusted_proxy)
+    except ValueError as exc:
+        raise RuntimeError("POS_TRUSTED_PROXY must be the local Cloudflare connector IP address.") from exc
+    options.update(
+        trusted_proxy=trusted_proxy,
+        trusted_proxy_headers="x-forwarded-for x-forwarded-host x-forwarded-proto x-forwarded-port",
+        clear_untrusted_proxy_headers=True,
+    )
+    return options
 
 
 def listener_pids():
@@ -82,7 +104,7 @@ def main():
     print(f"LAN URL:   http://THIS-COMPUTER-IP:{PORT}")
     print("Only one POS server instance is running.")
     print("Press Ctrl+C to stop the server.")
-    serve(create_app(), host=RUNTIME_CONFIG.host, port=PORT, threads=8)
+    serve(create_app(), **waitress_options())
     return 0
 
 

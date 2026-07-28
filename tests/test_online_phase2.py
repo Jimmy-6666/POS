@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pos_app import create_app
 from pos_app.database import get_db
+from pos_app.routes.online import safe_customer_next_url
 from tests.online_helpers import register_customer
 
 
@@ -45,6 +46,42 @@ class OnlinePhase2Tests(unittest.TestCase):
         response = self.client.post("/order/api/cart/validate", json={"items": [{"product_uuid": self.product_uuid, "quantity": 6}]})
         self.assertEqual(response.status_code, 400)
         self.assertIn("ไม่เพียงพอ", response.get_json()["error"])
+
+    def test_customer_catalog_and_cart_api_hide_barcode_and_exact_stock(self):
+        catalog = self.client.get("/order").get_data(as_text=True)
+        self.assertNotIn('"barcode": "111"', catalog)
+        self.assertNotIn('"available_quantity"', catalog)
+        products = self.client.get("/order/api/products").get_json()
+        product = next(row for row in products if row["product_uuid"] == self.product_uuid)
+        self.assertNotIn("barcode", product)
+        self.assertNotIn("available_quantity", product)
+        self.assertEqual(product["max_quantity"], 50.0)
+        cart = self.client.post(
+            "/order/api/cart/validate", json={"items": [{"product_uuid": self.product_uuid, "quantity": 1}]}
+        ).get_json()["items"][0]
+        self.assertNotIn("barcode", cart)
+        self.assertNotIn("available_quantity", cart)
+        self.assertEqual(cart["max_quantity"], 50.0)
+
+    def test_customer_stock_error_does_not_reveal_exact_quantity(self):
+        response = self.client.post(
+            "/order/api/cart/validate", json={"items": [{"product_uuid": self.product_uuid, "quantity": 6}]}
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn("5", response.get_json()["error"])
+
+    def test_customer_next_redirect_rejects_external_urls(self):
+        self.assertEqual(safe_customer_next_url("/order/checkout?step=1"), "/order/checkout?step=1")
+        self.assertIsNone(safe_customer_next_url("https://attacker.example/"))
+        self.assertIsNone(safe_customer_next_url("//attacker.example/"))
+
+    def test_customer_javascript_reuses_session_and_avoids_untrusted_html(self):
+        static_root = Path(__file__).resolve().parents[1] / "pos_app" / "static" / "js"
+        line_auth = (static_root / "online-line-auth.js").read_text(encoding="utf-8")
+        checkout = (static_root / "online-checkout.js").read_text(encoding="utf-8")
+        self.assertIn('api("/api/auth/me")', line_auth)
+        self.assertIn("safeOrderPath", line_auth)
+        self.assertNotIn("innerHTML", checkout)
 
     def test_checkout_requires_line_session_and_has_no_guest_pin_fields(self):
         page = self.client.get("/order/checkout")

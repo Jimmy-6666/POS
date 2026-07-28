@@ -60,8 +60,9 @@ imports, generated outputs, and UAT data are not source modules.
   tests.
 - Makro/UAT import change: relevant `work/makro-pos-import` scripts + manifest,
   review workbook, UAT verifier, and database integrity/foreign-key checks.
-  These scripts currently use bundled development Node tooling and external
-  source paths; they are not deployable POS runtime code.
+  `fetch-metadata-images.mjs` accepts explicit raw JSON/CSV input and output
+  paths; these scripts use development Node tooling and are not deployable POS
+  runtime code.
 
 See `MODULE_DEPENDENCIES.md` for cross-module impact.
 

@@ -4,6 +4,7 @@ import hmac
 import secrets
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlsplit
 
 from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -74,6 +75,32 @@ def online_product_availability(rows, settings):
     if not negative_stock_allowed(settings):
         return rows
     return [{**dict(row), "available_quantity": online_quantity_limit(row, settings)} for row in rows]
+
+
+def customer_product_payload(row, settings):
+    """Return only the catalog data a customer needs; never stock or barcode data."""
+
+    available = Decimal(str(row["available_quantity"]))
+    return {
+        "product_uuid": row["product_uuid"],
+        "name_th": row["name_th"],
+        "price_satang": row["price_satang"],
+        "image_path": row["image_path"],
+        "allow_decimal_quantity": bool(row["allow_decimal_quantity"]),
+        "max_quantity": online_quantity_limit(row, settings),
+        "is_available": negative_stock_allowed(settings) or available > 0,
+    }
+
+
+def customer_product_payloads(rows, settings):
+    return [customer_product_payload(row, settings) for row in rows]
+
+
+def safe_customer_next_url(value):
+    parts = urlsplit(value or "")
+    if parts.scheme or parts.netloc or not parts.path.startswith("/order"):
+        return None
+    return parts.path + (f"?{parts.query}" if parts.query else "")
 
 
 def customer_repeat_products(customer_id, settings):
@@ -157,14 +184,13 @@ def validate_cart(raw_items):
         if limit and quantity > limit:
             raise ValueError(f"{row['name_th']} สั่งได้สูงสุด {limit} ต่อออเดอร์")
         if not negative_stock_allowed(settings) and quantity > available:
-            raise ValueError(f"{row['name_th']} มีสินค้าไม่เพียงพอ (พร้อมขาย {available})")
+            raise ValueError(f"{row['name_th']} มีสินค้าไม่เพียงพอ กรุณาลดจำนวนหรือเลือกสินค้าอื่น")
         total_quantity += quantity
         line_total = int(Decimal(row["price_satang"]) * quantity)
-        browser_available = online_quantity_limit(row, settings) if negative_stock_allowed(settings) else float(available)
         validated.append({
-            "product_id": row["id"], "product_uuid": row["product_uuid"], "name_th": row["name_th"], "barcode": row["barcode"],
+            "product_id": row["id"], "barcode": row["barcode"], "product_uuid": row["product_uuid"], "name_th": row["name_th"],
             "image_path": row["image_path"], "quantity": float(quantity), "unit_price_satang": row["price_satang"],
-            "line_total_satang": line_total, "available_quantity": browser_available,
+            "line_total_satang": line_total, "max_quantity": online_quantity_limit(row, settings),
         })
     if total_quantity > max_total_quantity:
         raise ValueError(f"จำนวนสินค้ารวมต้องไม่เกิน {max_total_quantity}")
@@ -323,13 +349,15 @@ def customer_change_pin():
 def catalog():
     expire_pending_orders()
     settings = online_settings()
-    products = available_products(request.args.get("q", "").strip(), request.args.get("category_id", type=int))
+    products = customer_product_payloads(
+        available_products(request.args.get("q", "").strip(), request.args.get("category_id", type=int)), settings
+    )
     categories = get_db().execute(
         """SELECT DISTINCT c.id,c.name_th,c.sort_order FROM categories c JOIN products p ON p.category_id=c.id
            WHERE c.is_active=1 AND p.is_active=1 AND p.is_online_available=1
            ORDER BY c.sort_order,c.name_th"""
     ).fetchall()
-    repeat_products = customer_repeat_products(g.customer["id"], settings) if g.customer and not g.customer["is_guest"] else []
+    repeat_products = customer_product_payloads(customer_repeat_products(g.customer["id"], settings), settings) if g.customer and not g.customer["is_guest"] else []
     return render_template(
         "online/catalog.html", settings=settings, products=products, categories=categories,
         repeat_products=repeat_products, is_open=ordering_open(settings),
@@ -340,7 +368,7 @@ def catalog():
 @bp.get("/cart")
 def cart():
     settings = online_settings()
-    repeat_products = customer_repeat_products(g.customer["id"], settings) if g.customer and not g.customer["is_guest"] else []
+    repeat_products = customer_product_payloads(customer_repeat_products(g.customer["id"], settings), settings) if g.customer and not g.customer["is_guest"] else []
     return render_template(
         "online/cart.html", repeat_products=repeat_products,
         settings=settings, is_open=ordering_open(settings),
@@ -360,14 +388,20 @@ def customer_product_image(filename):
 
 @bp.get("/api/products")
 def customer_products_api():
-    return jsonify([dict(row) for row in available_products(request.args.get("q", "").strip(), request.args.get("category_id", type=int))])
+    settings = online_settings()
+    return jsonify(customer_product_payloads(
+        available_products(request.args.get("q", "").strip(), request.args.get("category_id", type=int)), settings
+    ))
 
 
 @bp.post("/api/cart/validate")
 def validate_cart_api():
     try:
         items = validate_cart((request.get_json(silent=True) or {}).get("items"))
-        public_items = [{key: value for key, value in item.items() if key != "product_id"} for item in items]
+        public_items = [
+            {key: value for key, value in item.items() if key not in {"product_id", "barcode"}}
+            for item in items
+        ]
         return jsonify(items=public_items, subtotal_satang=sum(item["line_total_satang"] for item in items))
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
@@ -507,7 +541,7 @@ def customer_profile():
                 (phone, registered_name, location_id, room_reference or None, iso_time(utc_now()), g.customer["id"]),
             )
             db.commit()
-            return redirect(request.args.get("next") or url_for("online.catalog"))
+            return redirect(safe_customer_next_url(request.args.get("next")) or url_for("online.catalog"))
         except sqlite3.IntegrityError:
             db.rollback()
             flash("หมายเลขโทรศัพท์นี้ถูกใช้กับบัญชีลูกค้าอื่นแล้ว กรุณาใช้หมายเลขอื่นหรือติดต่อร้านค้า", "error")
@@ -630,16 +664,19 @@ def repeat_order(public_id):
         """SELECT p.product_uuid,oi.ordered_quantity,oi.unit_price_satang
            FROM online_order_items oi JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?""", (order["id"],)
     ).fetchall()
-    available = {row["product_uuid"]: row for row in available_products()}
+    settings = online_settings()
+    available = {
+        row["product_uuid"]: row for row in customer_product_payloads(available_products(), settings)
+    }
     cart, notices = [], []
     for old in old_items:
         current = available.get(old["product_uuid"])
-        if not current or current["available_quantity"] <= 0:
+        if not current or not current["is_available"]:
             notices.append("นำสินค้าที่ไม่พร้อมขายออกจากตะกร้าแล้ว")
             continue
-        quantity = min(old["ordered_quantity"], current["available_quantity"], current["online_max_quantity"] or old["ordered_quantity"])
+        quantity = min(old["ordered_quantity"], current["max_quantity"])
         cart.append({"product_uuid": current["product_uuid"], "name_th": current["name_th"], "price_satang": current["price_satang"],
-                     "quantity": quantity, "max": current["available_quantity"], "allow_decimal_quantity": current["allow_decimal_quantity"]})
+                     "quantity": quantity, "max": current["max_quantity"], "allow_decimal_quantity": current["allow_decimal_quantity"]})
         if current["price_satang"] != old["unit_price_satang"]:
             notices.append(f"{current['name_th']} ใช้ราคาปัจจุบัน")
     return jsonify(items=cart, notices=notices)

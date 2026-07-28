@@ -12,6 +12,7 @@ from ..auth import (COOKIE_NAME, admin_required, create_session, delete_session,
                     utc_now, valid_csrf)
 from ..database import get_db
 from ..display_state import signal_display
+from ..public_host_access import is_remote_admin_request
 from ..services.admin_two_factor import (TwoFactorError, consume_recovery_code,
                                          decrypt_secret, encrypt_secret,
                                          issuer_name, new_recovery_codes,
@@ -122,10 +123,11 @@ def login():
     if g.staff:
         return redirect(url_for("pos.index"))
     db = get_db()
+    remote_admin = is_remote_admin_request()
     staff_list = db.execute(
         """SELECT st.id, st.display_name, r.name_th AS role_name
            FROM staff st JOIN roles r ON r.id = st.role_id
-           WHERE st.is_active = 1 ORDER BY st.display_name"""
+           WHERE st.is_active = 1""" + (" AND r.code = 'admin'" if remote_admin else "") + " ORDER BY st.display_name"
     ).fetchall()
     if request.method == "POST":
         recent_failures = db.execute(
@@ -138,8 +140,13 @@ def login():
             return render_template("login.html", staff_list=staff_list, next_url=""), 429
         staff_id = request.form.get("staff_id", type=int)
         pin = request.form.get("pin", "")
-        staff = db.execute("SELECT * FROM staff WHERE id = ? AND is_active = 1", (staff_id,)).fetchone()
-        if not staff or len(pin) not in (4, 6) or not pin.isdigit() or not check_password_hash(staff["pin_hash"], pin):
+        staff = db.execute(
+            """SELECT st.*, r.code AS role_code FROM staff st
+               JOIN roles r ON r.id = st.role_id WHERE st.id = ? AND st.is_active = 1""",
+            (staff_id,),
+        ).fetchone()
+        if (not staff or (remote_admin and staff["role_code"] != "admin")
+                or len(pin) not in (4, 6) or not pin.isdigit() or not check_password_hash(staff["pin_hash"], pin)):
             db.execute(
                 "INSERT INTO login_events (staff_id, event_type, ip_address, created_at) VALUES (?, 'login_failed', ?, ?)",
                 (staff_id if staff else None, request.remote_addr, iso_time(utc_now())),
@@ -147,11 +154,13 @@ def login():
             db.commit()
             flash("ชื่อพนักงานหรือรหัส PIN ไม่ถูกต้อง", "error")
         else:
-            if staff["role_id"] and db.execute(
-                """SELECT 1 FROM roles r JOIN staff_two_factor f ON f.staff_id=?
-                   WHERE r.id=? AND r.code='admin' AND f.is_enabled=1""",
-                (staff["id"], staff["role_id"]),
-            ).fetchone():
+            two_factor = _two_factor_record(db, staff["id"])
+            if remote_admin and not two_factor:
+                _audit_two_factor(db, staff["id"], "remote_admin_two_factor_enrollment_required")
+                db.commit()
+                flash("การเข้าใช้จากภายนอกต้องเปิดการยืนยันสองชั้นก่อน กรุณาเข้าสู่ระบบจากเครือข่ายร้านเพื่อตั้งค่า", "error")
+                return render_template("login.html", staff_list=staff_list, next_url="", remote_admin=True), 403
+            if two_factor:
                 challenge = _create_two_factor_challenge(db, staff["id"], request.form.get("next"))
                 db.commit()
                 response = make_response(redirect(url_for("auth.verify_two_factor")))
@@ -167,7 +176,10 @@ def login():
             response.set_cookie(COOKIE_NAME, token, **session_cookie_options())
             signal_display("fullscreen")
             return response
-    return render_template("login.html", staff_list=staff_list, next_url=safe_next_url(request.args.get("next")) or "")
+    return render_template(
+        "login.html", staff_list=staff_list,
+        next_url=safe_next_url(request.args.get("next")) or "", remote_admin=remote_admin,
+    )
 
 
 @bp.route("/login/2fa", methods=("GET", "POST"))
@@ -194,7 +206,7 @@ def verify_two_factor():
             return render_template("two_factor_login.html", challenge=challenge)
         _remove_two_factor_challenge(db, challenge["id"])
         db.commit()
-        token = create_session(challenge["staff_id"])
+        token = create_session(challenge["staff_id"], two_factor_verified=True)
         db.execute(
             "INSERT INTO login_events(staff_id,event_type,ip_address,created_at) VALUES(?, 'login_success', ?, ?)",
             (challenge["staff_id"], request.remote_addr, iso_time(utc_now())),
@@ -361,6 +373,8 @@ def regenerate_recovery_codes():
 @bp.post("/account/security/disable")
 @admin_required
 def disable_two_factor():
+    if is_remote_admin_request():
+        return ("การปิดการยืนยันสองชั้นต้องทำจากเครือข่ายร้าน", 403)
     if not valid_csrf(request.form.get("csrf_token")):
         return ("คำขอไม่ถูกต้อง", 400)
     db = get_db()
