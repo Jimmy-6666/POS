@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .backup import BackupError, exclusive_lock, sha256_file
@@ -100,7 +100,7 @@ def build_inventory(paths, configured_paths: str | None = None) -> dict[str, dic
 
 
 def sync_files(paths, transport, *, configured_paths: str | None = None, deletion_grace_days: int = 30, backup_id: str | None = None, now: datetime | None = None, retries: int = 3) -> FileSyncResult:
-    """Upload changed allow-listed files and quarantine deletions after a grace period."""
+    """Sync changed product images and archive prior/deleted remote snapshots."""
 
     paths.create_directories()
     current = build_inventory(paths, configured_paths)
@@ -110,14 +110,23 @@ def sync_files(paths, transport, *, configured_paths: str | None = None, deletio
     errors: list[str] = []
     uploaded = unchanged = quarantined = 0
     with exclusive_lock(paths.backups / ".file-sync.lock"):
+        new_files: list[tuple[str, dict[str, object]]] = []
         for relative, entry in current.items():
             prior = previous.get(relative)
-            if prior and prior.get("sha256") == entry["sha256"] and not prior.get("missing_since"):
+            if prior and prior.get("sha256") == entry["sha256"] and prior.get("uploaded_at") and not prior.get("missing_since"):
                 unchanged += 1
                 continue
+            if not prior and getattr(transport, "upload_files", None):
+                new_files.append((relative, entry))
+                continue
             try:
+                archive_path = f"file-backups/{current_time.strftime('%Y%m%dT%H%M%SZ')}/{relative}"
+                versioned_uploader = getattr(transport, "upload_versioned_file", None)
                 uploader = getattr(transport, "upload_with_retry", None)
-                if uploader:
+                if prior and versioned_uploader:
+                    versioned_uploader(paths.root / relative, str(entry["remote_path"]), archive_path)
+                    entry["previous_remote_path"] = archive_path
+                elif uploader:
                     uploader(paths.root / relative, str(entry["remote_path"]), retries=retries)
                 else:
                     transport.upload_file(paths.root / relative, str(entry["remote_path"]))
@@ -128,35 +137,42 @@ def sync_files(paths, transport, *, configured_paths: str | None = None, deletio
                 errors.append(f"{relative}: {exc}")
                 if prior:
                     entry.update({key: value for key, value in prior.items() if key not in {"path", "size", "sha256", "remote_path"}})
+        if new_files:
+            current_paths = [(paths.root / relative, str(entry["remote_path"])) for relative, entry in new_files]
+            try:
+                transport.upload_files(current_paths)
+                for _, entry in new_files:
+                    entry["uploaded_at"] = current_time.isoformat()
+                    entry["backup_id"] = backup_id
+                uploaded += len(new_files)
+            except Exception as exc:
+                errors.extend(f"{relative}: {exc}" for relative, _ in new_files)
+                # Do not promote a failed first upload into the next inventory;
+                # it must be retried on the next scheduled sync.
+                for relative, _ in new_files:
+                    current.pop(relative, None)
         merged = dict(current)
         for relative, prior in previous.items():
             if relative in current:
                 continue
-            missing_since = prior.get("missing_since") or current_time.isoformat()
-            try:
-                missing_at = datetime.fromisoformat(str(missing_since)).astimezone(UTC)
-            except ValueError:
-                missing_at = current_time
-            age = current_time - missing_at
             tombstone = dict(prior)
-            tombstone["missing_since"] = missing_since
-            tombstone["status"] = "missing_local"
-            if age >= timedelta(days=max(1, deletion_grace_days)) and not prior.get("quarantined_at"):
-                quarantine_path = f"quarantine/{current_time.strftime('%Y%m%dT%H%M%SZ')}/{relative}"
+            if not prior.get("archived_at"):
+                archive_path = f"file-backups/{current_time.strftime('%Y%m%dT%H%M%SZ')}/{relative}"
                 try:
                     quarantiner = getattr(transport, "quarantine_with_retry", None)
                     if quarantiner:
-                        quarantiner(str(prior.get("remote_path", f"file-snapshots/{relative}")), quarantine_path, retries=retries)
+                        quarantiner(str(prior.get("remote_path", f"file-snapshots/{relative}")), archive_path, retries=retries)
                     else:
-                        transport.quarantine_file(str(prior.get("remote_path", f"file-snapshots/{relative}")), quarantine_path)
-                    tombstone["quarantined_at"] = current_time.isoformat()
-                    tombstone["status"] = "quarantined"
+                        transport.quarantine_file(str(prior.get("remote_path", f"file-snapshots/{relative}")), archive_path)
+                    tombstone["archived_at"] = current_time.isoformat()
+                    tombstone["archived_remote_path"] = archive_path
+                    tombstone["status"] = "archived_local_deletion"
                     quarantined += 1
                 except Exception as exc:
                     errors.append(f"{relative}: {exc}")
             else:
-                tombstone["status"] = "pending_deletion"
+                tombstone["status"] = "archived_local_deletion"
             merged[relative] = tombstone
         _save_inventory(inventory_file, merged, backup_id)
-        _audit(paths, {"action": "sync", "scanned": len(current), "uploaded": uploaded, "quarantined": quarantined, "errors": len(errors), "backup_id": backup_id})
-    return FileSyncResult(len(current), uploaded, unchanged, sum(1 for item in merged.values() if item.get("status") == "pending_deletion"), quarantined, tuple(errors), backup_id)
+        _audit(paths, {"action": "sync_product_images", "scanned": len(current), "uploaded": uploaded, "archived": quarantined, "errors": len(errors), "backup_id": backup_id})
+    return FileSyncResult(len(current), uploaded, unchanged, 0, quarantined, tuple(errors), backup_id)

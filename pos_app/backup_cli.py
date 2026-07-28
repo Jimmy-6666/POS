@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from .runtime_paths import load_runtime_config
-from .services.backup import BackupError, create_local_backup, restore_backup_to_runtime, verify_backup
+from .services.backup import BackupError, create_local_backup, record_remote_backup_status, restore_backup_to_runtime, verify_backup
 from .services.file_sync import sync_files
 from .services.remote_backup import SftpTransport, load_remote_config
 
@@ -60,13 +60,29 @@ def main(argv: list[str] | None = None) -> int:
             if result.errors:
                 raise BackupError("File sync completed with errors: " + "; ".join(result.errors))
             transport.upload_sync_manifest({"status": "complete", "backup_id": result.backup_id, "scanned": result.scanned, "uploaded": result.uploaded})
+            record_remote_backup_status(config.paths, "image_sync_complete", {"backup_id": result.backup_id, "image_sync": result.__dict__})
             print(json.dumps(result.__dict__, ensure_ascii=False))
             return 0
+        # A verified local archive is the primary recovery point. Remote work
+        # starts only after it exists, and a VPS outage must not obscure it.
         artifact = create_local_backup(config.paths, config, retention=retention)
-        transport = _remote(config)
-        remote_status = transport.upload_backup(artifact, retries=int(os.environ.get("POS_VPS_RETRIES", "3")))
-        result = sync_files(config.paths, transport, configured_paths=os.environ.get("POS_SYNC_PATHS"), deletion_grace_days=int(os.environ.get("POS_SYNC_DELETION_GRACE_DAYS", "30")), backup_id=artifact.backup_id, retries=int(os.environ.get("POS_VPS_RETRIES", "3")))
-        transport.upload_sync_manifest({"status": "complete", "backup_id": artifact.backup_id, "scanned": result.scanned, "uploaded": result.uploaded})
+        try:
+            transport = _remote(config)
+            remote_status = transport.upload_backup(artifact, retries=int(os.environ.get("POS_VPS_RETRIES", "3")))
+            result = sync_files(config.paths, transport, configured_paths=os.environ.get("POS_SYNC_PATHS"), deletion_grace_days=int(os.environ.get("POS_SYNC_DELETION_GRACE_DAYS", "30")), backup_id=artifact.backup_id, retries=int(os.environ.get("POS_VPS_RETRIES", "3")))
+            if result.errors:
+                raise BackupError("File sync completed with errors: " + "; ".join(result.errors))
+            transport.upload_sync_manifest({"status": "complete", "backup_id": artifact.backup_id, "scanned": result.scanned, "uploaded": result.uploaded})
+        except (BackupError, OSError, ValueError) as exc:
+            record_remote_backup_status(config.paths, "failed", {"backup_id": artifact.backup_id, "archive": artifact.path.name, "error": str(exc)})
+            print(json.dumps({
+                "status": "local_complete_remote_failed",
+                "backup": str(artifact.path),
+                "sha256": artifact.archive_sha256,
+                "remote_error": str(exc),
+            }, ensure_ascii=False))
+            return 2
+        record_remote_backup_status(config.paths, "complete", {"backup_id": artifact.backup_id, "archive": artifact.path.name, "remote": remote_status, "image_sync": result.__dict__})
         print(json.dumps({"status": "complete", "backup": str(artifact.path), "remote": remote_status, "sync": result.__dict__}, ensure_ascii=False))
         return 0
     except (BackupError, OSError, ValueError) as exc:

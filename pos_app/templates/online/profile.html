@@ -1,0 +1,34 @@
+{% extends "online/base.html" %}
+{% block title %}ข้อมูลสำหรับจัดส่ง{% endblock %}
+{% block content %}
+<section class="checkout-card">
+  <div class="checkout-heading"><div><span>ยืนยันตัวตนผ่าน LINE แล้ว</span><h1>ข้อมูลสำหรับจัดส่ง</h1><p>กรอกครั้งแรกเพื่อใช้สั่งสินค้าและติดตามออเดอร์</p></div></div>
+  {% if pending_profile %}
+  <section class="profile-confirmation" aria-labelledby="confirm-phone-heading">
+    <h2 id="confirm-phone-heading">กรุณาตรวจสอบเบอร์อีกครั้ง</h2>
+    <p>เราจะใช้เบอร์นี้สำหรับติดต่อเรื่องการจัดส่ง</p>
+    <strong class="confirmed-phone">{{pending_profile.phone}}</strong>
+    <dl><div><dt>ชื่อสำหรับติดต่อ</dt><dd>{{pending_profile.registered_name}}</dd></div></dl>
+    <dl><div><dt>สถานที่จัดส่ง</dt><dd>{{pending_profile.location_name}}</dd></div><div><dt>ห้อง / จุดรับ</dt><dd>{{pending_profile.room_reference}}</dd></div></dl>
+    <form method="post" class="confirmation-actions">
+      <input type="hidden" name="csrf_token" value="{{g.customer_session.csrf_token}}">
+      <input type="hidden" name="phone" value="{{pending_profile.phone}}">
+      <input type="hidden" name="registered_name" value="{{pending_profile.registered_name}}">
+      <input type="hidden" name="delivery_location_id" value="{{pending_profile.location_id}}">
+      <input type="hidden" name="room_reference" value="{{pending_profile.room_reference}}">
+      <button class="secondary" type="submit" name="profile_action" value="edit">แก้ไข</button>
+      <button class="primary" type="submit" name="profile_action" value="confirm">ยืนยัน</button>
+    </form>
+  </section>
+  {% else %}
+  <form method="post" class="form-card">
+    <input type="hidden" name="csrf_token" value="{{g.customer_session.csrf_token}}">
+    <label>ชื่อสำหรับติดต่อ<input name="registered_name" autocomplete="name" required value="{{form_values.get('registered_name', g.customer.registered_name or '')}}"></label>
+    <label>เบอร์มือถือ<input name="phone" inputmode="tel" autocomplete="tel" required value="{{form_values.get('phone', '' if g.customer.phone_normalized.startswith('line:') else g.customer.phone_normalized)}}"></label>
+    <label>สถานที่จัดส่ง<select name="delivery_location_id" required><option value="">เลือกสถานที่</option>{% for location in locations %}<option value="{{location.id}}" {% if form_values.get('delivery_location_id', g.customer.default_delivery_location_id|string)==location.id|string %}selected{% endif %}>{{location.name}}</option>{% endfor %}</select></label>
+    <label>ห้อง / วิลล่า / จุดรับ<input name="room_reference" required value="{{form_values.get('room_reference', g.customer.default_room_reference or '')}}"></label>
+    <button class="primary" type="submit" name="profile_action" value="review">ดำเนินการต่อ</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

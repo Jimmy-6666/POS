@@ -1,6 +1,67 @@
-# Version 2.1 — Development
+# Version 2.2 — Released 2026-07-28
+
+## Release summary
+
+- Published verified LINE LIFF customer identity, registered-name and delivery
+  profile confirmation, suspended-customer handling, and audited anonymizing
+  deletion with re-registration support.
+- Published the compact two-step checkout, five recent delivery snapshots,
+  independent POS/online negative-stock settings, and current-price staff order
+  adjustments with customer-confirmation warnings.
+- Published the admin maintenance/support workflow and signed-update hand-off.
+- Split database backups from product images. Database ZIPs stay small; product
+  images sync by hash, replaced/deleted VPS snapshots move to `file-backups/`,
+  and administrators can view status or set the daily send time.
+- UAT VPS baseline contains 385 product images. Final release verification is
+  recorded in `FEATURE_STATUS.md`.
+
+## Sprint 2 follow-up — customer lifecycle and checkout
+
+- Split negative-stock control into separate POS and online settings. Repeat
+  products and cart hydration now honor the online setting when stock is below
+  zero. LINE login throttling is configurable and defaults to 12 failures per
+  IP in five minutes; suspended accounts do not consume that allowance.
+- Restyled saved-delivery selection as a responsive Glass UI dialog and split
+  the saved contact name and phone into clearly separated lines.
+- Added migration 22 for a customer-registered contact name and audited
+  lifecycle fields. LINE display name is retained separately.
+- Suspended LINE identities now receive a stable Thai blocked page rather than
+  repeatedly returning to LIFF login.
+- Retired the customer PIN-reset interface. Online customer administration now
+  shows customer code, LINE name, registered name, and an admin-only deletion
+  action that requires the current admin PIN.
+- Customer deletion preserves relational history and auditability while
+  anonymizing direct identifiers and releasing the LINE/phone unique values for
+  later re-registration.
+- Simplified customer checkout to delivery plus payment followed by one compact
+  confirmation. Changed delivery contact details are order snapshots only, and
+  customers may select one of five distinct recently used delivery details.
+
+## Sprint 2 — LINE LIFF customer identity
+
+- Added server-side LINE ID-token verification, POS-owned customer sessions,
+  authenticated identity endpoints, and a required delivery profile.
+- Retired new phone/PIN registration, guest checkout, and PIN account login for
+  online ordering; historical data remains intact.
+- Added migration 21 and the production LIFF/Cloudflare setup runbook.
+- Show a clear Thai message when a LINE customer's delivery-profile phone number
+  is already linked to a different customer, rather than exposing a SQLite error.
+- Add a review step for a LINE customer's delivery phone: the customer must
+  choose แก้ไข or ยืนยัน after seeing “กรุณาตรวจสอบเบอร์อีกครั้ง” before it is saved.
 
 ## Online operations update
+
+- Removed active customer slip-upload, transfer-account, and staff
+  transfer-verification workflows. Online orders now retain only cash/transfer
+  selection for confirmation at delivery; historic payment data is preserved.
+- Made the existing negative-stock setting effective across POS sales, online
+  reservations, and staff online-order edits. It now defaults to enabled to
+  preserve the established operating behavior and remains manager-configurable.
+- Made staff/customer session cookies Secure for HTTPS requests while retaining
+  direct localhost HTTP operation; trusted reverse-proxy support is opt-in via
+  `POS_TRUST_PROXY=1`.
+- Made scheduled backup reporting local-first: a verified local archive is kept
+  and reported even when VPS upload or file sync fails (`local_complete_remote_failed`).
 
 - Split the configurable customer-order store name onto one line per word in
   the top-left home logo, so “แสนงาม มินิมาร์ท” renders as two balanced lines.
@@ -152,6 +213,10 @@
 
 ## Sprint 2 backup, VPS sync, and disaster recovery
 
+- Split product images from the database ZIP. The Backup page now sends only
+  changed images, archives a VPS snapshot before a replacement/local deletion,
+  shows the latest server-upload result, and stores a daily Bangkok send time.
+
 - Added an independent local backup service using SQLite's online backup API,
   staged ZIP publication, integrity/foreign-key checks, manifests, SHA-256
   checksums, sanitized recovery metadata, locking, and verified retention.
@@ -160,13 +225,29 @@
 - Replaced the working admin backup path with the verified backup service while
   retaining the existing permission and CSRF boundary.
 - Added incremental allow-listed product-file sync with hash change detection,
-  persistent inventory, delayed deletion, remote quarantine, retry/backoff,
-  and backup-id linkage.
+  persistent inventory, immediate archival on replacement/deletion,
+  retry/backoff, and backup-id linkage.
 - Added restricted outbound OpenSSH SFTP transport with temporary remote names,
   atomic rename, completion markers, and optional download checksum
   verification. No VPS password or private key is stored in the repository.
-- Added Windows backup/sync runners, a daily `SaengngamPOS-Backup` scheduled
-  task, VPS provisioning/retention scripts, and non-destructive recovery-drill
-  scripts.
+- Fixed the Windows OpenSSH invocation to pass strict host-key options as
+  separate arguments, ensuring the configured pinned `known_hosts` file is
+  honored during automated SFTP backup runs.
+- Added Windows backup/sync runners, an administrator-configurable daily
+  in-process schedule, VPS provisioning/retention scripts, and non-destructive
+  recovery-drill scripts. Installation/repair removes the legacy duplicate
+  `SaengngamPOS-Backup` task.
 - Added Sprint 2 maintenance and recovery tests. Signed update, administrator
   maintenance dashboard, and remote-support workflow remain Sprint 3 scope.
+
+## Sprint 3 maintenance, signed updates, and support
+
+- Added the admin-only **ดูแลระบบ** dashboard with live runtime health,
+  verified backup summary, maintenance audit events, and a Thai responsive UI.
+- Added redacted support ZIP generation and download. Bundles exclude the
+  database, uploads, configuration, secret key, and browser profiles; the POS
+  never opens remote support automatically.
+- Added staged signed-update verification: versioned manifest, SHA-256 script
+  hash, Windows Authenticode status, and pinned publisher thumbprint are all
+  required. Applying requires the current admin PIN and the detached runner
+  checks the signature/thumbprint again before handing off to the signed script.

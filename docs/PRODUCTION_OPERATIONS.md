@@ -3,11 +3,11 @@
 ## Daily checks
 
     .\verify-production.ps1
-    Get-ScheduledTask -TaskName SaengngamPOS-Backup
     Get-ChildItem .\runtime\backups\backup-*.zip
 
-The POS service and backup task are independent. A failed VPS upload must not
-interrupt sales; inspect the scheduled-task result and local backup directory.
+The Backup page contains the daily schedule and last server-upload status. The
+POS must be running during the selected Bangkok minute. A failed VPS upload must not
+interrupt sales; inspect the local backup directory and Backup page status.
 
 ## Manual commands
 
@@ -15,13 +15,16 @@ interrupt sales; inspect the scheduled-task result and local backup directory.
     .\sync-production.ps1
     .\.venv\Scripts\python.exe -m pos_app.backup_cli verify .\runtime\backups\backup-YYYYMMDDT020000Z.zip
 
-The admin backup page remains available to users with `backup.manage`. It
-creates the same verified local archive and records an audit event.
+The admin backup page remains available to users with `backup.manage`. It can
+create a local database archive, send a database archive plus image delta now,
+and set the daily send time; all actions record audit events.
 
 ## File policy
 
-Back up: SQLite snapshots, product images, and required uploads. Sync by
-default: `uploads/products`. Configure additional approved runtime roots only
+Back up: SQLite snapshots in the database ZIP. Sync separately by default:
+`uploads/products`. Only new/changed product images are sent. The VPS moves a
+previous or locally deleted image snapshot into `file-backups/` before removing
+it from the active snapshot. Configure additional approved runtime roots only
 after reviewing their privacy and recovery need.
 
 Never sync: databases, WAL/SHM files, secrets, private keys, logs, browser

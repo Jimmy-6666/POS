@@ -1,9 +1,9 @@
 import json
+import sqlite3
 import hmac
 import secrets
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 
 from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -11,7 +11,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from ..auth import iso_time, utc_now
 from ..customer_auth import (
     CUSTOMER_COOKIE_NAME, create_customer_session, customer_login_required,
-    normalize_phone, phone_fingerprint, valid_customer_csrf,
+    delete_customer_cookie, normalize_phone, phone_fingerprint, set_customer_cookie,
+    valid_customer_csrf,
 )
 from ..database import get_db
 from ..services.online_orders import (
@@ -60,6 +61,34 @@ def online_settings():
     return dict(get_db().execute("SELECT key,value FROM settings").fetchall())
 
 
+def negative_stock_allowed(settings=None):
+    return (settings or online_settings()).get("online_allow_negative_stock") == "1"
+
+
+def online_quantity_limit(row, settings):
+    return float(row["online_max_quantity"] or Decimal(settings.get("online_max_order_quantity") or "50"))
+
+
+def online_product_availability(rows, settings):
+    if not negative_stock_allowed(settings):
+        return rows
+    return [{**dict(row), "available_quantity": online_quantity_limit(row, settings)} for row in rows]
+
+
+def customer_repeat_products(customer_id, settings):
+    rows = get_db().execute(
+        """SELECT p.id,p.name_th,p.price_satang,p.image_path,p.allow_decimal_quantity,p.online_max_quantity,
+                  MAX(0,p.stock_quantity-COALESCE((SELECT SUM(sr.quantity) FROM stock_reservations sr
+                    WHERE sr.product_id=p.id AND sr.status='active'),0)) AS available_quantity
+           FROM online_order_items oi JOIN online_orders o ON o.id=oi.order_id
+           JOIN products p ON p.id=oi.product_id
+           WHERE o.customer_id=? AND p.is_active=1 AND p.is_online_available=1
+           GROUP BY p.id ORDER BY MAX(o.created_at) DESC LIMIT 8""",
+        (customer_id,),
+    ).fetchall()
+    return online_product_availability(rows, settings)
+
+
 def ordering_open(settings=None):
     settings = settings or online_settings()
     if settings.get("online_ordering_enabled") != "1":
@@ -73,6 +102,7 @@ def ordering_open(settings=None):
 
 
 def available_products(query="", category_id=None):
+    settings = online_settings()
     where = ["p.is_active=1", "p.is_online_available=1"]
     params = []
     if query:
@@ -81,7 +111,7 @@ def available_products(query="", category_id=None):
     if category_id:
         where.append("p.category_id=?")
         params.append(category_id)
-    return get_db().execute(
+    rows = get_db().execute(
         f"""SELECT p.id,p.name_th,p.barcode,p.price_satang,p.image_path,p.allow_decimal_quantity,
                    p.online_max_quantity,c.id AS category_id,c.name_th AS category_name,
                    MAX(0,p.stock_quantity-COALESCE((SELECT SUM(sr.quantity) FROM stock_reservations sr
@@ -91,6 +121,7 @@ def available_products(query="", category_id=None):
             ORDER BY p.online_sort_order,p.name_th LIMIT 200""",
         params,
     ).fetchall()
+    return online_product_availability(rows, settings)
 
 
 def validate_cart(raw_items):
@@ -124,14 +155,15 @@ def validate_cart(raw_items):
         available = Decimal(str(row["available_quantity"]))
         if limit and quantity > limit:
             raise ValueError(f"{row['name_th']} สั่งได้สูงสุด {limit} ต่อออเดอร์")
-        if quantity > available:
+        if not negative_stock_allowed(settings) and quantity > available:
             raise ValueError(f"{row['name_th']} มีสินค้าไม่เพียงพอ (พร้อมขาย {available})")
         total_quantity += quantity
         line_total = int(Decimal(row["price_satang"]) * quantity)
+        browser_available = online_quantity_limit(row, settings) if negative_stock_allowed(settings) else float(available)
         validated.append({
             "product_id": row["id"], "name_th": row["name_th"], "barcode": row["barcode"],
             "image_path": row["image_path"], "quantity": float(quantity), "unit_price_satang": row["price_satang"],
-            "line_total_satang": line_total, "available_quantity": float(available),
+            "line_total_satang": line_total, "available_quantity": browser_available,
         })
     if total_quantity > max_total_quantity:
         raise ValueError(f"จำนวนสินค้ารวมต้องไม่เกิน {max_total_quantity}")
@@ -140,11 +172,17 @@ def validate_cart(raw_items):
 
 @bp.route("/register", methods=("GET", "POST"))
 def customer_register():
+    return ("การสมัครด้วยเบอร์โทรศัพท์และ PIN ถูกยกเลิกแล้ว กรุณาเปิดผ่าน LINE", 410)
+
+    # Historical implementation retained only until its removal in Sprint 2.
     if request.method == "POST":
         if not valid_public_csrf(request.form.get("csrf_token")):
             return ("คำขอไม่ถูกต้อง", 400)
         try:
             phone = normalize_phone(request.form.get("phone"))
+            registered_name = str(request.form.get("registered_name") or "").strip()[:120]
+            if not registered_name:
+                raise ValueError("กรุณาระบุชื่อสำหรับติดต่อ")
             pin = request.form.get("pin", "")
             if pin != request.form.get("pin_confirm") or not pin.isdigit() or len(pin) not in (4, 6):
                 raise ValueError("PIN ต้องเป็นตัวเลข 4 หรือ 6 หลักและกรอกให้ตรงกัน")
@@ -165,7 +203,7 @@ def customer_register():
             token = create_customer_session(cursor.lastrowid)
             db.commit()
             response = redirect(url_for("online.catalog"))
-            response.set_cookie(CUSTOMER_COOKIE_NAME, token, httponly=True, samesite="Lax", secure=request.is_secure)
+            set_customer_cookie(response, token)
             return response
         except Exception as exc:
             get_db().rollback()
@@ -176,6 +214,9 @@ def customer_register():
 
 @bp.route("/login", methods=("GET", "POST"))
 def customer_login():
+    return ("การเข้าสู่ระบบด้วยเบอร์โทรศัพท์และ PIN ถูกยกเลิกแล้ว กรุณาเปิดผ่าน LINE", 410)
+
+    # Historical implementation retained only until its removal in Sprint 2.
     if request.method == "POST":
         if not valid_public_csrf(request.form.get("csrf_token")):
             return ("คำขอไม่ถูกต้อง", 400)
@@ -208,7 +249,7 @@ def customer_login():
             token = create_customer_session(cursor.lastrowid)
             db.commit()
             response = redirect(url_for("online.catalog"))
-            response.set_cookie(CUSTOMER_COOKIE_NAME, token, httponly=True, samesite="Lax", secure=request.is_secure)
+            set_customer_cookie(response, token)
             return response
         fingerprint = phone_fingerprint(phone)
         cutoff = iso_time(utc_now() - timedelta(minutes=15))
@@ -232,7 +273,7 @@ def customer_login():
             token = create_customer_session(customer["id"])
             db.commit()
             response = redirect(request.args.get("next") or url_for("online.catalog"))
-            response.set_cookie(CUSTOMER_COOKIE_NAME, token, httponly=True, samesite="Lax", secure=request.is_secure)
+            set_customer_cookie(response, token)
             return response
     return render_template("online/login.html", public_csrf=public_form_csrf())
 
@@ -247,13 +288,16 @@ def customer_logout():
     db.execute("DELETE FROM customer_sessions WHERE id=?", (g.customer_session["session_id"],))
     db.commit()
     response = redirect(url_for("online.customer_login"))
-    response.delete_cookie(CUSTOMER_COOKIE_NAME)
+    delete_customer_cookie(response)
     return response
 
 
 @bp.route("/change-pin", methods=("GET", "POST"))
 @customer_login_required
 def customer_change_pin():
+    return ("การเปลี่ยน PIN สำหรับการสั่งออนไลน์ถูกยกเลิกแล้ว", 410)
+
+    # Historical implementation retained only until its removal in Sprint 2.
     if request.method == "POST":
         if not valid_customer_csrf(request.form.get("csrf_token")):
             return ("คำขอไม่ถูกต้อง", 400)
@@ -284,17 +328,7 @@ def catalog():
            WHERE c.is_active=1 AND p.is_active=1 AND p.is_online_available=1
            ORDER BY c.sort_order,c.name_th"""
     ).fetchall()
-    repeat_products = []
-    if g.customer and not g.customer["is_guest"]:
-        repeat_products = get_db().execute(
-            """SELECT p.id,p.name_th,p.price_satang,p.image_path,p.allow_decimal_quantity,p.online_max_quantity,
-                      MAX(0,p.stock_quantity-COALESCE((SELECT SUM(sr.quantity) FROM stock_reservations sr
-                        WHERE sr.product_id=p.id AND sr.status='active'),0)) AS available_quantity
-               FROM online_order_items oi JOIN online_orders o ON o.id=oi.order_id
-               JOIN products p ON p.id=oi.product_id
-               WHERE o.customer_id=? AND p.is_active=1 AND p.is_online_available=1
-               GROUP BY p.id ORDER BY MAX(o.created_at) DESC LIMIT 8""", (g.customer["id"],)
-        ).fetchall()
+    repeat_products = customer_repeat_products(g.customer["id"], settings) if g.customer and not g.customer["is_guest"] else []
     return render_template("online/catalog.html", settings=settings, products=products, categories=categories,
                            repeat_products=repeat_products, is_open=ordering_open(settings))
 
@@ -302,17 +336,7 @@ def catalog():
 @bp.get("/cart")
 def cart():
     settings = online_settings()
-    repeat_products = []
-    if g.customer and not g.customer["is_guest"]:
-        repeat_products = get_db().execute(
-            """SELECT p.id,p.name_th,p.price_satang,p.image_path,p.allow_decimal_quantity,p.online_max_quantity,
-                      MAX(0,p.stock_quantity-COALESCE((SELECT SUM(sr.quantity) FROM stock_reservations sr
-                        WHERE sr.product_id=p.id AND sr.status='active'),0)) AS available_quantity
-               FROM online_order_items oi JOIN online_orders o ON o.id=oi.order_id
-               JOIN products p ON p.id=oi.product_id
-               WHERE o.customer_id=? AND p.is_active=1 AND p.is_online_available=1
-               GROUP BY p.id ORDER BY MAX(o.created_at) DESC LIMIT 8""", (g.customer["id"],)
-        ).fetchall()
+    repeat_products = customer_repeat_products(g.customer["id"], settings) if g.customer and not g.customer["is_guest"] else []
     return render_template(
         "online/cart.html", repeat_products=repeat_products,
         settings=settings, is_open=ordering_open(settings),
@@ -327,14 +351,6 @@ def customer_product_image(filename):
     if not allowed:
         return ("ไม่พบรูปสินค้า", 404)
     return send_from_directory(current_app.config["RUNTIME_PATHS"].product_images, filename)
-
-
-@bp.get("/bank-qr")
-def bank_qr():
-    filename = online_settings().get("online_bank_qr_path")
-    if not filename:
-        return ("ไม่พบรูป QR", 404)
-    return send_from_directory(current_app.config["RUNTIME_PATHS"].online_payment_evidence, filename)
 
 
 @bp.get("/api/products")
@@ -353,6 +369,9 @@ def validate_cart_api():
 
 @bp.post("/api/account/lookup")
 def checkout_account_lookup():
+    return jsonify(error="การค้นหาบัญชีด้วยเบอร์โทรศัพท์ถูกยกเลิกแล้ว"), 410
+
+    # Historical implementation retained only until its removal in Sprint 2.
     payload = request.get_json(silent=True) or {}
     if not valid_public_csrf(request.headers.get("X-CSRF-Token")):
         return jsonify(error="คำขอไม่ถูกต้อง"), 400
@@ -368,6 +387,9 @@ def checkout_account_lookup():
 
 @bp.post("/api/account/login")
 def checkout_account_login():
+    return jsonify(error="การเข้าสู่ระบบด้วย PIN ถูกยกเลิกแล้ว"), 410
+
+    # Historical implementation retained only until its removal in Sprint 2.
     payload = request.get_json(silent=True) or {}
     if not valid_public_csrf(request.headers.get("X-CSRF-Token")):
         return jsonify(error="คำขอไม่ถูกต้อง"), 400
@@ -402,11 +424,12 @@ def checkout_account_login():
     ).fetchone()[0]
     db.commit()
     response = jsonify(ok=True, csrf_token=csrf, display_name=customer["display_name"] or "")
-    response.set_cookie(CUSTOMER_COOKIE_NAME, token, httponly=True, samesite="Lax", secure=request.is_secure)
+    set_customer_cookie(response, token)
     return response
 
 
 @bp.get("/checkout")
+@customer_login_required
 def checkout():
     settings = online_settings()
     locations = get_db().execute(
@@ -414,8 +437,78 @@ def checkout():
     ).fetchall()
     return render_template(
         "online/checkout.html", settings=settings, locations=locations,
-        is_open=ordering_open(settings), public_csrf=public_form_csrf(),
+        is_open=ordering_open(settings),
     )
+
+
+@bp.get("/suspended")
+def customer_suspended():
+    return render_template("online/suspended.html"), 403
+
+
+@bp.route("/profile", methods=("GET", "POST"))
+@customer_login_required
+def customer_profile():
+    db = get_db()
+    locations = db.execute(
+        "SELECT * FROM delivery_locations WHERE is_active=1 AND is_available=1 ORDER BY sort_order,name"
+    ).fetchall()
+    if request.method == "POST":
+        if not valid_customer_csrf(request.form.get("csrf_token")):
+            return ("คำขอไม่ถูกต้อง", 400)
+        action = request.form.get("profile_action", "review")
+        if action == "edit":
+            session.pop("pending_customer_profile", None)
+            return render_template("online/profile.html", locations=locations, form_values=request.form)
+        try:
+            phone = normalize_phone(request.form.get("phone"))
+            registered_name = str(request.form.get("registered_name") or g.customer["registered_name"] or g.customer["line_display_name"] or g.customer["display_name"] or "").strip()[:120]
+            if not registered_name:
+                raise ValueError("กรุณาระบุชื่อสำหรับติดต่อ")
+            location_id = int(request.form.get("delivery_location_id") or 0)
+            room_reference = str(request.form.get("room_reference") or "").strip()[:200]
+            location = db.execute(
+                "SELECT * FROM delivery_locations WHERE id=? AND is_active=1 AND is_available=1", (location_id,)
+            ).fetchone()
+            if not location:
+                raise ValueError("กรุณาเลือกสถานที่จัดส่ง")
+            if location["room_required"] and not room_reference:
+                raise ValueError("กรุณาระบุห้องหรือจุดรับ")
+            if action == "review":
+                pending_profile = {
+                    "customer_id": g.customer["id"], "phone": phone,
+                    "registered_name": registered_name,
+                    "location_id": location_id, "location_name": location["name"],
+                    "room_reference": room_reference,
+                }
+                session["pending_customer_profile"] = pending_profile
+                return render_template("online/profile.html", locations=locations, pending_profile=pending_profile)
+            if action != "confirm":
+                return ("คำขอไม่ถูกต้อง", 400)
+            pending_profile = session.pop("pending_customer_profile", None)
+            if not pending_profile or (
+                pending_profile["customer_id"] != g.customer["id"]
+                or pending_profile["phone"] != phone
+                or pending_profile["registered_name"] != registered_name
+                or pending_profile["location_id"] != location_id
+                or pending_profile["room_reference"] != room_reference
+            ):
+                flash("กรุณาตรวจสอบเบอร์อีกครั้งก่อนยืนยัน", "error")
+                return redirect(url_for("online.customer_profile"))
+            db.execute(
+                """UPDATE customers SET phone_normalized=?,registered_name=?,default_delivery_location_id=?,default_room_reference=?,
+                   profile_completed=1,updated_at=? WHERE id=?""",
+                (phone, registered_name, location_id, room_reference or None, iso_time(utc_now()), g.customer["id"]),
+            )
+            db.commit()
+            return redirect(request.args.get("next") or url_for("online.catalog"))
+        except sqlite3.IntegrityError:
+            db.rollback()
+            flash("หมายเลขโทรศัพท์นี้ถูกใช้กับบัญชีลูกค้าอื่นแล้ว กรุณาใช้หมายเลขอื่นหรือติดต่อร้านค้า", "error")
+        except (ValueError, TypeError) as exc:
+            db.rollback()
+            flash(str(exc), "error")
+    return render_template("online/profile.html", locations=locations, form_values=request.form)
 
 
 def owned_order(public_id):
@@ -428,11 +521,25 @@ def owned_order(public_id):
     ).fetchone()
 
 
+@bp.get("/api/delivery-history")
+@customer_login_required
+def delivery_history():
+    rows = get_db().execute(
+        """SELECT contact_name,contact_phone,delivery_location_id,location_name_snapshot,room_reference,MAX(created_at) AS last_used_at
+           FROM online_orders WHERE customer_id=? GROUP BY contact_name,contact_phone,delivery_location_id,location_name_snapshot,room_reference
+           ORDER BY last_used_at DESC LIMIT 5""",
+        (g.customer["id"],),
+    ).fetchall()
+    return jsonify([dict(row) for row in rows])
+
+
 @bp.post("/api/orders")
 def submit_order():
-    is_member = g.customer is not None
-    csrf_ok = valid_customer_csrf(request.headers.get("X-CSRF-Token")) if is_member else valid_public_csrf(request.headers.get("X-CSRF-Token"))
-    if not csrf_ok:
+    if g.customer is None or not g.customer["line_user_id"]:
+        return jsonify(error="กรุณายืนยันตัวตนผ่าน LINE ก่อนสั่งซื้อ"), 401
+    if not g.customer["profile_completed"]:
+        return jsonify(error="กรุณากรอกข้อมูลการจัดส่งให้ครบก่อนสั่งซื้อ"), 403
+    if not valid_customer_csrf(request.headers.get("X-CSRF-Token")):
         return jsonify(error="คำขอไม่ถูกต้อง"), 400
     settings = online_settings()
     if not ordering_open(settings):
@@ -445,92 +552,24 @@ def submit_order():
     if not location:
         return jsonify(error="สถานที่จัดส่งไม่พร้อมใช้งาน"), 400
     try:
-        token = None
-        customer_id = g.customer["id"] if is_member else None
-        if not customer_id:
-            phone = normalize_phone(payload.get("phone"))
-            name = str(payload.get("display_name") or "").strip()
-            if not name:
-                raise OnlineOrderError("กรุณาระบุชื่อลูกค้า")
-            existing = get_db().execute(
-                "SELECT id FROM customers WHERE phone_normalized=? AND is_guest=0", (phone,)
-            ).fetchone()
-            if existing:
-                raise OnlineOrderError("เบอร์นี้มีบัญชีแล้ว กรุณาเข้าสู่ระบบก่อนสั่งซื้อ")
-            pin = str(payload.get("new_pin") or "")
-            if pin and (not pin.isdigit() or len(pin) != 4):
-                raise OnlineOrderError("PIN ต้องเป็นตัวเลข 4 หลัก")
-            now = iso_time(utc_now())
-            public_id = secrets.token_urlsafe(12)
-            stored_phone = phone if pin else f"guest:{public_id}"
-            cursor = get_db().execute(
-                """INSERT INTO customers(public_id,phone_normalized,display_name,pin_hash,is_guest,created_at,updated_at)
-                   VALUES(?,?,?,?,?,?,?)""",
-                (public_id, stored_phone, name, generate_password_hash(pin or secrets.token_urlsafe(16)),
-                 0 if pin else 1, now, now),
-            )
-            customer_id = cursor.lastrowid
-            payload["contact_phone"] = phone
-            payload["contact_name"] = name
-            token = create_customer_session(customer_id)
-        result, duplicate = create_order(customer_id, payload, validate_cart, settings, location)
+        payload["contact_phone"] = normalize_phone(
+            payload.get("contact_phone") or g.customer["phone_normalized"]
+        )
+        payload["contact_name"] = str(
+            payload.get("contact_name")
+            or g.customer["registered_name"]
+            or g.customer["line_display_name"]
+            or g.customer["display_name"]
+            or ""
+        ).strip()[:120]
+        if not payload["contact_name"]:
+            raise ValueError("กรุณาระบุชื่อสำหรับติดต่อ")
+        result, duplicate = create_order(g.customer["id"], payload, validate_cart, settings, location)
         response = jsonify(public_id=result["public_id"], order_number=result["order_number"], duplicate=duplicate,
                            detail_url=url_for("online.order_detail", public_id=result["public_id"]))
-        if token:
-            response.set_cookie(CUSTOMER_COOKIE_NAME, token, httponly=True, samesite="Lax", secure=request.is_secure)
         return response
     except (OnlineOrderError, ValueError) as exc:
         return jsonify(error=str(exc)), 400
-
-
-def sniff_image(content):
-    if content.startswith(b"\xff\xd8\xff"):
-        return ".jpg", "image/jpeg"
-    if content.startswith(b"\x89PNG\r\n\x1a\n"):
-        return ".png", "image/png"
-    if content.startswith(b"RIFF") and content[8:12] == b"WEBP":
-        return ".webp", "image/webp"
-    raise OnlineOrderError("ไฟล์สลิปต้องเป็น JPG, PNG หรือ WEBP")
-
-
-@bp.post("/orders/<public_id>/slips")
-@customer_login_required
-def upload_slip(public_id):
-    if not valid_customer_csrf(request.form.get("csrf_token")):
-        return ("คำขอไม่ถูกต้อง", 400)
-    order = owned_order(public_id)
-    blocked = {"completed", "customer_cancelled", "staff_cancelled", "rejected", "expired"}
-    if not order or order["payment_method_code"] != "transfer" or order["status"] in blocked:
-        return ("ไม่สามารถอัปโหลดสลิปสำหรับออเดอร์นี้", 400)
-    upload = request.files.get("slip")
-    if not upload or not upload.filename:
-        flash("กรุณาเลือกไฟล์สลิป", "error")
-        return redirect(url_for("online.order_detail", public_id=public_id))
-    content = upload.read(5 * 1024 * 1024 + 1)
-    if len(content) > 5 * 1024 * 1024:
-        flash("ไฟล์สลิปต้องไม่เกิน 5 MB", "error")
-        return redirect(url_for("online.order_detail", public_id=public_id))
-    try:
-        ext, content_type = sniff_image(content)
-        filename = f"slip-{secrets.token_hex(16)}{ext}"
-        path = current_app.config["RUNTIME_PATHS"].online_payment_evidence / filename
-        path.write_bytes(content)
-        db = get_db()
-        now = iso_time(utc_now())
-        db.execute("BEGIN IMMEDIATE")
-        db.execute(
-            """INSERT INTO online_order_payments
-               (order_id,method_code,amount_satang,status,slip_path,content_type,uploaded_by_customer_id,created_at,updated_at)
-               VALUES(?,'transfer',?,'awaiting_verification',?,?,?,?,?)""",
-            (order["id"], order["total_satang"], filename, content_type, g.customer["id"], now, now),
-        )
-        db.execute("UPDATE online_orders SET payment_status='awaiting_verification',updated_at=? WHERE id=?", (now, order["id"]))
-        audit_order("online_payment_slip_uploaded", order["id"], detail={"payment_status": "awaiting_verification"})
-        db.commit()
-        flash("อัปโหลดสลิปแล้ว รอร้านตรวจสอบการชำระเงิน", "success")
-    except OnlineOrderError as exc:
-        flash(str(exc), "error")
-    return redirect(url_for("online.order_detail", public_id=public_id))
 
 
 @bp.get("/orders")
@@ -556,26 +595,7 @@ def order_detail(public_id):
         "SELECT * FROM online_order_status_history WHERE order_id=? AND customer_visible=1 ORDER BY created_at,id",
         (order["id"],),
     ).fetchall()
-    slips = db.execute(
-        """SELECT id,status,rejection_reason,created_at FROM online_order_payments
-           WHERE order_id=? AND slip_path IS NOT NULL ORDER BY created_at DESC""", (order["id"],)
-    ).fetchall()
-    return render_template("online/order_detail.html", order=order, items=items, history=history, slips=slips, settings=online_settings())
-
-
-@bp.get("/orders/<public_id>/slips/<int:payment_id>")
-@customer_login_required
-def view_own_slip(public_id, payment_id):
-    order = owned_order(public_id)
-    if not order:
-        return ("ไม่พบไฟล์", 404)
-    payment = get_db().execute(
-        "SELECT slip_path FROM online_order_payments WHERE id=? AND order_id=? AND slip_path IS NOT NULL",
-        (payment_id, order["id"]),
-    ).fetchone()
-    if not payment:
-        return ("ไม่พบไฟล์", 404)
-    return send_from_directory(current_app.config["RUNTIME_PATHS"].online_payment_evidence, payment["slip_path"])
+    return render_template("online/order_detail.html", order=order, items=items, history=history, settings=online_settings())
 
 
 @bp.post("/orders/<public_id>/cancel")

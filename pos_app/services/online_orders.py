@@ -77,7 +77,7 @@ def create_order(customer_id, payload, validate_cart, settings, location):
     if existing:
         return existing, True
     method = payload.get("payment_method")
-    if method not in {"cash", "transfer"} or (method == "transfer" and settings.get("online_transfer_enabled") != "1"):
+    if method not in {"cash", "transfer"}:
         raise OnlineOrderError("วิธีชำระเงินไม่พร้อมใช้งาน")
     room = str(payload.get("room_reference") or "").strip()
     if location["room_required"] and not room:
@@ -193,14 +193,10 @@ def complete_online_order_sale(order_id, staff_id, staff_role, payload):
         rows = db.execute("SELECT * FROM online_order_items WHERE order_id=? AND is_removed=0 ORDER BY id", (order_id,)).fetchall()
         items = [{"product_id": row["product_id"], "quantity": row["ordered_quantity"], "discount_satang": 0} for row in rows]
         prices = {row["product_id"]: row["unit_price_satang"] for row in rows}
-        latest_slip = db.execute(
-            "SELECT slip_path FROM online_order_payments WHERE order_id=? AND slip_path IS NOT NULL ORDER BY id DESC LIMIT 1", (order_id,)
-        ).fetchone()
         sale_id, receipt, cart, change = complete_sale(
             {"items": items, "bill_discount_satang": 0, "delivery_fee_satang": order["delivery_fee_satang"],
              "payment_method": payment_method, "amount_received_satang": cash_received,
              "payment_confirmed": payment_method == "transfer",
-             "evidence_image_path": latest_slip["slip_path"] if latest_slip else None,
              "customer_note": f"ออเดอร์ออนไลน์ {order['order_number']}"},
             staff_id, manage_transaction=False, online_order_id=order_id, unit_price_overrides=prices,
         )

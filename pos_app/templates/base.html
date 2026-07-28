@@ -46,6 +46,7 @@
     <a href="{{url_for('admin.settings')}}" {% if request.endpoint=='admin.settings' %}class="active" aria-current="page"{% endif %}><i>⚙</i><span>ตั้งค่า</span></a>
     <a href="{{url_for('admin.audit_logs')}}" {% if request.endpoint=='admin.audit_logs' %}class="active" aria-current="page"{% endif %}><i>◷</i><span>Audit Log</span></a>
     <a href="{{url_for('admin.backups')}}" {% if request.endpoint=='admin.backups' %}class="active" aria-current="page"{% endif %}><i>⇩</i><span>สำรองข้อมูล</span></a>
+    <a href="{{url_for('maintenance.index')}}" {% if request.blueprint=='maintenance' %}class="active" aria-current="page"{% endif %}><i>⚙</i><span>ดูแลระบบ</span></a>
     {% endif %}
   </nav>
   <div class="sidebar-footer">
@@ -53,7 +54,7 @@
     <form class="sidebar-logout" method="post" action="{{url_for('auth.logout')}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button type="submit"><i>↪</i><span>ออกจากระบบ</span></button></form>
   </div>
 </aside>
-<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R2.1</span></header>
+<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R2.2</span></header>
 <div id="sidebarOverlay" class="sidebar-overlay"></div>
 {% endif %}
 <main id="mainContent" class="shell {% block shell_class %}{% endblock %}">

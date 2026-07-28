@@ -71,6 +71,20 @@ class Phase2Tests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(get_db().execute("SELECT COUNT(*) FROM staff_sessions").fetchone()[0], 0)
 
+    def test_staff_cookie_is_secure_only_for_https_requests(self):
+        local_cookie = self.login().headers["Set-Cookie"]
+        self.assertNotIn("Secure", local_cookie)
+        secure_app = create_app({
+            "TESTING": True,
+            "DATABASE": str(Path(self.folder.name) / "https-phase2.db"),
+            "POS_TRUST_PROXY": True,
+        })
+        secure_cookie = secure_app.test_client().post(
+            "/login", data={"staff_id": "1", "pin": "1234"},
+            headers={"X-Forwarded-Proto": "https"}, follow_redirects=False,
+        ).headers["Set-Cookie"]
+        self.assertIn("Secure", secure_cookie)
+
     def test_expired_session_is_rejected(self):
         self.login()
         with self.app.app_context():

@@ -75,6 +75,12 @@ class Phase3To5Tests(unittest.TestCase):
 
     def test_sale_allows_negative_stock_for_short_over_reconciliation(self):
         with self.app.app_context():
+            get_db().execute("UPDATE settings SET value='0' WHERE key='allow_negative_stock'")
+            get_db().commit()
+            with self.assertRaisesRegex(SaleError, "สต็อกไม่เพียงพอ"):
+                complete_sale(self.payload(items=[{"product_id": 1, "quantity": 99}], amount_received_satang=100000), 1)
+            get_db().execute("UPDATE settings SET value='1' WHERE key='allow_negative_stock'")
+            get_db().commit()
             sale_id, _, _, _ = complete_sale(self.payload(items=[{"product_id": 1, "quantity": 99}], amount_received_satang=100000), 1)
             db = get_db()
             self.assertGreater(sale_id, 0)

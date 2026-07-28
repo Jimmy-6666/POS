@@ -5,7 +5,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from datetime import timedelta
 
-from ..auth import COOKIE_NAME, create_session, delete_session, iso_time, login_required, utc_now, valid_csrf
+from ..auth import COOKIE_NAME, create_session, delete_session, iso_time, login_required, session_cookie_options, utc_now, valid_csrf
 from ..database import get_db
 from ..display_state import signal_display
 
@@ -57,7 +57,7 @@ def login():
             )
             db.commit()
             response = make_response(redirect(safe_next_url(request.form.get("next")) or url_for("pos.index")))
-            response.set_cookie(COOKIE_NAME, token, httponly=True, samesite="Lax", secure=False)
+            response.set_cookie(COOKIE_NAME, token, **session_cookie_options())
             signal_display("fullscreen")
             return response
     return render_template("login.html", staff_list=staff_list, next_url=safe_next_url(request.args.get("next")) or "")
@@ -71,7 +71,7 @@ def logout():
     delete_session()
     signal_display("normal")
     response = make_response(redirect(url_for("auth.login")))
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(COOKIE_NAME, **session_cookie_options())
     return response
 
 

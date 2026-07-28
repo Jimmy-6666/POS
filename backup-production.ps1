@@ -15,7 +15,12 @@ try {
     Push-Location $context.InstallRoot
     try {
         & $context.Python -m pos_app.backup_cli backup-and-sync
-        if ($LASTEXITCODE -ne 0) { throw "Scheduled backup or VPS sync failed." }
+        $backupExitCode = $LASTEXITCODE
+        if ($backupExitCode -eq 2) {
+            Write-Warning "The verified local backup completed, but the VPS transfer or file sync failed."
+            exit 2
+        }
+        if ($backupExitCode -ne 0) { throw "Scheduled local backup failed." }
     } finally {
         Pop-Location
     }

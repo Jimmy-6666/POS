@@ -33,7 +33,6 @@ class BackupBusyError(BackupError):
 UTC = timezone.utc
 BANGKOK = timezone(timedelta(hours=7))
 BACKUP_FORMAT_VERSION = 1
-_SKIP_FILE_SUFFIXES = {".tmp", ".part", ".crdownload"}
 
 
 @dataclass(frozen=True)
@@ -79,6 +78,19 @@ def _record_backup_status(paths, status: str, payload: Mapping[str, object]) -> 
     os.replace(temporary, paths.support / "backup-status.json")
 
 
+def record_remote_backup_status(paths, status: str, payload: Mapping[str, object]) -> None:
+    """Publish the latest remote database/image-sync result for operators."""
+
+    event = {"status": status, "updated_at": datetime.now(UTC).isoformat(), **payload}
+    paths.logs.mkdir(parents=True, exist_ok=True)
+    with (paths.logs / "remote-backup.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+    paths.support.mkdir(parents=True, exist_ok=True)
+    temporary = paths.support / ".remote-backup-status.json.part"
+    _write_json(temporary, event)
+    os.replace(temporary, paths.support / "remote-backup-status.json")
+
+
 def _database_schema_version(database: Path) -> str:
     try:
         connection = sqlite3.connect(database, timeout=30)
@@ -119,28 +131,6 @@ def _snapshot_sqlite(source: Path, destination: Path) -> None:
         target_db.close()
         source_db.close()
     _verify_sqlite(destination)
-
-
-def _is_backup_file(path: Path) -> bool:
-    return path.is_file() and not path.name.startswith(".") and path.suffix.lower() not in _SKIP_FILE_SUFFIXES
-
-
-def _copy_uploads(source: Path, destination: Path) -> list[Path]:
-    copied: list[Path] = []
-    if not source.is_dir():
-        return copied
-    for path in sorted(source.rglob("*")):
-        if not _is_backup_file(path) or any(part.startswith(".") for part in path.relative_to(source).parts):
-            continue
-        relative = path.relative_to(source)
-        target = destination / "uploads" / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            shutil.copy2(path, target)
-        except OSError as exc:
-            raise BackupError(f"Could not copy runtime file: {path}") from exc
-        copied.append(target)
-    return copied
 
 
 @contextlib.contextmanager
@@ -184,10 +174,10 @@ def _config_snapshot(runtime_config, paths: object, schema_version: str, created
         "created_at_bangkok": created_at.astimezone(BANGKOK).isoformat(),
         "runtime_layout": {
             "database": "data/pos.db",
-            "uploads": "uploads/",
+            "product_images": "separate SFTP file-snapshots/uploads/products/",
             "config": "config/",
         },
-        "note": "Secrets, private keys, tokens, and the local Flask secret are intentionally excluded.",
+        "note": "Product images use separate incremental SFTP sync. Secrets, private keys, tokens, and the local Flask secret are intentionally excluded.",
     }
 
 
@@ -258,7 +248,6 @@ def create_local_backup(runtime_paths, runtime_config, *, retention: int = 7, no
                 legacy_database = root / "data" / "pos.db"
                 legacy_database.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(database, legacy_database)
-                copied = _copy_uploads(paths.uploads, root)
                 schema_version = _database_schema_version(database)
                 config_snapshot = _config_snapshot(runtime_config, paths, schema_version, created)
                 config_path = root / "config" / "recovery-config.json"
@@ -276,7 +265,7 @@ def create_local_backup(runtime_paths, runtime_config, *, retention: int = 7, no
                     "store_id": getattr(runtime_config, "store_id", "") or "unassigned",
                     "files": entries,
                     "file_count": len(entries),
-                    "uploaded_file_count": len(copied),
+                    "product_images_separate_sync": True,
                 }
                 _write_json(root / "manifest.json", manifest)
                 checksums = [f"{sha256_file(path)}  {path.relative_to(root).as_posix()}" for path in sorted(root.rglob("*")) if path.is_file()]

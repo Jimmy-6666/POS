@@ -9,6 +9,7 @@ uploads/
 imports/
 outputs/
 work/
+.codex-remote-attachments/
 *.pyc
 *.db
 *.db-shm

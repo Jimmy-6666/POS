@@ -86,14 +86,14 @@ class OnlinePhase4Tests(unittest.TestCase):
                 "SELECT quantity FROM stock_reservations WHERE order_id=1 AND product_id=2"
             ).fetchone()[0], 2)
 
-    def test_cashier_cannot_verify_transfer_payment(self):
+    def test_transfer_slip_verification_endpoint_is_removed(self):
         with self.app.app_context():
             db = get_db()
             cashier_role = db.execute("SELECT id FROM roles WHERE code='cashier'").fetchone()[0]
             db.execute("UPDATE staff SET role_id=? WHERE id=1", (cashier_role,))
             db.commit()
         response = self.staff.post("/online-orders/1/payment/999", data={"csrf_token": self.csrf, "action": "confirm"})
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

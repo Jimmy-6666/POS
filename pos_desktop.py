@@ -1,4 +1,4 @@
-"""Friendly Windows launcher for Saengngam Minimart POS 2.1."""
+"""Friendly Windows launcher for Saengngam Minimart POS 2.2."""
 import ctypes
 import json
 import os
@@ -23,8 +23,8 @@ STATE_FILE = RUNTIME_PATHS.display_state
 LOG_FILE = RUNTIME_PATHS.launcher_log
 PORT = int(os.environ.get("POS_PORT", "8002"))
 URL = f"http://127.0.0.1:{PORT}"
-LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 2.1")
-MUTEX_NAME = os.environ.get("POS_LAUNCHER_MUTEX", "SaengngamPOS21DesktopLauncher")
+LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 2.2")
+MUTEX_NAME = os.environ.get("POS_LAUNCHER_MUTEX", "SaengngamPOS22DesktopLauncher")
 CREATE_NO_WINDOW = 0x08000000
 ERROR_ALREADY_EXISTS = 183
 SW_RESTORE = 9
@@ -85,7 +85,7 @@ class PosDesktop:
         header.pack(fill="x")
         header.pack_propagate(False)
         tk.Label(header, text="แสนงาม มินิมาร์ท", fg="white", bg="#0b3d2a", font=("Tahoma", 20, "bold")).pack(anchor="w", padx=24, pady=(15, 0))
-        tk.Label(header, text="POS Desktop Launcher · Version 2.1", fg="#cce6d5", bg="#0b3d2a", font=("Tahoma", 9)).pack(anchor="w", padx=25)
+        tk.Label(header, text="POS Desktop Launcher · Version 2.2", fg="#cce6d5", bg="#0b3d2a", font=("Tahoma", 9)).pack(anchor="w", padx=25)
 
         content = tk.Frame(self.root, bg="#eef4ef")
         content.pack(fill="both", expand=True, padx=24, pady=20)
@@ -153,7 +153,7 @@ class PosDesktop:
     def server_failed(self, detail):
         self.status.config(text="ไม่สามารถเริ่มระบบได้")
         self.status_dot.config(fg="#ad2929")
-        messagebox.showerror("POS 2.1", f"เริ่มเซิร์ฟเวอร์ไม่สำเร็จ\n\n{detail}\n\nดูรายละเอียดที่ runtime\\launcher.log")
+        messagebox.showerror("POS 2.2", f"เริ่มเซิร์ฟเวอร์ไม่สำเร็จ\n\n{detail}\n\nดูรายละเอียดที่ runtime\\launcher.log")
 
     def open_browser(self):
         if not self.browser_exe:

@@ -14,7 +14,7 @@ and prints 80 mm receipts through the browser.
 - Server-rendered Jinja HTML plus local vanilla JavaScript and CSS.
 - No Docker, Node, React, cloud service, CDN, or frontend build step.
 - Python dependencies: Flask and Waitress only.
-- Release 2.1 desktop launcher uses port `8002` and `runtime/`.
+- Release 2.2 desktop launcher uses port `8002` and `runtime/`.
 - UAT launcher uses port `8001` and `uat_runtime/`.
 - Legacy launcher uses port `8000` and the repository root runtime.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
@@ -41,14 +41,17 @@ must not be treated as production-ready without barcode and price approval.
 
 ## Current health
 
-On 2026-07-27, `python -m unittest discover -s tests -v` ran 69 tests and all
-passed, including customer contact UI, delivery payment-method confirmation,
+On 2026-07-28, `python -m unittest discover -s tests -v` completed 88 tests
+successfully, including customer contact UI, delivery payment-method confirmation,
 receipt-only print-agent behavior, stock-sheet print-preview isolation, and the
-online ordering lifecycle. Staff can add or reduce order items before picking;
+online ordering lifecycle. LINE LIFF verifies customer identity before the POS
+creates a customer session and delivery profile. Staff can add or reduce order items before picking;
 price/total changes retain the customer's confirmed price snapshot and show a
 customer-confirmation warning. Product price, receiving, and stock-adjustment pages
 also support manager/admin name, SKU, and barcode lookup; online customer
-administration supports phone/name/public-ID search.
+administration supports phone/name/public-ID search, admin-PIN-confirmed
+anonymizing deletion, and customer re-registration after deletion. Suspended
+LINE customers receive a stable blocked page instead of a LIFF login loop.
 
 The UAT database passes SQLite integrity and foreign-key checks. It contains
 386 products; all active products now have mock selling prices calculated as
@@ -71,11 +74,18 @@ No new product scope should be invented. Follow the user's next feature
 priority. If catalog deployment is selected, first complete owner approval of
 selling prices and real barcodes and make the import input path portable.
 
-Sprint 1 production foundation and Sprint 2 backup/recovery foundation are
+Version 2.2 is the current published baseline. Sprint 1 production foundation
+and Sprint 2 backup/recovery foundation are
 implemented: canonical runtime paths, startup validation, migration history,
-deterministic dependency locking, verified SQLite online backups, incremental
-allow-listed file sync with delayed quarantine, SFTP transport, recovery-drill
-scripts, and Windows lifecycle tasks. The production and backup tasks use Task
-Scheduler; the firewall rule remains limited to Private/LocalSubnet. Signed
-updates, admin maintenance dashboard, and remote support remain deferred to
-Sprint 3.
+deterministic dependency locking, verified database-only SQLite online backups,
+incremental product-image sync with VPS archival before replace/delete, SFTP transport, recovery-drill
+scripts, and Windows lifecycle tasks. The production task uses Task Scheduler;
+the daily backup schedule runs inside the active POS process, and the firewall
+rule remains limited to Private/LocalSubnet. Signed
+Sprint 3 is implemented: an admin-only maintenance page reports runtime and
+verified backup status, creates redacted local support bundles, and can hand a
+staged update to a Windows runner only after manifest hash plus pinned
+Authenticode signer verification. It has no automatic download, private key,
+or remote-control channel; see `docs/SIGNED_UPDATE_AND_SUPPORT.md`.
+The Backup page records the latest VPS result and provides an in-process daily
+Bangkok-time schedule; it runs only while the POS is open.

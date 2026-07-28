@@ -2,11 +2,15 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 from zipfile import ZipFile
 
+from pos_app import backup_cli
 from pos_app.runtime_paths import RuntimePaths
 from pos_app.services.backup import BackupBusyError, BackupError, create_local_backup, restore_backup_to_runtime, verify_backup
 from pos_app.services.file_sync import sync_files
@@ -20,6 +24,10 @@ class FakeTransport:
 
     def upload_file(self, local, remote):
         self.uploads.append((Path(local), remote))
+
+    def upload_versioned_file(self, local, remote, archive):
+        self.uploads.append((Path(local), remote))
+        self.quarantines.append((remote, archive))
 
     def quarantine_file(self, remote, quarantine):
         self.quarantines.append((remote, quarantine))
@@ -59,8 +67,9 @@ class Sprint2MaintenanceTests(unittest.TestCase):
         with ZipFile(artifact.path) as package:
             names = set(package.namelist())
             self.assertIn("database/pos.db", names)
-            self.assertIn("uploads/products/coffee.png", names)
+            self.assertNotIn("uploads/products/coffee.png", names)
             self.assertNotIn("data/pos.db-wal", names)
+            self.assertTrue(verified["product_images_separate_sync"])
             recovery_config = json.loads(package.read("config/recovery-config.json"))
             self.assertNotIn("secret_key", recovery_config)
 
@@ -86,7 +95,7 @@ class Sprint2MaintenanceTests(unittest.TestCase):
         self.assertEqual(len(archives), 2)
         self.assertTrue(all(verify_backup(path)["status"] == "complete" for path in archives))
 
-    def test_incremental_sync_and_delayed_quarantine(self):
+    def test_incremental_sync_archives_replaced_and_deleted_images(self):
         transport = FakeTransport()
         first = sync_files(self.paths, transport, now=datetime(2026, 7, 20, tzinfo=timezone.utc), deletion_grace_days=2, backup_id="backup-one")
         self.assertEqual(first.uploaded, 1)
@@ -95,19 +104,20 @@ class Sprint2MaintenanceTests(unittest.TestCase):
         self.paths.product_images.joinpath("coffee.png").write_bytes(b"image-v2")
         third = sync_files(self.paths, transport, now=datetime(2026, 7, 20, 2, tzinfo=timezone.utc), deletion_grace_days=2, backup_id="backup-two")
         self.assertEqual(third.uploaded, 1)
+        self.assertIn("file-backups/20260720T020000Z/uploads/products/coffee.png", transport.quarantines[-1][1])
         self.paths.product_images.joinpath("coffee.png").unlink()
-        pending = sync_files(self.paths, transport, now=datetime(2026, 7, 20, 3, tzinfo=timezone.utc), deletion_grace_days=2, backup_id="backup-three")
-        self.assertEqual(pending.quarantined, 0)
-        recovered = sync_files(self.paths, transport, now=datetime(2026, 7, 22, 3, tzinfo=timezone.utc), deletion_grace_days=2, backup_id="backup-four")
-        self.assertEqual(recovered.quarantined, 1)
-        self.assertEqual(len(transport.quarantines), 1)
+        deleted = sync_files(self.paths, transport, now=datetime(2026, 7, 20, 3, tzinfo=timezone.utc), deletion_grace_days=2, backup_id="backup-three")
+        self.assertEqual(deleted.pending_deletions, 0)
+        self.assertEqual(deleted.quarantined, 1)
+        self.assertEqual(len(transport.quarantines), 2)
+        self.assertIn("file-backups/20260720T030000Z/uploads/products/coffee.png", transport.quarantines[-1][1])
 
     def test_recovery_restores_to_separate_runtime_without_overwrite(self):
         artifact = create_local_backup(self.paths, self.config)
         target = Path(self.folder.name) / "replacement-runtime"
         restored = restore_backup_to_runtime(artifact.path, target)
         self.assertTrue((restored / "data" / "pos.db").is_file())
-        self.assertTrue((restored / "uploads" / "products" / "coffee.png").is_file())
+        self.assertFalse((restored / "uploads" / "products" / "coffee.png").exists())
         with self.assertRaises(BackupError):
             restore_backup_to_runtime(artifact.path, target)
 
@@ -128,6 +138,26 @@ class Sprint2MaintenanceTests(unittest.TestCase):
         self.assertIn(".part", batch)
         self.assertIn("rename", batch)
         self.assertIn("file-snapshots/uploads/products/coffee.png", batch)
+        self.assertIn("UserKnownHostsFile=" + str(known_hosts), calls[-1][0])
+        transport.upload_versioned_file(self.paths.product_images / "coffee.png", "file-snapshots/uploads/products/coffee.png", "file-backups/test/uploads/products/coffee.png")
+        version_batches = [batch for _, batch in calls if "file-backups/test/uploads/products/coffee.png" in batch]
+        self.assertTrue(any("-rename" in batch for batch in version_batches))
+        transport.upload_files([(self.paths.product_images / "coffee.png", "file-snapshots/uploads/products/coffee.png")])
+        self.assertIn("put", calls[-1][1])
+
+    def test_vps_failure_reports_degraded_status_after_verified_local_backup(self):
+        artifact = create_local_backup(self.paths, self.config)
+        output = StringIO()
+        config = SimpleNamespace(paths=self.paths, app_version="2.1", store_id="store-test", config_file=None)
+        with patch.object(backup_cli, "_config", return_value=config), \
+             patch.object(backup_cli, "create_local_backup", return_value=artifact), \
+             patch.object(backup_cli, "_remote", side_effect=BackupError("VPS unavailable")), \
+             redirect_stdout(output):
+            self.assertEqual(backup_cli.main(["backup-and-sync"]), 2)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["status"], "local_complete_remote_failed")
+        self.assertEqual(result["backup"], str(artifact.path))
+        self.assertTrue(verify_backup(artifact.path))
 
 
 if __name__ == "__main__":

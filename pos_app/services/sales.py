@@ -11,6 +11,11 @@ class SaleError(ValueError):
     pass
 
 
+def negative_stock_allowed():
+    row = get_db().execute("SELECT value FROM settings WHERE key='allow_negative_stock'").fetchone()
+    return bool(row and row[0] == "1")
+
+
 def _quantity(value, allow_decimal):
     try:
         quantity = Decimal(str(value))
@@ -41,8 +46,11 @@ def calculate_cart(items, bill_discount_satang=0, *, unit_price_overrides=None, 
             f"SELECT COALESCE(SUM(quantity),0) FROM stock_reservations WHERE product_id=? AND status='active'{reserved_where}",
             reserved_params,
         ).fetchone()[0]
-        if reserved > 0 and float(quantity) > product["stock_quantity"] - reserved:
-            raise SaleError(f"{product['name_th']} ถูกสำรองไว้สำหรับออเดอร์ออนไลน์")
+        available = Decimal(str(product["stock_quantity"])) - Decimal(str(reserved))
+        if not negative_stock_allowed() and quantity > available:
+            if reserved > 0:
+                raise SaleError(f"{product['name_th']} ถูกสำรองไว้สำหรับออเดอร์ออนไลน์")
+            raise SaleError(f"{product['name_th']} มีสต็อกไม่เพียงพอ")
         unit_price = product["price_satang"]
         if unit_price_overrides is not None and product["id"] in unit_price_overrides:
             unit_price = int(unit_price_overrides[product["id"]])

@@ -4,7 +4,11 @@
 
 The existing additive startup migrations remain in pos_app/database.py.
 Sprint 1 adds the schema_migrations table and records the existing schema
-version 19 as legacy-ad-hoc-migrations. Future migrations use
+version 19 as legacy-ad-hoc-migrations. Version 20 enables the existing
+negative-stock setting because earlier releases displayed it without applying
+it to sales. Version 21 adds verified LINE customer identity/profile and saved
+delivery defaults. Version 22 adds registered customer names and lifecycle
+fields for auditable anonymizing deletion. Future migrations use
 pos_app/migrations.py and record version, name, checksum, application version,
 UTC timestamp, and success state. A failed migration prevents startup.
 
@@ -43,12 +47,15 @@ data-preserving startup migrations. Current seeded `schema_version` is 19.
 - Schema version 17 enables `is_online_available` for all existing products
   once and defaults new products to online. The customer catalogue still
   excludes inactive products and products with a zero selling price.
-- `online_bank_accounts` stores reusable transfer destinations. The selected
-  active account is copied to the existing online payment settings so customer
-  and order views retain their established interface.
-- `customers.is_guest` distinguishes one-time checkout identities.
-  `online_orders.contact_phone` and `contact_name` preserve guest delivery
-  contact details without making the phone a reusable login credential.
+- Historic `online_bank_accounts` records are retained for data preservation,
+  but no new customer-facing transfer destination is configured or displayed.
+- `customers.line_user_id` is unique and comes only from successful LINE ID
+  token verification. New online orders require a completed LINE profile;
+  registered name, phone/location/room defaults are retained for delivery.
+- Deleting a customer preserves the original `customers.id` and related orders,
+  marks the row deleted, records the responsible staff and time, removes direct
+  LINE/contact identifiers, and substitutes a unique tombstone phone value.
+  The prior LINE identity and phone may therefore create a new customer later.
 - `online_orders.sale_id` is unique. Items retain original/current quantity,
   name/barcode/current price, and `customer_confirmed_unit_price_satang`.
   Existing rows are backfilled from their prior price snapshot; a null confirmed
@@ -56,6 +63,21 @@ data-preserving startup migrations. Current seeded `schema_version` is 19.
 - Reservations become `released` on cancellation/expiry or `converted` in the
   transaction that creates the sale and stock movements.
 - `sales.delivery_fee_satang` records the explicit receipt delivery charge.
+- `settings.allow_negative_stock` controls POS sales and
+  `settings.online_allow_negative_stock` independently controls online
+  reservations. Both default to `1`; when enabled, negative movements remain
+  fully auditable. Online customer controls use the configured per-order limit
+  rather than an unavailable-stock ceiling when online negative stock is on.
+- Historic `online_order_payments` records are retained, but customer slip
+  upload and staff transfer verification are no longer active. New online
+  orders select cash or transfer for confirmation at delivery only.
+- Sprint 3 adds no business-data table: `maintenance.manage` is a seeded,
+  admin-only permission. Support-bundle and signed-update actions write the
+  existing immutable `audit_logs` table; staged packages and support ZIPs stay
+  in their dedicated runtime directories.
+- `settings.backup_schedule_enabled` and `settings.backup_schedule_time` store
+  the daily Asia/Bangkok database-plus-product-image sync preference. They are
+  operational settings only; no business-data migration is required.
 
 ## Migration rule
 

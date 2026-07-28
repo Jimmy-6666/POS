@@ -45,17 +45,17 @@ PERMISSIONS = {
     "online_orders.accept": "รับหรือปฏิเสธออเดอร์ออนไลน์",
     "online_orders.prepare": "จัดสินค้าออเดอร์ออนไลน์",
     "online_orders.reconcile": "ตรวจสอบสินค้าออเดอร์ออนไลน์",
-    "online_orders.verify_payment": "ตรวจสอบการโอนเงินออนไลน์",
     "online_orders.assign": "มอบหมายผู้จัดส่ง",
     "online_orders.deliver": "จัดส่งและรับเงินสด",
     "online_orders.cancel": "ยกเลิกออเดอร์ออนไลน์",
     "online_customers.manage": "จัดการบัญชีลูกค้าออนไลน์",
     "online_settings.manage": "จัดการการสั่งซื้อและสถานที่จัดส่ง",
+    "maintenance.manage": "ดูแลระบบ อัปเดต และข้อมูลช่วยเหลือ",
 }
 ROLE_PERMISSIONS = {
     "admin": set(PERMISSIONS),
     "manager": {"pos.use", "inventory.manage", "stock_count.manage", "stock_count.participate", "reports.view", "reconciliation.manage", "sales.approve", "products.manage",
-                "online_orders.view", "online_orders.accept", "online_orders.prepare", "online_orders.reconcile", "online_orders.verify_payment",
+                "online_orders.view", "online_orders.accept", "online_orders.prepare", "online_orders.reconcile",
                 "online_orders.assign", "online_orders.deliver", "online_orders.cancel", "online_customers.manage", "online_settings.manage"},
     "cashier": {"pos.use", "stock_count.participate", "reconciliation.manage", "online_orders.view", "online_orders.accept",
                 "online_orders.prepare", "online_orders.reconcile", "online_orders.assign", "online_orders.deliver"},
@@ -95,7 +95,8 @@ def initialize_database():
         "store_name": "แสนงาม มินิมาร์ท",
         "timezone": "Asia/Bangkok",
         "currency": "THB",
-        "allow_negative_stock": "0",
+        "allow_negative_stock": "1",
+        "online_allow_negative_stock": "1",
         "receipt_prefix": "POS",
         "schema_version": "1",
         "online_ordering_enabled": "0",
@@ -117,6 +118,8 @@ def initialize_database():
         "online_bank_account_id": "",
         "online_transfer_enabled": "0",
         "all_products_online_migrated": "0",
+        "backup_schedule_enabled": "1",
+        "backup_schedule_time": "02:00",
     }
     db.executemany(
         "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
@@ -262,12 +265,15 @@ def initialize_database():
     bootstrap_legacy_history(
         db,
         legacy_version=19,
-        application_version=current_app.config.get("POS_APP_VERSION", "2.1"),
+        application_version=current_app.config.get("POS_APP_VERSION", "2.2"),
     )
+    # Legacy bootstrap performs writes; the versioned runner owns a separate
+    # immediate transaction for every subsequent migration.
+    db.commit()
     apply_migrations(
         db,
         MIGRATIONS,
-        application_version=current_app.config.get("POS_APP_VERSION", "2.1"),
+        application_version=current_app.config.get("POS_APP_VERSION", "2.2"),
     )
     db.commit()
 

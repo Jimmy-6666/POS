@@ -6,7 +6,7 @@
 Flask blueprints → Jinja templates and local static assets.
 
 `pos_desktop.py` manages the Windows desktop experience and starts/controls the
-Release 2.1 server. Batch files select the port and runtime root.
+Release 2.2 server. Batch files select the port and runtime root.
 
 ## Source map
 
@@ -23,6 +23,7 @@ Release 2.1 server. Batch files select the port and runtime root.
 | Blind stock count | `pos_app/routes/stock_count.py`, stock-count templates, `stock-count.js`, local barcode vendors |
 | Closing, billing, reports | `pos_app/routes/reporting.py`, reconciliation/billing/report templates, `billing-report.js` |
 | Staff, settings, audit, backup | `pos_app/routes/admin.py`, admin templates |
+| Runtime maintenance, signed updates, support bundles | `pos_app/routes/maintenance.py`, `services/signed_updates.py`, `services/support_bundle.py`, `apply-signed-update.ps1` |
 | Customer ordering/auth/cart/history | `pos_app/routes/online.py`, `customer_auth.py`, `templates/online/`, online JS/CSS |
 | Online fulfilment/reservations | `services/online_orders.py`, `routes/online_staff.py`, staff/reconciliation templates |
 | Online settings/customers/locations | `routes/online_admin.py`, online admin/customer templates |
@@ -33,7 +34,7 @@ Release 2.1 server. Batch files select the port and runtime root.
 | VPS provisioning | `deploy/vps/*.sh` |
 | UAT fixtures | `seed_uat.py`, `start-uat.bat`, `install-uat.bat`, `uat_runtime/` (generated) |
 | Makro catalog preparation | `work/makro-pos-import/*.mjs`, `imports/makro-products/` inputs/artifacts, `outputs/` review workbooks |
-| Automated verification | `tests/test_phase1.py`, `test_phase2.py`, `test_phase3_5.py`, `test_phase6_10.py`, `test_inventory.py`, `test_billing.py`, `test_version_2_1.py` |
+| Automated verification | `tests/test_phase1.py`, `test_phase2.py`, `test_phase3_5.py`, `test_phase6_10.py`, `test_inventory.py`, `test_billing.py`, `test_version_2_1.py`, `test_version_2_2.py` |
 
 Templates are under `pos_app/templates/`; static files are under
 `pos_app/static/`. Runtime databases, browser profiles, uploads, backups,

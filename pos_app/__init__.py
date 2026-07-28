@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .database import init_app
 from .auth import init_app as init_auth
@@ -19,7 +20,10 @@ from .routes.online import bp as online_bp
 from .routes.online_admin import bp as online_admin_bp
 from .routes.online_staff import bp as online_staff_bp
 from .routes.print_agent import bp as print_agent_bp
+from .routes.line_auth import bp as line_auth_bp
+from .routes.maintenance import bp as maintenance_bp
 from .services.print_jobs import init_app as init_print_jobs
+from .services.backup_scheduler import init_app as init_backup_scheduler
 from .runtime_paths import RuntimePathError, RuntimePaths, load_runtime_config, validate_runtime
 
 
@@ -45,6 +49,7 @@ def create_app(test_config=None):
             app_version=runtime_config.app_version,
             production=runtime_config.production,
             config_file=runtime_config.config_file,
+            update_signer_thumbprint=runtime_config.update_signer_thumbprint,
         )
     runtime_paths.create_directories()
     runtime_paths.ensure_secret_key()
@@ -58,14 +63,27 @@ def create_app(test_config=None):
         POS_BIND_HOST=runtime_config.host,
         POS_PORT=runtime_config.port,
         POS_APP_VERSION=runtime_config.app_version,
+        POS_INSTALL_ROOT=str(project_root),
         POS_BACKUP_RETENTION=int(os.environ.get("POS_BACKUP_RETENTION", "7")),
+        BACKUP_SCHEDULER_ENABLED=os.environ.get("POS_BACKUP_SCHEDULER_ENABLED", "1").lower() not in {"0", "false", "no"},
         SESSION_TIMEOUT_MINUTES=30,
         MAX_CONTENT_LENGTH=8 * 1024 * 1024,
         CUSTOMER_SESSION_DAYS=14,
         PRINT_AGENT_TOKEN=os.environ.get("POS_PRINT_AGENT_TOKEN", ""),
+        POS_TRUST_PROXY=os.environ.get("POS_TRUST_PROXY", "").lower() in {"1", "true", "yes"},
+        LINE_LIFF_ID=os.environ.get("LINE_LIFF_ID", "").strip(),
+        LINE_LOGIN_CHANNEL_ID=os.environ.get("LINE_LOGIN_CHANNEL_ID", "").strip(),
+        LINE_LOGIN_CHANNEL_SECRET=os.environ.get("LINE_LOGIN_CHANNEL_SECRET", ""),
+        LINE_LOGIN_FAILURE_LIMIT=int(os.environ.get("LINE_LOGIN_FAILURE_LIMIT", "12")),
+        LINE_LOGIN_FAILURE_WINDOW_MINUTES=int(os.environ.get("LINE_LOGIN_FAILURE_WINDOW_MINUTES", "5")),
+        APP_BASE_URL=os.environ.get("APP_BASE_URL", "").rstrip("/"),
+        POS_UPDATE_SIGNER_THUMBPRINT=os.environ.get("POS_UPDATE_SIGNER_THUMBPRINT", runtime_config.update_signer_thumbprint).strip(),
+        POS_UPDATE_POWERSHELL=os.environ.get("POS_UPDATE_POWERSHELL", "powershell.exe").strip(),
     )
     if test_config:
         app.config.update(test_config)
+    if app.config["POS_TRUST_PROXY"]:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     init_app(app)
     try:
@@ -78,6 +96,8 @@ def create_app(test_config=None):
     init_auth(app)
     init_customer_auth(app)
     init_print_jobs(app)
+    if not app.config.get("TESTING"):
+        init_backup_scheduler(app)
     app.register_blueprint(auth_bp)
     app.register_blueprint(products_bp)
     app.register_blueprint(pos_bp)
@@ -90,6 +110,8 @@ def create_app(test_config=None):
     app.register_blueprint(online_admin_bp)
     app.register_blueprint(online_staff_bp)
     app.register_blueprint(print_agent_bp)
+    app.register_blueprint(line_auth_bp)
+    app.register_blueprint(maintenance_bp)
 
     @app.context_processor
     def auth_context():

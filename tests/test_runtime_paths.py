@@ -33,12 +33,13 @@ class RuntimePathTests(unittest.TestCase):
         config_dir = root / "config"
         config_dir.mkdir(parents=True)
         (config_dir / "production.json").write_text(
-            json.dumps({"port": 8123, "bind_host": "127.0.0.1", "min_free_space_mb": 0}),
+            json.dumps({"port": 8123, "bind_host": "127.0.0.1", "min_free_space_mb": 0, "update_signer_thumbprint": "ABCD"}),
             encoding="utf-8",
         )
         config = load_runtime_config(root, {"POS_RUNTIME_ROOT": str(root)})
         self.assertEqual(config.port, 8123)
         self.assertEqual(config.host, "127.0.0.1")
+        self.assertEqual(config.update_signer_thumbprint, "ABCD")
         overridden = load_runtime_config(root, {"POS_RUNTIME_ROOT": str(root), "POS_PORT": "8124"})
         self.assertEqual(overridden.port, 8124)
 
@@ -84,11 +85,16 @@ class MigrationHistoryTests(unittest.TestCase):
             create_app({"TESTING": True, "DATABASE": str(database)})
             connection = sqlite3.connect(database)
             first = connection.execute("SELECT version,name,success FROM schema_migrations").fetchall()
-            self.assertEqual(first, [(19, "legacy-ad-hoc-migrations", 1)])
+            self.assertEqual(first, [
+                (19, "legacy-ad-hoc-migrations", 1),
+                (20, "enable configured negative stock", 1),
+                (21, "add LINE customer identity", 1),
+                (22, "add customer lifecycle fields", 1),
+            ])
             connection.close()
             create_app({"TESTING": True, "DATABASE": str(database)})
             connection = sqlite3.connect(database)
-            self.assertEqual(connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 1)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 4)
             connection.close()
         finally:
             folder.cleanup()

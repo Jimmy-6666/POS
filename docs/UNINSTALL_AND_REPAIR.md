@@ -9,15 +9,16 @@ Run from an elevated PowerShell window:
 
 Repair recreates missing non-data directories, repairs the virtual
 environment and locked dependencies, reruns safe startup migrations, restores
-the POS and daily-backup Task Scheduler registrations, and restores the
-private-LAN firewall rule.
+the POS Task Scheduler registration, removes any legacy daily-backup task, and
+restores the private-LAN firewall rule. Daily backup time is set in the Backup
+page.
 It never replaces the production database or secret key.
 
 ## Uninstall
 
     .\uninstall-production.ps1
 
-Uninstall removes the production and backup Task Scheduler tasks, the
+Uninstall removes the production and any legacy backup Task Scheduler tasks, the
 dedicated production firewall rule, and the application virtual environment.
 It preserves:
 

@@ -25,8 +25,8 @@ order when information differs:
 
 1. the user's current explicit instruction;
 2. `REQUIREMENTS_V1.0.md` for the original accepted product contract;
-3. `RELEASE_2.0.md`, `VERSION_2.1.md`, and `CHANGELOG.md` for accepted later
-   additions and presentation changes;
+3. `RELEASE_2.0.md`, `VERSION_2.1.md`, `VERSION_2.2.md`, and `CHANGELOG.md`
+   for accepted later additions and presentation changes;
 4. tests and current code for implemented behavior;
 5. compact context documents for navigation and summaries.
 

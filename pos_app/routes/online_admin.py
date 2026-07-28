@@ -1,11 +1,9 @@
 import json
 import secrets
 from datetime import datetime, timezone
-from pathlib import Path
 
-from flask import Blueprint, current_app, flash, g, redirect, render_template, request, url_for
-from werkzeug.security import generate_password_hash
-from werkzeug.utils import secure_filename
+from flask import Blueprint, flash, g, redirect, render_template, request, url_for
+from werkzeug.security import check_password_hash
 
 from ..auth import permission_required, valid_csrf
 from ..database import get_db
@@ -23,30 +21,12 @@ def audit(action, entity_type, entity_id, old=None, new=None):
     )
 
 
-def save_bank_qr(file):
-    if not file or not file.filename:
-        return None
-    ext = Path(secure_filename(file.filename)).suffix.lower()
-    if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
-        raise ValueError("รองรับรูป QR เฉพาะ JPG, PNG หรือ WEBP")
-    content = file.read(2 * 1024 * 1024 + 1)
-    valid_magic = content.startswith(b"\xff\xd8\xff") or content.startswith(b"\x89PNG\r\n\x1a\n") or (
-        content.startswith(b"RIFF") and content[8:12] == b"WEBP"
-    )
-    if len(content) > 2 * 1024 * 1024 or not valid_magic:
-        raise ValueError("รูป QR ไม่ถูกต้องหรือมีขนาดเกิน 2 MB")
-    filename = f"bank-qr-{secrets.token_hex(10)}{ext}"
-    folder = current_app.config["RUNTIME_PATHS"].online_payment_evidence
-    (folder / filename).write_bytes(content)
-    return filename
-
-
 @bp.route("/settings", methods=("GET", "POST"))
 @permission_required("online_settings.manage")
 def settings():
     db = get_db()
     section = request.args.get("section", "schedule")
-    if section not in {"schedule", "payment", "locations"}:
+    if section not in {"schedule", "locations"}:
         section = "schedule"
     if request.method == "POST":
         if not valid_csrf(request.form.get("csrf_token")):
@@ -54,6 +34,7 @@ def settings():
         try:
             values = {
                 "online_ordering_enabled": "1" if request.form.get("online_ordering_enabled") else "0",
+                "online_allow_negative_stock": "1" if request.form.get("online_allow_negative_stock") else "0",
                 "online_auto_expiry": "1" if request.form.get("online_auto_expiry") else "0",
                 "online_closed_message": request.form.get("online_closed_message", "").strip(),
                 "online_minimum_order_satang": str(baht_to_satang(request.form.get("online_minimum_order") or 0)),
@@ -80,81 +61,10 @@ def settings():
             flash(str(exc), "error")
     values = dict(db.execute("SELECT key,value FROM settings").fetchall())
     locations = db.execute("SELECT * FROM delivery_locations ORDER BY sort_order,name").fetchall()
-    accounts = db.execute("SELECT * FROM online_bank_accounts ORDER BY is_active DESC,updated_at DESC,id DESC").fetchall()
     return render_template(
         "online/admin_settings.html", settings=values, locations=locations,
-        accounts=accounts, section=section,
+        section=section,
     )
-
-
-@bp.post("/bank-accounts")
-@permission_required("online_settings.manage")
-def add_bank_account():
-    if not valid_csrf(request.form.get("csrf_token")):
-        return ("คำขอไม่ถูกต้อง", 400)
-    db = get_db()
-    label = request.form.get("label", "").strip()
-    bank_name = request.form.get("bank_name", "").strip()
-    account_name = request.form.get("account_name", "").strip()
-    account_number = request.form.get("account_number", "").strip()
-    if not all((label, bank_name, account_name, account_number)):
-        flash("กรุณากรอกชื่อเรียก ธนาคาร ชื่อบัญชี และเลขบัญชีให้ครบ", "error")
-        return redirect(url_for("online_admin.settings", section="payment"))
-    try:
-        qr_path = save_bank_qr(request.files.get("qr"))
-        db.execute("BEGIN IMMEDIATE")
-        cursor = db.execute(
-            """INSERT INTO online_bank_accounts
-               (label,bank_name,account_name,account_number,instructions,qr_path)
-               VALUES(?,?,?,?,?,?)""",
-            (label, bank_name, account_name, account_number,
-             request.form.get("instructions", "").strip() or None, qr_path),
-        )
-        audit("create_online_bank_account", "online_bank_account", cursor.lastrowid, new={
-            "label": label, "bank_name": bank_name, "account_tail": account_number[-4:],
-        })
-        db.commit()
-        flash("เพิ่มบัญชีรับโอนแล้ว เลือกบัญชีด้านบนเพื่อให้ลูกค้าใช้งาน", "success")
-    except Exception as exc:
-        db.rollback()
-        flash(str(exc), "error")
-    return redirect(url_for("online_admin.settings", section="payment"))
-
-
-@bp.post("/bank-accounts/select")
-@permission_required("online_settings.manage")
-def select_bank_account():
-    if not valid_csrf(request.form.get("csrf_token")):
-        return ("คำขอไม่ถูกต้อง", 400)
-    db = get_db()
-    account_id = request.form.get("account_id", type=int)
-    account = db.execute(
-        "SELECT * FROM online_bank_accounts WHERE id=? AND is_active=1", (account_id,)
-    ).fetchone() if account_id else None
-    if request.form.get("online_transfer_enabled") and not account:
-        flash("กรุณาเลือกบัญชีที่เปิดใช้งานก่อนเปิดรับโอนเงิน", "error")
-        return redirect(url_for("online_admin.settings", section="payment"))
-    values = {
-        "online_transfer_enabled": "1" if request.form.get("online_transfer_enabled") else "0",
-        "online_bank_account_id": str(account["id"]) if account else "",
-        "online_bank_name": account["bank_name"] if account else "",
-        "online_bank_account_name": account["account_name"] if account else "",
-        "online_bank_account_number": account["account_number"] if account else "",
-        "online_bank_instructions": account["instructions"] or "" if account else "",
-        "online_bank_qr_path": account["qr_path"] or "" if account else "",
-    }
-    db.execute("BEGIN IMMEDIATE")
-    for key, value in values.items():
-        db.execute(
-            "INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP",
-            (key, value),
-        )
-    audit("select_online_bank_account", "online_bank_account", account_id or "none", new={
-        "enabled": values["online_transfer_enabled"], "label": account["label"] if account else None,
-    })
-    db.commit()
-    flash("บันทึกบัญชีที่ลูกค้าใช้รับโอนแล้ว", "success")
-    return redirect(url_for("online_admin.settings", section="payment"))
 
 
 @bp.post("/locations")
@@ -219,9 +129,9 @@ def customers():
     where = ""
     if query:
         term = f"%{query}%"
-        where = """WHERE c.phone_normalized LIKE ? OR COALESCE(c.display_name,'') LIKE ?
-                   OR c.public_id LIKE ?"""
-        params = [term, term, term]
+        where = """WHERE c.phone_normalized LIKE ? OR COALESCE(c.registered_name,'') LIKE ?
+                   OR COALESCE(c.line_display_name,'') LIKE ? OR c.public_id LIKE ?"""
+        params = [term, term, term, term]
     rows = get_db().execute(
         f"""SELECT c.*,(SELECT COUNT(*) FROM online_orders o WHERE o.customer_id=c.id) AS order_count
             FROM customers c {where} ORDER BY c.created_at DESC""",
@@ -233,24 +143,39 @@ def customers():
 @bp.post("/customers/<int:customer_id>/reset-pin")
 @permission_required("online_customers.manage")
 def reset_customer_pin(customer_id):
+    return ("ระบบ PIN ลูกค้าถูกยกเลิกแล้ว", 410)
+
+
+@bp.post("/customers/<int:customer_id>/delete")
+@permission_required("online_customers.manage")
+def delete_customer(customer_id):
     if not valid_csrf(request.form.get("csrf_token")):
         return ("คำขอไม่ถูกต้อง", 400)
-    if g.staff["role_code"] not in {"admin", "manager"}:
-        return ("ไม่มีสิทธิ์", 403)
-    pin = request.form.get("temporary_pin", "")
-    if not pin.isdigit() or len(pin) not in (4, 6):
-        flash("PIN ชั่วคราวต้องเป็นตัวเลข 4 หรือ 6 หลัก", "error")
+    if g.staff["role_code"] != "admin":
+        return ("เฉพาะผู้ดูแลระบบเท่านั้น", 403)
+    staff_pin_hash = get_db().execute("SELECT pin_hash FROM staff WHERE id=?", (g.staff["id"],)).fetchone()[0]
+    if not check_password_hash(staff_pin_hash, request.form.get("admin_pin", "")):
+        flash("PIN ผู้ดูแลระบบไม่ถูกต้อง จึงไม่ลบลูกค้า", "error")
         return redirect(url_for("online_admin.customers"))
     db = get_db()
+    customer = db.execute("SELECT * FROM customers WHERE id=?", (customer_id,)).fetchone()
+    if not customer or customer["is_deleted"]:
+        return ("ไม่พบลูกค้า", 404)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    replacement = f"deleted:{customer_id}:{secrets.token_hex(6)}"
     db.execute("BEGIN IMMEDIATE")
     db.execute(
-        "UPDATE customers SET pin_hash=?,must_change_pin=1,updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        (generate_password_hash(pin), customer_id),
+        """UPDATE customers SET is_active=0,is_deleted=1,deleted_at=?,deleted_by_staff_id=?,
+           line_user_id=NULL,line_display_name=NULL,line_picture_url=NULL,registered_name=NULL,display_name='ลูกค้าที่ลบแล้ว',
+           phone_normalized=?,profile_completed=0,updated_at=? WHERE id=?""",
+        (now, g.staff["id"], replacement, now, customer_id),
     )
     db.execute("DELETE FROM customer_sessions WHERE customer_id=?", (customer_id,))
-    audit("reset_customer_pin", "customer", customer_id)
+    audit("delete_online_customer", "customer", customer_id,
+          {"public_id": customer["public_id"], "line_user_id": customer["line_user_id"], "phone": customer["phone_normalized"]},
+          {"replacement": replacement, "is_deleted": True})
     db.commit()
-    flash("รีเซ็ต PIN แล้ว ลูกค้าต้องตั้ง PIN ใหม่เมื่อเข้าสู่ระบบ", "success")
+    flash("ลบข้อมูลการใช้งานลูกค้าแล้ว โดยเก็บรหัสอ้างอิงและประวัติออเดอร์ไว้ตรวจสอบ", "success")
     return redirect(url_for("online_admin.customers"))
 
 

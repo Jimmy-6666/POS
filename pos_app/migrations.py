@@ -32,9 +32,53 @@ class Migration:
         return hashlib.sha256(payload).hexdigest()
 
 
-# New migrations are added here in strictly increasing order. The current
-# release has no additional schema change beyond the legacy version 19 bridge.
-MIGRATIONS: tuple[Migration, ...] = ()
+def _enable_configured_negative_stock(db: sqlite3.Connection) -> None:
+    # Earlier releases displayed this setting but did not use it in sales.
+    # Preserve the established behaviour while making the setting effective.
+    db.execute(
+        "UPDATE settings SET value='1',updated_at=CURRENT_TIMESTAMP WHERE key='allow_negative_stock'"
+    )
+
+
+def _add_line_customer_identity(db: sqlite3.Connection) -> None:
+    columns = {row[1] for row in db.execute("PRAGMA table_info(customers)")}
+    additions = (
+        ("line_user_id", "TEXT"),
+        ("line_display_name", "TEXT"),
+        ("line_picture_url", "TEXT"),
+        ("line_created_at", "TEXT"),
+        ("line_last_login_at", "TEXT"),
+        ("default_delivery_location_id", "INTEGER REFERENCES delivery_locations(id) ON DELETE SET NULL"),
+        ("default_room_reference", "TEXT"),
+        ("profile_completed", "INTEGER NOT NULL DEFAULT 0 CHECK(profile_completed IN (0,1))"),
+    )
+    for name, definition in additions:
+        if name not in columns:
+            db.execute(f"ALTER TABLE customers ADD COLUMN {name} {definition}")
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_line_user_id "
+        "ON customers(line_user_id) WHERE line_user_id IS NOT NULL"
+    )
+
+
+def _add_customer_lifecycle_fields(db: sqlite3.Connection) -> None:
+    columns = {row[1] for row in db.execute("PRAGMA table_info(customers)")}
+    additions = (
+        ("registered_name", "TEXT"),
+        ("is_deleted", "INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0,1))"),
+        ("deleted_at", "TEXT"),
+        ("deleted_by_staff_id", "INTEGER REFERENCES staff(id) ON DELETE SET NULL"),
+    )
+    for name, definition in additions:
+        if name not in columns:
+            db.execute(f"ALTER TABLE customers ADD COLUMN {name} {definition}")
+
+
+MIGRATIONS: tuple[Migration, ...] = (
+    Migration(20, "enable configured negative stock", _enable_configured_negative_stock),
+    Migration(21, "add LINE customer identity", _add_line_customer_identity),
+    Migration(22, "add customer lifecycle fields", _add_customer_lifecycle_fields),
+)
 
 
 def ensure_history_table(db: sqlite3.Connection) -> None:

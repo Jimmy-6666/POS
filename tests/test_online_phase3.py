@@ -1,4 +1,3 @@
-import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,6 +16,7 @@ class OnlinePhase3Tests(unittest.TestCase):
             category = db.execute("SELECT id FROM categories LIMIT 1").fetchone()[0]
             unit = db.execute("SELECT id FROM units LIMIT 1").fetchone()[0]
             db.execute("UPDATE settings SET value='1' WHERE key='online_ordering_enabled'")
+            db.execute("UPDATE settings SET value='0' WHERE key='online_allow_negative_stock'")
             db.execute("UPDATE settings SET value='1' WHERE key='online_transfer_enabled'")
             db.execute("""INSERT INTO products(barcode,name_th,category_id,unit_id,price_satang,stock_quantity,is_online_available)
                           VALUES('111','สินค้าออนไลน์',?,?,2500,5,1)""", (category, unit))
@@ -73,15 +73,33 @@ class OnlinePhase3Tests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(get_db().execute("SELECT status FROM stock_reservations").fetchone()[0], "released")
 
-    def test_order_ownership_and_slip_validation(self):
+    def test_order_ownership_and_slip_endpoint_removed(self):
         public_id = self.submit(payment_method="transfer").get_json()["public_id"]
-        invalid = self.client.post(f"/order/orders/{public_id}/slips", data={
-            "csrf_token": self.csrf, "slip": (io.BytesIO(b"not-image"), "bad.exe")
-        }, content_type="multipart/form-data", follow_redirects=True)
-        self.assertIn("JPG", invalid.get_data(as_text=True))
+        self.assertEqual(self.client.post(f"/order/orders/{public_id}/slips").status_code, 404)
         other = self.app.test_client()
         register_customer(other, "0899999999")
         self.assertEqual(other.get(f"/order/orders/{public_id}").status_code, 404)
+
+    def test_negative_stock_setting_controls_online_reservations(self):
+        blocked = self.submit(items=[{"product_id": 1, "quantity": 6}])
+        self.assertEqual(blocked.status_code, 400)
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE settings SET value='0' WHERE key='allow_negative_stock'")
+            db.execute("UPDATE settings SET value='1' WHERE key='online_allow_negative_stock'")
+            db.commit()
+        allowed = self.submit(items=[{"product_id": 1, "quantity": 6}], idempotency_key="negative-stock-order-123")
+        self.assertEqual(allowed.status_code, 200)
+
+    def test_online_negative_stock_returns_a_repeatable_cart_limit(self):
+        self.submit(items=[{"product_id": 1, "quantity": 5}])
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE settings SET value='1' WHERE key='online_allow_negative_stock'")
+            db.commit()
+        response = self.client.post("/order/api/cart/validate", json={"items": [{"product_id": 1, "quantity": 1}]})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["items"][0]["available_quantity"], 50.0)
 
     def test_customer_order_hides_bank_details_and_uses_contact_icons(self):
         with self.app.app_context():

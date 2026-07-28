@@ -1,8 +1,5 @@
 import json
 import shutil
-import sqlite3
-import tempfile
-import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +9,7 @@ from werkzeug.security import generate_password_hash
 from ..auth import permission_required, valid_csrf
 from ..database import get_db
 from ..services.backup import BackupError, create_local_backup, list_verified_backups
+from ..services.backup_scheduler import is_valid_schedule
 from ..services.money import baht_to_satang
 
 
@@ -111,27 +109,40 @@ def backups():
     if request.method=="POST" and not valid_csrf(request.form.get("csrf_token")):
         return ("คำขอไม่ถูกต้อง",400)
     if request.method=="POST" and valid_csrf(request.form.get("csrf_token")):
-        try:
-            artifact=create_local_backup(paths,current_app.config["RUNTIME_CONFIG"],retention=int(current_app.config.get("POS_BACKUP_RETENTION",7)))
-        except (BackupError,OSError,ValueError) as exc:
-            flash(f"สร้างไฟล์สำรองไม่สำเร็จ: {exc}","error")
+        action=request.form.get("action","create_local")
+        if action=="schedule":
+            schedule=request.form.get("backup_schedule_time","").strip()
+            if not is_valid_schedule(schedule):
+                flash("กรุณาระบุเวลาเป็น HH:MM เช่น 02:00","error")
+            else:
+                db=get_db()
+                for key,value in (("backup_schedule_time",schedule),("backup_schedule_enabled","1" if request.form.get("backup_schedule_enabled") else "0")):
+                    db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP",(key,value))
+                db.execute("INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,new_value,created_at) VALUES(?,'update_backup_schedule','backup_schedule','daily',?,CURRENT_TIMESTAMP)",(g.staff["id"],json.dumps({"time":schedule,"enabled":bool(request.form.get("backup_schedule_enabled"))})))
+                db.commit();flash("บันทึกเวลาส่งฐานข้อมูลและรูปสินค้าแล้ว","success")
+        elif action=="send_remote":
+            scheduler=current_app.extensions.get("backup_scheduler")
+            if scheduler is None:
+                flash("ตัวส่งข้อมูลอัตโนมัติยังไม่พร้อม กรุณาตรวจการตั้งค่า runtime","error")
+            else:
+                scheduler.start_backup("manual")
+                get_db().execute("INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,created_at) VALUES(?,'start_remote_backup','backup','manual',CURRENT_TIMESTAMP)",(g.staff["id"],));get_db().commit();flash("เริ่มสร้างฐานข้อมูลและ sync รูปสินค้าไป server แล้ว โปรดรีเฟรชเพื่อตรวจสถานะ","success")
         else:
-            db=get_db();db.execute("INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,created_at) VALUES(?,'create_backup','backup',?,CURRENT_TIMESTAMP)",(g.staff["id"],artifact.path.name));db.commit();flash("สร้างไฟล์สำรองและตรวจสอบความถูกต้องแล้ว","success")
-        return redirect(url_for("admin.backups"))
-    if request.method=="POST":
-        if not valid_csrf(request.form.get("csrf_token")):return ("คำขอไม่ถูกต้อง",400)
-        stamp=datetime.now().strftime("%Y%m%d-%H%M%S");archive=folder/f"pos-backup-{stamp}.zip"
-        with tempfile.TemporaryDirectory() as temp:
-            db_copy=Path(temp)/"pos.db";target=sqlite3.connect(db_copy);get_db().backup(target);target.close()
-            with zipfile.ZipFile(archive,"w",zipfile.ZIP_DEFLATED) as z:
-                z.write(db_copy,"data/pos.db")
-                uploads=paths.uploads
-                for path in uploads.rglob("*"):
-                    if path.is_file():z.write(path,path.relative_to(root))
-        db=get_db();db.execute("INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,created_at) VALUES(?,'create_backup','backup',?,CURRENT_TIMESTAMP)",(g.staff["id"],archive.name));db.commit();flash("สร้างไฟล์สำรองแล้ว","success")
+            try:
+                artifact=create_local_backup(paths,current_app.config["RUNTIME_CONFIG"],retention=int(current_app.config.get("POS_BACKUP_RETENTION",7)))
+            except (BackupError,OSError,ValueError) as exc:
+                flash(f"สร้างไฟล์สำรองไม่สำเร็จ: {exc}","error")
+            else:
+                db=get_db();db.execute("INSERT INTO audit_logs(staff_id,action,entity_type,entity_id,created_at) VALUES(?,'create_backup','backup',?,CURRENT_TIMESTAMP)",(g.staff["id"],artifact.path.name));db.commit();flash("สร้างไฟล์สำรองฐานข้อมูลและตรวจสอบความถูกต้องแล้ว","success")
         return redirect(url_for("admin.backups"))
     files=[Path(item["archive"]) for item in list_verified_backups(folder)]
-    return render_template("backups.html",files=files)
+    settings=dict(get_db().execute("SELECT key,value FROM settings WHERE key IN ('backup_schedule_enabled','backup_schedule_time')").fetchall())
+    remote_status={}
+    try:
+        remote_status=json.loads((paths.support/"remote-backup-status.json").read_text(encoding="utf-8"))
+    except (OSError,json.JSONDecodeError):
+        pass
+    return render_template("backups.html",files=files,schedule_time=settings.get("backup_schedule_time","02:00"),schedule_enabled=settings.get("backup_schedule_enabled","1")=="1",remote_status=remote_status)
 
 
 @bp.get("/backups/<path:filename>")

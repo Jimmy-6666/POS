@@ -5,14 +5,24 @@ import secrets
 from datetime import timedelta
 from functools import wraps
 
-from flask import current_app, g, redirect, request, url_for
+from flask import current_app, g, redirect, request, session, url_for
 
-from .auth import iso_time, token_hash, utc_now
+from .auth import iso_time, session_cookie_options, token_hash, utc_now
 from .database import get_db
 
 
 CUSTOMER_COOKIE_NAME = "online_customer_session"
 PHONE_RE = re.compile(r"^0[689]\d{8}$")
+
+
+def set_customer_cookie(response, token):
+    response.set_cookie(CUSTOMER_COOKIE_NAME, token, **session_cookie_options())
+    return response
+
+
+def delete_customer_cookie(response):
+    response.delete_cookie(CUSTOMER_COOKIE_NAME, **session_cookie_options())
+    return response
 
 
 def normalize_phone(value):
@@ -22,6 +32,19 @@ def normalize_phone(value):
     if not PHONE_RE.fullmatch(phone):
         raise ValueError("กรุณากรอกหมายเลขโทรศัพท์มือถือไทยให้ถูกต้อง")
     return phone
+
+
+def line_auth_csrf():
+    token = session.get("line_auth_csrf")
+    if not token:
+        token = secrets.token_urlsafe(24)
+        session["line_auth_csrf"] = token
+    return token
+
+
+def valid_line_auth_csrf(value):
+    expected = session.get("line_auth_csrf")
+    return bool(expected and value and hmac.compare_digest(expected, value))
 
 
 def phone_fingerprint(phone):
@@ -46,6 +69,7 @@ def create_customer_session(customer_id):
 def load_logged_in_customer():
     g.customer = None
     g.customer_session = None
+    g.customer_suspended = False
     token = request.cookies.get(CUSTOMER_COOKIE_NAME)
     if not token:
         return
@@ -61,6 +85,7 @@ def load_logged_in_customer():
     if not row["is_active"] or row["expires_at"] <= iso_time(utc_now()):
         db.execute("DELETE FROM customer_sessions WHERE id=?", (row["session_id"],))
         db.commit()
+        g.customer_suspended = not row["is_active"] and not row["is_deleted"]
         g.clear_customer_cookie = True
         return
     g.customer = row
@@ -76,10 +101,14 @@ def load_logged_in_customer():
 def customer_login_required(view):
     @wraps(view)
     def wrapped(**kwargs):
+        if getattr(g, "customer_suspended", False):
+            return redirect(url_for("online.customer_suspended"))
         if g.customer is None:
-            return redirect(url_for("online.customer_login", next=request.path))
-        if g.customer["must_change_pin"] and request.endpoint not in ("online.customer_change_pin", "online.customer_logout"):
-            return redirect(url_for("online.customer_change_pin"))
+            return redirect(url_for("online.catalog", next=request.path))
+        if g.customer["line_user_id"] and not g.customer["profile_completed"] and request.endpoint not in (
+            "online.customer_profile", "online.customer_logout",
+        ):
+            return redirect(url_for("online.customer_profile", next=request.path))
         return view(**kwargs)
     return wrapped
 
@@ -90,7 +119,7 @@ def valid_customer_csrf(value):
 
 def add_customer_cookie_cleanup(response):
     if getattr(g, "clear_customer_cookie", False):
-        response.delete_cookie(CUSTOMER_COOKIE_NAME)
+        delete_customer_cookie(response)
     return response
 
 

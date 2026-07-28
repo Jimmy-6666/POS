@@ -12,6 +12,12 @@ from .database import get_db
 COOKIE_NAME = "pos_session"
 
 
+def session_cookie_options():
+    """Keep local HTTP usable while requiring Secure cookies for HTTPS requests."""
+
+    return {"httponly": True, "samesite": "Lax", "secure": request.is_secure}
+
+
 def utc_now():
     return datetime.now(timezone.utc)
 

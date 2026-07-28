@@ -1,8 +1,6 @@
 import json
 from datetime import datetime, timezone
-from pathlib import Path
-
-from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
 from ..auth import permission_required, valid_csrf
 from ..database import get_db
@@ -11,7 +9,7 @@ from ..services.online_orders import (
     record_history, release_reservations,
 )
 from ..services.print_jobs import enqueue_print
-from ..services.sales import SaleError
+from ..services.sales import SaleError, negative_stock_allowed
 
 
 bp = Blueprint("online_staff", __name__, url_prefix="/online-orders")
@@ -96,7 +94,7 @@ def summary():
     db = get_db()
     row = db.execute(
         """SELECT SUM(status='submitted') AS new_count,
-                  SUM(payment_status='awaiting_verification') AS payment_count,
+                  0 AS payment_count,
                   MAX(CASE WHEN status='submitted' THEN id ELSE 0 END) AS latest_id
            FROM online_orders"""
     ).fetchone()
@@ -121,7 +119,6 @@ def detail(order_id):
         """SELECT h.*,st.display_name FROM online_order_status_history h
            LEFT JOIN staff st ON st.id=h.actor_staff_id WHERE h.order_id=? ORDER BY h.created_at,h.id""", (order_id,)
     ).fetchall()
-    payments = db.execute("SELECT * FROM online_order_payments WHERE order_id=? ORDER BY created_at DESC", (order_id,)).fetchall()
     staff = db.execute("SELECT id,display_name FROM staff WHERE is_active=1 ORDER BY display_name").fetchall()
     product_rows = db.execute(
         """SELECT id,name_th,barcode,price_satang,stock_quantity,allow_decimal_quantity
@@ -138,7 +135,7 @@ def detail(order_id):
     )
     return render_template(
         "online/staff_order_detail.html", order=order, items=items, history=history,
-        payments=payments, staff_rows=staff, product_rows=product_rows,
+        staff_rows=staff, product_rows=product_rows,
         confirmed_subtotal=confirmed_subtotal,
         order_price_changed=order["subtotal_satang"] != confirmed_subtotal or has_catalog_price_change,
         print_status=request.args.get("print_status"),
@@ -199,42 +196,6 @@ def reject(order_id):
     return redirect(url_for("online_staff.detail", order_id=order_id))
 
 
-@bp.post("/<int:order_id>/payment/<int:payment_id>")
-@permission_required("online_orders.verify_payment")
-def verify_payment(order_id, payment_id):
-    if not valid_csrf(request.form.get("csrf_token")):
-        return ("คำขอไม่ถูกต้อง", 400)
-    action = request.form.get("action")
-    reason = request.form.get("reason", "").strip()
-    if action not in {"confirm", "reject"} or (action == "reject" and not reason):
-        flash("กรุณาระบุผลตรวจสอบและเหตุผล", "error")
-        return redirect(url_for("online_staff.detail", order_id=order_id))
-    db = get_db(); db.execute("BEGIN IMMEDIATE")
-    payment = db.execute("SELECT * FROM online_order_payments WHERE id=? AND order_id=? AND slip_path IS NOT NULL", (payment_id, order_id)).fetchone()
-    if not payment:
-        db.rollback(); return ("ไม่พบสลิป", 404)
-    status = "confirmed" if action == "confirm" else "rejected"
-    db.execute(
-        """UPDATE online_order_payments SET status=?,verified_by=?,verified_at=?,rejection_reason=?,updated_at=?
-           WHERE id=?""", (status, g.staff["id"], now(), reason or None, now(), payment_id)
-    )
-    db.execute("UPDATE online_orders SET payment_status=?,updated_at=? WHERE id=?", (status, now(), order_id))
-    audit_order(f"online_payment_{status}", order_id, staff_id=g.staff["id"], detail={"reason": reason or None})
-    db.commit()
-    return redirect(url_for("online_staff.detail", order_id=order_id))
-
-
-@bp.get("/<int:order_id>/payment/<int:payment_id>/slip")
-@permission_required("online_orders.verify_payment")
-def staff_slip(order_id, payment_id):
-    payment = get_db().execute(
-        "SELECT slip_path FROM online_order_payments WHERE id=? AND order_id=? AND slip_path IS NOT NULL", (payment_id, order_id)
-    ).fetchone()
-    if not payment:
-        return ("ไม่พบสลิป", 404)
-    return send_from_directory(current_app.config["RUNTIME_PATHS"].online_payment_evidence, payment["slip_path"])
-
-
 @bp.post("/<int:order_id>/items/<int:item_id>")
 @permission_required("online_orders.accept")
 def adjust_item(order_id, item_id):
@@ -262,7 +223,7 @@ def adjust_item(order_id, item_id):
             """SELECT COALESCE(SUM(quantity),0) FROM stock_reservations
                WHERE product_id=? AND status='active' AND order_id<>?""", (item["product_id"], order_id)
         ).fetchone()[0]
-        if quantity > item["stock_quantity"] - reserved_elsewhere:
+        if not negative_stock_allowed() and quantity > item["stock_quantity"] - reserved_elsewhere:
             raise ValueError("สินค้าไม่เพียงพอ")
         line_total = round(item["current_price_satang"] * quantity)
         db.execute(
@@ -333,7 +294,7 @@ def add_item(order_id):
                WHERE product_id=? AND status='active' AND order_id<>?""",
             (product_id, order_id),
         ).fetchone()[0]
-        if quantity > product["stock_quantity"] - reserved_elsewhere:
+        if not negative_stock_allowed() and quantity > product["stock_quantity"] - reserved_elsewhere:
             raise ValueError("สินค้าไม่เพียงพอ")
         line_total = round(product["price_satang"] * quantity)
         if existing:

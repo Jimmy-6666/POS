@@ -80,7 +80,13 @@ class SftpTransport:
         self.sftp_command = sftp_command
 
     def _run(self, commands: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
-        args = [self.sftp_command, "-b", "-", "-P", str(self.config.port), "-oBatchMode=yes", "-oStrictHostKeyChecking=yes", "-oIdentitiesOnly=yes", f"-oConnectTimeout={self.config.connect_timeout}", "-oUserKnownHostsFile=" + str(self.config.known_hosts), "-i", str(self.config.key_file), f"{self.config.username}@{self.config.host}"]
+        args = [
+            self.sftp_command, "-b", "-", "-P", str(self.config.port),
+            "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+            "-o", "IdentitiesOnly=yes", "-o", f"ConnectTimeout={self.config.connect_timeout}",
+            "-o", "UserKnownHostsFile=" + str(self.config.known_hosts),
+            "-i", str(self.config.key_file), f"{self.config.username}@{self.config.host}",
+        ]
         result = self.runner(args, input="\n".join(commands) + "\n", text=True, capture_output=True, check=False)
         if check and result.returncode != 0:
             detail = (result.stderr or result.stdout or "SFTP command failed").strip()
@@ -95,7 +101,7 @@ class SftpTransport:
 
     def ensure_layout(self) -> None:
         base = self.config.base_path
-        self._run([f"-mkdir {_quote(base)}", f"-mkdir {_quote(posixpath.join(base, 'database-backups'))}", f"-mkdir {_quote(posixpath.join(base, 'file-snapshots'))}", f"-mkdir {_quote(posixpath.join(base, 'manifests'))}", f"-mkdir {_quote(posixpath.join(base, 'status'))}", f"-mkdir {_quote(posixpath.join(base, 'quarantine'))}"])
+        self._run([f"-mkdir {_quote(base)}", f"-mkdir {_quote(posixpath.join(base, 'database-backups'))}", f"-mkdir {_quote(posixpath.join(base, 'file-snapshots'))}", f"-mkdir {_quote(posixpath.join(base, 'file-backups'))}", f"-mkdir {_quote(posixpath.join(base, 'manifests'))}", f"-mkdir {_quote(posixpath.join(base, 'status'))}", f"-mkdir {_quote(posixpath.join(base, 'quarantine'))}"])
 
     def _ensure_parent(self, remote_path: str) -> None:
         parts = remote_path.split("/")
@@ -110,12 +116,55 @@ class SftpTransport:
         if commands:
             self._run(commands)
 
+    @staticmethod
+    def _parent_commands(remote_path: str) -> list[str]:
+        parts = remote_path.split("/")
+        commands = []
+        current = ""
+        for part in parts[:-1]:
+            if not part:
+                current = "/"
+                continue
+            current = posixpath.join(current, part) if current != "/" else "/" + part
+            commands.append(f"-mkdir {_quote(current)}")
+        return commands
+
     def upload_file(self, local: Path, remote_relative: str) -> str:
         remote = self._base(remote_relative)
         self._ensure_parent(remote)
         temporary = remote + ".part"
         self._run([f"-rm {_quote(temporary)}", f"put {_quote(str(local))} {_quote(temporary)}", f"rename {_quote(temporary)} {_quote(remote)}"])
         return sha256_file(local)
+
+    def upload_files(self, files: list[tuple[Path, str]]) -> dict[str, str]:
+        """Upload a set of new snapshots in one SFTP connection."""
+
+        commands: list[str] = []
+        made_directories: set[str] = set()
+        results: dict[str, str] = {}
+        for local, remote_relative in files:
+            remote = self._base(remote_relative)
+            for command in self._parent_commands(remote):
+                if command not in made_directories:
+                    commands.append(command)
+                    made_directories.add(command)
+            temporary = remote + ".part"
+            commands.extend([f"-rm {_quote(temporary)}", f"put {_quote(str(local))} {_quote(temporary)}", f"rename {_quote(temporary)} {_quote(remote)}"])
+            results[remote_relative] = sha256_file(local)
+        if commands:
+            self._run(commands)
+        return results
+
+    def upload_versioned_file(self, local: Path, remote_relative: str, archive_relative: str) -> str:
+        """Keep the prior remote product image before replacing its snapshot."""
+
+        source = self._base(remote_relative)
+        archive = self._base(archive_relative)
+        self._ensure_parent(archive)
+        # The leading dash keeps first-time uploads successful when no prior
+        # snapshot exists. Existing snapshots are moved atomically first.
+        self._run([f"-rename {_quote(source)} {_quote(archive)}"])
+        return self.upload_file(local, remote_relative)
 
     def upload_with_retry(self, local: Path, remote_relative: str, *, retries: int = 3) -> str:
         return self._retry(lambda: self.upload_file(local, remote_relative), retries)

@@ -35,6 +35,7 @@ class ProjectContextContractTests(unittest.TestCase):
         self.assertIn("REQUIREMENTS_V1.0.md", agent_text)
         self.assertIn("RELEASE_2.0.md", agent_text)
         self.assertIn("VERSION_2.1.md", agent_text)
+        self.assertIn("VERSION_2.2.md", agent_text)
 
         project_map = (ROOT / "PROJECT_MAP.md").read_text(encoding="utf-8")
         required_areas = [

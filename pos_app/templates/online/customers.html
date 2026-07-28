@@ -1,48 +1,5 @@
-{% extends "base.html" %}
-{% block title %}ลูกค้าออนไลน์{% endblock %}
-{% block content %}
-<div class="page-heading">
-  <div>
-    <h1>ลูกค้าออนไลน์</h1>
-    <p>เจ้าหน้าที่ไม่สามารถดู PIN ปัจจุบันของลูกค้าได้</p>
-  </div>
-</div>
-<form class="search-bar" method="get">
-  <input name="q" value="{{query}}" placeholder="ค้นหาเบอร์โทร ชื่อลูกค้า หรือรหัสลูกค้า" autofocus>
-  <button class="primary-button">ค้นหา</button>
-  {% if query %}<a class="secondary-button" href="{{url_for('online_admin.customers')}}">ล้าง</a>{% endif %}
-</form>
-<div class="table-wrap">
-  <table>
-    <thead><tr><th>เบอร์โทร</th><th>ชื่อ</th><th>ออเดอร์</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
-    <tbody>
-      {% for c in customers %}
-      <tr>
-        <td>{{c.phone_normalized}}</td>
-        <td>{{c.display_name or '-'}}</td>
-        <td>{{c.order_count}}</td>
-        <td>{{'ใช้งาน' if c.is_active else 'ระงับ'}}</td>
-        <td>
-          <form method="post" action="{{url_for('online_admin.reset_customer_pin',customer_id=c.id)}}">
-            <input type="hidden" name="csrf_token" value="{{csrf_token}}">
-            <input name="temporary_pin" inputmode="numeric" minlength="4" maxlength="6" required placeholder="PIN ชั่วคราว">
-            <button class="small-button">รีเซ็ต PIN</button>
-          </form>
-          <form method="post" action="{{url_for('online_admin.correct_customer_phone',customer_id=c.id)}}">
-            <input type="hidden" name="csrf_token" value="{{csrf_token}}">
-            <input name="phone" value="{{c.phone_normalized}}" required>
-            <button class="small-button">แก้เบอร์</button>
-          </form>
-          <form method="post" action="{{url_for('online_admin.toggle_customer',customer_id=c.id)}}">
-            <input type="hidden" name="csrf_token" value="{{csrf_token}}">
-            <button class="small-button">{{'ระงับ' if c.is_active else 'เปิดใช้'}}</button>
-          </form>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="5" class="empty">ไม่พบลูกค้าที่ค้นหา</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+{% extends "base.html" %}{% block title %}ลูกค้าออนไลน์{% endblock %}{% block content %}
+<div class="page-heading"><div><h1>ลูกค้าออนไลน์</h1><p>LINE เป็นตัวตนหลัก ไม่มีระบบ PIN ลูกค้า</p></div></div>
+<form class="search-bar" method="get"><input name="q" value="{{query}}" placeholder="ค้นหารหัสลูกค้า ชื่อ LINE ชื่อที่ลงทะเบียน หรือเบอร์"><button class="primary-button">ค้นหา</button>{% if query %}<a class="secondary-button" href="{{url_for('online_admin.customers')}}">ล้าง</a>{% endif %}</form>
+<div class="table-wrap"><table><thead><tr><th>รหัสลูกค้า</th><th>ชื่อ LINE</th><th>ชื่อที่ลงทะเบียน</th><th>เบอร์</th><th>ออเดอร์</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>{% for c in customers %}<tr><td>{{c.public_id}}</td><td>{{c.line_display_name or '-'}}</td><td>{{c.registered_name or '-'}}</td><td>{{c.phone_normalized if not c.is_deleted else 'ลบข้อมูลแล้ว'}}</td><td>{{c.order_count}}</td><td>{% if c.is_deleted %}ลบแล้ว{% elif c.is_active %}ใช้งาน{% else %}ระงับ{% endif %}</td><td>{% if not c.is_deleted %}<form method="post" action="{{url_for('online_admin.toggle_customer',customer_id=c.id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button class="small-button">{{'ระงับ' if c.is_active else 'เปิดใช้'}}</button></form>{% if g.staff.role_code=='admin' %}<form method="post" action="{{url_for('online_admin.delete_customer',customer_id=c.id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input name="admin_pin" type="password" inputmode="numeric" required placeholder="PIN ผู้ดูแล"><button class="small-button">ลบลูกค้า</button></form>{% endif %}{% endif %}</td></tr>{% else %}<tr><td colspan="7" class="empty">ไม่พบลูกค้าที่ค้นหา</td></tr>{% endfor %}</tbody></table></div>
 {% endblock %}

@@ -5,8 +5,8 @@ store computer and the POS does not require internet access to sell.
 
 ## 1. Create a key on the POS computer
 
-Run OpenSSH's key generator as the Windows service account that will execute
-the backup task. Store the private key outside Git, for example under the
+Run OpenSSH's key generator as the Windows account that runs the POS. Store the
+private key outside Git, for example under the
 production runtime config directory, and protect it with Windows ACLs:
 
     ssh-keygen -t ed25519 -f C:\ProgramData\SaengngamPOS\config\vps-backup-ed25519
@@ -29,7 +29,7 @@ The setup creates `posbackup`, disables password login for that user, forces
 internal SFTP, disables forwarding and shell access, and creates:
 
     /srv/pos-backups/store-001/
-      database-backups/  file-snapshots/  manifests/  status/  quarantine/
+      database-backups/  file-snapshots/  file-backups/  manifests/  status/
 
 The SFTP-visible root is `/store-001` because the account is chrooted to
 `/srv/pos-backups`.
@@ -50,12 +50,11 @@ tokens in Git:
     POS_VPS_VERIFY_DOWNLOAD=1
     POS_VPS_RETRIES=3
     POS_SYNC_PATHS=uploads/products
-    POS_SYNC_DELETION_GRACE_DAYS=30
 
 Test from the POS computer with the same key and known-hosts file:
 
-    sftp -oBatchMode=yes -oStrictHostKeyChecking=yes `
-      -oUserKnownHostsFile=C:\ProgramData\SaengngamPOS\config\vps-known-hosts `
+    sftp -o BatchMode=yes -o StrictHostKeyChecking=yes `
+      -o UserKnownHostsFile=C:\ProgramData\SaengngamPOS\config\vps-known-hosts `
       -i C:\ProgramData\SaengngamPOS\config\vps-backup-ed25519 `
       posbackup@169.58.77.35
 

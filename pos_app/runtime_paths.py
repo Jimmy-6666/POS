@@ -17,7 +17,7 @@ from typing import Mapping
 
 
 DEFAULT_MIN_FREE_SPACE_MB = 512
-DEFAULT_APP_VERSION = "2.1"
+DEFAULT_APP_VERSION = "2.2"
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
@@ -173,6 +173,7 @@ class RuntimeConfig:
     app_version: str
     production: bool
     config_file: Path
+    update_signer_thumbprint: str = ""
 
 
 def _read_local_config(path: Path) -> dict[str, object]:
@@ -227,6 +228,7 @@ def load_runtime_config(
         app_version=str(setting("POS_APP_VERSION", "app_version", DEFAULT_APP_VERSION)).strip(),
         production=_as_bool(setting("POS_PRODUCTION", "production", False)),
         config_file=config_file,
+        update_signer_thumbprint=str(setting("POS_UPDATE_SIGNER_THUMBPRINT", "update_signer_thumbprint", "")).strip(),
     )
 
 
