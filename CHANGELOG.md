@@ -1,3 +1,19 @@
+# Release 3.0.4 — 2026-07-30
+
+- Added one touch-friendly “เงื่อนไขการใช้งานและ PDPA” button to the customer
+  online header, linking to the existing public `/order/policy` route.
+- Combined the existing privacy policy with product-image terms explaining
+  that packaging, labels, and appearance may differ from displayed images,
+  while quantity and unit follow product/order text.
+- Added clickable phone and LINE contact details sourced from POS online
+  settings for mismatched-item or pre-purchase questions.
+- No consent-record storage, database migration, or change to customer
+  authentication/order processing.
+- Verification: 25 focused public-policy/public-host/release-identity tests
+  passed. Browser verification passed at desktop and mobile breakpoints with
+  no horizontal overflow or console warnings/errors. The full suite completed
+  158 tests (157 passed, one existing filesystem-capability skip).
+
 # Release 3.0.3 — 2026-07-29
 
 - Added the approved local `noimage.png` default for products without a saved

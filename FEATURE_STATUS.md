@@ -26,6 +26,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0.1 private-LAN access hotfix | Released 2026-07-29; 153 passed, 1 capability skip | `VERSION_3.0.1.md`, public-host/runtime tests |
 | Release 3.0.2 product-image preview hotfix | Released 2026-07-29; 153 passed, 1 capability skip; no migration | `VERSION_3.0.2.md`, V2.4 form regression |
 | Release 3.0.3 default-image and online best-seller update | Released 2026-07-29; 156 passed, 1 capability skip; no migration | `VERSION_3.0.3.md`, online phases 2 and 6 |
+| Release 3.0.4 combined terms/PDPA notice | Implemented 2026-07-30; 157 passed, 1 capability skip; no migration | `VERSION_3.0.4.md`, online phase 1, public-host tests |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -99,6 +100,21 @@ and detailed verification remain in their linked version documents and tests.
   existing filesystem-capability skip. Browser reached the local `/order` page, but
   deeper browser inspection was not performed because its security policy
   prohibited the connected LINE access.
+- No schema migration.
+
+## Version 3.0.4 release baseline — 2026-07-30
+
+- Customer online pages provide one touch-friendly link to the public combined
+  terms-and-PDPA page.
+- The policy states that packaging, labels, and appearance may differ from
+  displayed images, explains that quantity/unit follow product and order text,
+  and shows phone/LINE contact values from POS settings.
+- The page remains public without LINE authentication. This release does not
+  store consent or require an acceptance checkbox.
+- Focused public-policy/public-host and release-identity suites: 25 passed.
+  Browser verification passed at desktop and mobile breakpoints with no
+  horizontal overflow or console warnings/errors. Full suite: 158 tests
+  completed—157 passed and one existing filesystem-capability skip.
 - No schema migration.
 
 ## Approved online sprint 1 verification — 2026-07-28
