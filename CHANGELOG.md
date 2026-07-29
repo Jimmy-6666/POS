@@ -1,3 +1,18 @@
+# Release 3.0.2 — 2026-07-29
+
+- Fixed the product add/edit form so file selection and camera capture display
+  an immediate unsaved image preview.
+- Initialized product-image listeners before the optional profit calculation
+  and guarded missing profit elements, preventing the page-load JavaScript
+  error that disabled both image inputs.
+- Restored the saved product image when an unsaved replacement is removed,
+  added explicit hidden-state CSS, and bumped the form script cache key.
+- Preserved the Release 3.0.1 LAN access policy and public privacy policy. No
+  database migration or server-side image-storage change.
+- Verification: 13 focused tests passed; browser browse/camera preview,
+  remove/restore, and iPad-size layout passed with no console error; the full
+  suite passed 153 tests with one existing filesystem-capability skip.
+
 # Release 3.0.1 — 2026-07-29
 
 - Allowed authenticated staff POS access from the configured private network

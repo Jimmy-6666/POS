@@ -8,7 +8,7 @@ and detailed verification remain in their linked version documents and tests.
 |---|---|---|
 | Offline Flask/SQLite/Windows/LAN foundation | Implemented | phase 1 |
 | Staff auth | Pre-login CSRF; staff allowed on configured private LAN only; remote Admin host requires Admin role plus TOTP/recovery code | phase 2, 2FA, public host |
-| Product/catalog/images/pricing | Implemented; immutable UUID/XLSX flow, camera capture, shared menu actions, current/last receiving cost | product, XLSX, V2.4 |
+| Product/catalog/images/pricing | Implemented; immutable UUID/XLSX flow, camera/file preview, shared menu actions, current/last receiving cost | product, XLSX, V2.4, V3.0.2 |
 | POS, sales, receipts, void/refund | Implemented; cashier initiation requires active Manager/Admin server PIN authorization with touch Void controls | phase 3–5, V2.4 |
 | Billing customers and payment | Implemented | billing |
 | Receiving, weighted-average cost, adjustment, ledger, suppliers | Implemented | inventory |
@@ -24,6 +24,7 @@ and detailed verification remain in their linked version documents and tests.
 | Version 2.4.2 online-alert update | Released 2026-07-28 | list badge, scoped sound/polling, sidebar gesture retry, auto-refresh |
 | Release 3.0 customer-delivery hardening | Approved; 151 passed, 1 capability skip | `RELEASE_3.0.md`, `VERSION_3.0.0.md` |
 | Release 3.0.1 private-LAN access hotfix | Released 2026-07-29; 153 passed, 1 capability skip | `VERSION_3.0.1.md`, public-host/runtime tests |
+| Release 3.0.2 product-image preview hotfix | Released 2026-07-29; 153 passed, 1 capability skip; no migration | `VERSION_3.0.2.md`, V2.4 form regression |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -70,6 +71,19 @@ and detailed verification remain in their linked version documents and tests.
 - Live runtime checks passed local and LAN `/health` plus LAN `/login`.
   Focused suite: 29 passed; full suite: 153 passed with one existing
   filesystem-capability skip. No schema migration.
+
+## Version 3.0.2 release baseline — 2026-07-29
+
+- Product add/edit forms now bind file and camera preview events before the
+  optional profit summary. Missing profit fields no longer terminate the
+  product-form script.
+- Selecting a replacement hides the current image; removing the unsaved
+  selection restores it. Explicit hidden-state CSS and `product-form.js?v=3`
+  prevent stale layout/cache behavior.
+- Focused suite: 13 passed. Browser browse/camera preview, remove/restore, and
+  iPad-size layout passed without console errors. Full suite: 153 passed with
+  one existing filesystem-capability skip.
+- No schema migration and no server-side image-storage change.
 
 ## Approved online sprint 1 verification — 2026-07-28
 
