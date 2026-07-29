@@ -92,9 +92,18 @@ class Version24Tests(unittest.TestCase):
         self.assertIn('capture="environment"', form_html)
         self.assertIn('id="productImagePreview"', form_html)
         self.assertIn('class="secondary-button capture-button" for="productImageCamera"', form_html)
+        self.assertIn('product-form.js?v=3', form_html)
         form_content = form_html.split('<main id="mainContent"', 1)[1].split('</main>', 1)[0]
         self.assertIn('name="price"', form_content)
         self.assertNotIn('href="/products/prices"', form_content)
+        product_form_js = (Path(self.app.static_folder) / "js" / "product-form.js").read_text(encoding="utf-8")
+        self.assertLess(
+            product_form_js.index("setupProductImagePreview();"),
+            product_form_js.index("const profitAmount"),
+        )
+        self.assertIn("if (!cost || !price || !profitAmount || !profitPercent) return;", product_form_js)
+        app_css = (Path(self.app.static_folder) / "css" / "app.css").read_text(encoding="utf-8")
+        self.assertIn(".product-current-image[hidden],.product-image-preview[hidden]{display:none}", app_css)
         with self.app.app_context():
             images = get_db().execute("SELECT image_path,price_satang FROM products WHERE barcode IN ('v24-desktop','v24-camera') ORDER BY barcode").fetchall()
             self.assertEqual(len(images), 2)

@@ -52,6 +52,9 @@ def create_app(test_config=None):
             production=runtime_config.production,
             config_file=runtime_config.config_file,
             update_signer_thumbprint=runtime_config.update_signer_thumbprint,
+            server_ip=runtime_config.server_ip,
+            lan_access_enabled=runtime_config.lan_access_enabled,
+            lan_networks=runtime_config.lan_networks,
         )
     runtime_paths.create_directories()
     runtime_paths.ensure_secret_key()
@@ -65,6 +68,9 @@ def create_app(test_config=None):
         POS_BIND_HOST=runtime_config.host,
         POS_PORT=runtime_config.port,
         POS_APP_VERSION=runtime_config.app_version,
+        POS_SERVER_IP=runtime_config.server_ip,
+        POS_LAN_ACCESS_ENABLED=runtime_config.lan_access_enabled,
+        POS_LAN_NETWORKS=runtime_config.lan_networks,
         POS_INSTALL_ROOT=str(project_root),
         POS_BACKUP_RETENTION=int(os.environ.get("POS_BACKUP_RETENTION", "7")),
         BACKUP_SCHEDULER_ENABLED=os.environ.get("POS_BACKUP_SCHEDULER_ENABLED", "1").lower() not in {"0", "false", "no"},
@@ -95,6 +101,13 @@ def create_app(test_config=None):
     if app.config["POS_PUBLIC_ORDER_HOST"] and app.config["POS_PUBLIC_ORDER_HOST"] == app.config["POS_ADMIN_HOST"]:
         raise RuntimeError("POS_PUBLIC_ORDER_HOST and POS_ADMIN_HOST must be different hostnames.")
     trusted_hosts = [host.strip().lower().rstrip(".") for host in str(app.config["POS_TRUSTED_HOSTS"] or "").split(",") if host.strip()]
+    if app.config.get("POS_LAN_ACCESS_ENABLED"):
+        trusted_hosts = list(dict.fromkeys([
+            *trusted_hosts,
+            str(app.config["POS_SERVER_IP"]).strip().lower(),
+            "localhost",
+            "127.0.0.1",
+        ]))
     public_hosts = {host for host in (app.config["POS_PUBLIC_ORDER_HOST"], app.config["POS_ADMIN_HOST"]) if host}
     if not app.config.get("TESTING") and public_hosts:
         if not trusted_hosts:

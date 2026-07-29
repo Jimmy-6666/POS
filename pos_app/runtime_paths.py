@@ -17,7 +17,9 @@ from typing import Mapping
 
 
 DEFAULT_MIN_FREE_SPACE_MB = 512
-DEFAULT_APP_VERSION = "3.0.0"
+DEFAULT_APP_VERSION = "3.0.2"
+DEFAULT_SERVER_IP = "192.168.0.200"
+DEFAULT_LAN_NETWORKS = "192.168.0.0/24"
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _BACKUP_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
@@ -175,6 +177,9 @@ class RuntimeConfig:
     production: bool
     config_file: Path
     update_signer_thumbprint: str = ""
+    server_ip: str = DEFAULT_SERVER_IP
+    lan_access_enabled: bool = True
+    lan_networks: str = DEFAULT_LAN_NETWORKS
 
 
 def _read_local_config(path: Path) -> dict[str, object]:
@@ -230,6 +235,9 @@ def load_runtime_config(
         production=_as_bool(setting("POS_PRODUCTION", "production", False)),
         config_file=config_file,
         update_signer_thumbprint=str(setting("POS_UPDATE_SIGNER_THUMBPRINT", "update_signer_thumbprint", "")).strip(),
+        server_ip=str(setting("POS_SERVER_IP", "server_ip", DEFAULT_SERVER_IP)).strip(),
+        lan_access_enabled=_as_bool(setting("POS_LAN_ACCESS_ENABLED", "lan_access_enabled", True), True),
+        lan_networks=str(setting("POS_LAN_NETWORKS", "lan_networks", DEFAULT_LAN_NETWORKS)).strip(),
     )
 
 
@@ -312,6 +320,40 @@ def validate_runtime(
             valid_host = bool(_HOSTNAME_RE.fullmatch(config.host))
     check("host", valid_host, "Configured bind host is invalid.")
     check("port", 1 <= config.port <= 65535, "Configured port must be between 1 and 65535.")
+    configured_server_ip = getattr(config, "server_ip", DEFAULT_SERVER_IP)
+    lan_access_enabled = getattr(config, "lan_access_enabled", True)
+    configured_lan_networks = getattr(config, "lan_networks", DEFAULT_LAN_NETWORKS)
+    try:
+        server_ip = ipaddress.ip_address(configured_server_ip)
+        valid_server_ip = server_ip.version == 4 and server_ip.is_private
+    except ValueError:
+        server_ip = None
+        valid_server_ip = False
+    check("server_ip", valid_server_ip, "Configured POS server IP must be a private IPv4 address.")
+    lan_networks = []
+    try:
+        lan_networks = [
+            ipaddress.ip_network(item.strip(), strict=False)
+            for item in configured_lan_networks.split(",")
+            if item.strip()
+        ]
+        valid_lan_networks = bool(lan_networks) and all(network.is_private for network in lan_networks)
+    except ValueError:
+        valid_lan_networks = False
+    check(
+        "lan_networks",
+        not lan_access_enabled or valid_lan_networks,
+        "LAN staff access requires one or more valid private IP networks.",
+    )
+    check(
+        "server_ip_in_lan",
+        not lan_access_enabled or (
+            valid_server_ip
+            and valid_lan_networks
+            and any(server_ip in network for network in lan_networks)
+        ),
+        "Configured POS server IP must belong to an allowed LAN network.",
+    )
 
     if config.paths.database.is_file() and database_required:
         try:
@@ -354,6 +396,9 @@ def validate_runtime(
         "port": config.port,
         "app_version": config.app_version,
         "store_id": config.store_id,
+        "server_ip": configured_server_ip,
+        "lan_access_enabled": lan_access_enabled,
+        "lan_networks": configured_lan_networks,
     }
 
 

@@ -11,6 +11,7 @@ try {
     $context = Get-ProductionContext $InstallRoot $RuntimeRoot $Port
     $systemPython = Get-SupportedPython
     Ensure-RuntimeDirectories $context
+    Write-ProductionRuntimeConfig $context
     Ensure-VirtualEnvironment $context $systemPython
     Initialize-ProductionApplication $context
     Register-ProductionStartup $context

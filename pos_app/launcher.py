@@ -101,7 +101,8 @@ def main():
         return 1
     print("Starting Thai Minimart POS...")
     print(f"Local URL: http://127.0.0.1:{PORT}")
-    print(f"LAN URL:   http://THIS-COMPUTER-IP:{PORT}")
+    print(f"LAN URL:   http://{RUNTIME_CONFIG.server_ip}:{PORT}")
+    print(f"Allowed LAN networks: {RUNTIME_CONFIG.lan_networks}")
     print("Only one POS server instance is running.")
     print("Press Ctrl+C to stop the server.")
     serve(create_app(), **waitress_options())

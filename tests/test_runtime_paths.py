@@ -180,6 +180,7 @@ class MigrationHistoryTests(unittest.TestCase):
         command = (
             "$files=Get-ChildItem -LiteralPath . -Filter '*-production.ps1';"
             "$files+=Get-Item production-common.ps1;"
+            "$files+=Get-Item configure-production-network.ps1;"
             "foreach($file in $files){$t=$null;$e=$null;"
             "[System.Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$t,[ref]$e)|Out-Null;"
             "if($e.Count -gt 0){exit 1}}"

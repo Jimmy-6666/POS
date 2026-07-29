@@ -27,6 +27,8 @@ class PublicHostAccessTests(unittest.TestCase):
             "POS_PUBLIC_ORDER_HOST": ORDER_HOST,
             "POS_ADMIN_HOST": ADMIN_HOST,
             "POS_TRUSTED_HOSTS": f"{ORDER_HOST},{ADMIN_HOST},lan.raisanngam.local",
+            "POS_LAN_ACCESS_ENABLED": True,
+            "POS_LAN_NETWORKS": "192.168.0.0/24",
         })
         self.customer = self.app.test_client()
         self.admin = self.app.test_client()
@@ -88,6 +90,7 @@ class PublicHostAccessTests(unittest.TestCase):
 
     def test_customer_host_allows_only_customer_routes(self):
         self.assertEqual(self.customer.get("/order", headers=self.host(ORDER_HOST)).status_code, 200)
+        self.assertEqual(self.customer.get("/order/policy", headers=self.host(ORDER_HOST)).status_code, 200)
         self.assertEqual(self.customer.get("/api/auth/config", headers=self.host(ORDER_HOST)).status_code, 200)
         static_response = self.customer.get("/static/css/online.css", headers=self.host(ORDER_HOST))
         self.assertEqual(static_response.status_code, 200)
@@ -172,7 +175,24 @@ class PublicHostAccessTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(get_db().execute("SELECT is_enabled FROM staff_two_factor WHERE staff_id=1").fetchone()[0], 1)
 
-    def test_nonlocal_staff_login_is_blocked_while_customer_and_health_remain_available(self):
+    def test_private_lan_staff_can_login_and_reuse_their_session(self):
+        remote = {"REMOTE_ADDR": "192.168.0.50"}
+        response = staff_login(
+            self.lan,
+            headers=self.host("192.168.0.200"),
+            environ_overrides=remote,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self.lan.get(
+                "/pos",
+                headers=self.host("192.168.0.200"),
+                environ_overrides=remote,
+            ).status_code,
+            200,
+        )
+
+    def test_outside_configured_lan_staff_is_blocked_while_customer_and_health_remain_available(self):
         remote = {"REMOTE_ADDR": "192.168.1.50"}
         self.assertEqual(
             self.lan.get(
@@ -207,7 +227,7 @@ class PublicHostAccessTests(unittest.TestCase):
             302,
         )
 
-    def test_nonlocal_request_cannot_reuse_a_staff_session(self):
+    def test_outside_configured_lan_cannot_reuse_a_staff_session(self):
         with self.app.test_request_context("/", base_url="http://lan.raisanngam.local"):
             token = create_session(1)
         self.lan.set_cookie("pos_session", token, domain="lan.raisanngam.local")

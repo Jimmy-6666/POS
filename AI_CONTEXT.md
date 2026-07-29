@@ -16,7 +16,8 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- Release 3.0.0 desktop launcher uses port `8002` and `runtime/`.
+- Release 3.0.2 desktop launcher uses port `8002`, `runtime/`, and fixed server
+  address `192.168.0.200` on the trusted `192.168.0.0/24` private LAN.
 - UAT launcher uses port `8001` and `uat_runtime/`.
 - Legacy launcher uses port `8000` and the repository root runtime.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
@@ -44,12 +45,14 @@ production-ready without barcode and price approval.
 
 ## Current health
 
-On 2026-07-28, `python -m unittest discover -s tests -v` completed 151 tests
-successfully with one filesystem-capability skip, including customer contact UI, delivery payment-method confirmation,
+On 2026-07-29, `python -m unittest discover -s tests -v` completed 153 tests
+successfully with one filesystem-capability skip, including the Release 3.0.2
+product browse/camera preview regression, private-LAN staff login/session
+access, outside-LAN rejection, customer contact UI, delivery payment-method confirmation,
 receipt-only print-agent behavior, stock-sheet print-preview isolation, and the
 online ordering lifecycle. Release 3 transaction regressions cover concurrent
 checkout, void, expiry, and idempotent order submission. Sprint 3 security
-regressions cover pre-login CSRF, localhost-only staff access, remote Admin
+regressions cover pre-login CSRF, configured private-LAN staff access, remote Admin
 host isolation and 2FA, signed-update reauthentication, and structured support
 redaction. Release 3 recovery and runtime regressions cover the full
 database-and-product-image bundle and in-process schedule validation. Flask
@@ -84,7 +87,14 @@ No new product scope should be invented. Follow the user's next feature
 priority. If catalog deployment is selected, first complete owner approval of
 selling prices and real barcodes and make the import input path portable.
 
-Version 3.0.0 is the current customer-delivery baseline. It retains Version 2.4's
+Version 3.0.2 is the current customer-delivery baseline. It retains Version 3.0.1
+private-LAN access and Version 3.0.0 hardening while correcting the product
+add/edit image preview: file selection and camera capture now initialize before
+the optional profit summary and show an immediate unsaved preview without a
+page-load JavaScript error. Requests outside `192.168.0.0/24` remain blocked.
+The Windows server address is static
+`192.168.0.200/24`; firewall exposure stays Private/LocalSubnet only. It also
+retains Version 2.4's
 product camera capture, Manager-authorized POS item voids, reconciliation void
 totals, current/latest cost pricing, customer/staff online-order workflow
 improvements, and submitted-order sound/badge alerts. It also restores direct

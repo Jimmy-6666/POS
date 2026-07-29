@@ -50,6 +50,14 @@ class OnlinePhase1Tests(unittest.TestCase):
         self.assertEqual(self.client.post("/order/api/account/lookup", json={}).status_code, 410)
         self.assertEqual(self.client.post("/order/api/account/login", json={}).status_code, 410)
 
+    def test_privacy_policy_is_public_without_line_authentication(self):
+        response = self.client.get("/order/policy")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("นโยบายความเป็นส่วนตัว (Privacy Policy)", page)
+        self.assertIn("ปรับปรุงล่าสุด: กรกฎาคม 2569", page)
+        self.assertNotIn("online-line-auth.js", page)
+
     def test_catalog_loads_line_auth_without_exposing_contact_configuration(self):
         with self.app.app_context():
             db = get_db()

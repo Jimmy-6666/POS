@@ -48,7 +48,11 @@ UAT มีสินค้า สต็อก และยอดขายตั�
 
 ## เปิดจาก iPad หรือมือถือ
 
-ใช้คำสั่ง `ipconfig` หา IPv4 ของเครื่องหลัก แล้วเปิด `http://IP-เครื่องหลัก:8000` สำหรับ Production หรือ `:8001` สำหรับ UAT จาก Wi-Fi เดียวกัน อนุญาต Python บน Private network ใน Windows Firewall
+Release 3.0.1 ใช้ IP เครื่องหลักคงที่ `192.168.0.200` เปิด
+`http://192.168.0.200:8002` สำหรับ Desktop Launcher,
+`http://192.168.0.200:8000` สำหรับ scheduled Production service หรือ `:8001`
+สำหรับ UAT จาก Wi-Fi วง `192.168.0.0/24` เดียวกัน Firewall ต้องเป็น Private
+และจำกัด RemoteAddress เป็น LocalSubnet
 
 ## การใช้งานทั่วไป
 

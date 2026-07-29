@@ -1,7 +1,43 @@
-# Unreleased — Release 3.0
+# Release 3.0.2 — 2026-07-29
+
+- Fixed the product add/edit form so file selection and camera capture display
+  an immediate unsaved image preview.
+- Initialized product-image listeners before the optional profit calculation
+  and guarded missing profit elements, preventing the page-load JavaScript
+  error that disabled both image inputs.
+- Restored the saved product image when an unsaved replacement is removed,
+  added explicit hidden-state CSS, and bumped the form script cache key.
+- Preserved the Release 3.0.1 LAN access policy and public privacy policy. No
+  database migration or server-side image-storage change.
+- Verification: 13 focused tests passed; browser browse/camera preview,
+  remove/restore, and iPad-size layout passed with no console error; the full
+  suite passed 153 tests with one existing filesystem-capability skip.
+
+# Release 3.0.1 — 2026-07-29
+
+- Allowed authenticated staff POS access from the configured private network
+  `192.168.0.0/24`; login and existing sessions remain blocked outside that
+  network.
+- Added the fixed server address `192.168.0.200` to trusted hosts while
+  retaining the customer-host allow-list and remote Admin role/2FA controls.
+- Included the public `/order/policy` route, Thai privacy-policy template, and
+  regressions that were present on the deployed customer machine but missing
+  from the Release 3.0.0 source commit.
+- Added idempotent Windows static-network configuration for
+  `192.168.0.200/24`, gateway `192.168.0.1`, Google DNS, Private network
+  profile, and a Private/LocalSubnet-only TCP `8002` firewall rule.
+- Updated runtime config, desktop/console launchers, release identity, build
+  requirement, installation output, validation, and operations documentation.
+- No database migration. Live local/LAN health and LAN login passed; 29 focused
+  tests passed; the full suite passed 153 tests with one existing filesystem
+  capability skip.
+
+# Release 3.0
 
 ## Sprints 4–6 — customer delivery
 
+- Published the customer privacy policy at `/order/policy` without requiring
+  LINE authentication, including access through the approved customer host.
 - Corrected production verification to require the in-process backup schedule
   and reject the obsolete Windows backup task that install/repair removes.
 - Added a separate verified full recovery bundle containing the SQLite
@@ -10,6 +46,10 @@
 - Set runtime, launcher, UAT launcher, and mobile badge identity to 3.0.0.
 - Added committed-ref packaging with runtime/credential rejection, SHA-256,
   JSON manifest, and a customer-site acceptance checklist.
+- Added a sanitized, crash-resumable customer-machine deployment playbook and
+  reusable hands-on Codex prompt covering clean/upgrade protection, physical
+  acceptance, key-only VPS backup, Cloudflare/LINE gates, and redacted
+  readiness reporting.
 - Verification: `pip check` passed; 21 focused tests passed with one
   filesystem-capability skip; isolated Windows health/backup/restore/image
   acceptance passed; full suite passed 151 tests with the same skip.
