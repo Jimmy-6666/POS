@@ -17,11 +17,13 @@ class OnlinePhase6Tests(unittest.TestCase):
             db = get_db(); db.execute("UPDATE staff SET must_change_pin=0 WHERE id=1")
             category = db.execute("SELECT id FROM categories LIMIT 1").fetchone()[0]; unit = db.execute("SELECT id FROM units LIMIT 1").fetchone()[0]
             db.execute("UPDATE settings SET value='1' WHERE key='online_ordering_enabled'")
-            db.execute("INSERT INTO products(barcode,name_th,category_id,unit_id,cost_satang,price_satang,stock_quantity,is_online_available) VALUES('111','สินค้า',?,?,600,1000,5,1)", (category, unit))
+            db.execute("""INSERT INTO products(barcode,name_th,category_id,unit_id,cost_satang,price_satang,stock_quantity,is_online_available)
+                          VALUES('111','สินค้า',?,?,600,1000,5,1),('222','สินค้ายังไม่ขาย',?,?,500,900,5,1)""",
+                       (category, unit, category, unit))
             db.execute("INSERT INTO delivery_locations(name,delivery_fee_satang,room_required) VALUES('รีสอร์ต',500,1)"); db.commit()
         customer = self.app.test_client(); register_customer(customer)
         with self.app.app_context():
-            db=get_db(); customer_csrf = db.execute("SELECT csrf_token FROM customer_sessions").fetchone()[0]; self.product_uuid=db.execute("SELECT product_uuid FROM products WHERE id=1").fetchone()[0]
+            db=get_db(); customer_csrf = db.execute("SELECT csrf_token FROM customer_sessions").fetchone()[0]; self.product_uuid=db.execute("SELECT product_uuid FROM products WHERE barcode='111'").fetchone()[0]
         customer.post("/order/api/orders", json={"items": [{"product_uuid": self.product_uuid, "quantity": 2}], "delivery_location_id": 1,
             "room_reference": "A1", "payment_method": "cash", "idempotency_key": "complete-123456"}, headers={"X-CSRF-Token": customer_csrf})
         self.staff = self.app.test_client(); staff_login(self.staff)
@@ -48,6 +50,8 @@ class OnlinePhase6Tests(unittest.TestCase):
             sale = db.execute("SELECT * FROM sales").fetchone()
             self.assertEqual(sale["total_satang"], 2500); self.assertEqual(sale["delivery_fee_satang"], 500)
             self.assertEqual(db.execute("SELECT status FROM stock_reservations").fetchone()[0], "converted")
+        products = self.staff.get("/order/api/products").get_json()
+        self.assertEqual(products[0]["product_uuid"], self.product_uuid)
         second = self.staff.post("/online-orders/1/delivery/complete", data={
             "csrf_token": self.csrf, "cash_received": "30", "delivery_result": "delivered",
             "payment_method": "cash", "payment_method_confirmed": "1"})

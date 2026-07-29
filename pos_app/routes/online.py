@@ -141,7 +141,7 @@ def available_products(query="", category_id=None):
     if query:
         where.append("(p.name_th LIKE ? OR p.name_en LIKE ? OR p.barcode LIKE ?)")
         params.extend([f"%{query}%"] * 3)
-    if category_id:
+    if category_id and not query:
         where.append("p.category_id=?")
         params.append(category_id)
     rows = get_db().execute(
@@ -150,8 +150,13 @@ def available_products(query="", category_id=None):
                    MAX(0,p.stock_quantity-COALESCE((SELECT SUM(sr.quantity) FROM stock_reservations sr
                      WHERE sr.product_id=p.id AND sr.status='active'),0)) AS available_quantity
             FROM products p JOIN categories c ON c.id=p.category_id
+            LEFT JOIN (
+                SELECT product_id,SUM(quantity-voided_quantity) AS net_sold_quantity
+                FROM sale_items GROUP BY product_id
+            ) sales_totals ON sales_totals.product_id=p.id
             WHERE {' AND '.join(where)}
-            ORDER BY p.online_sort_order,p.name_th LIMIT 200""",
+            ORDER BY COALESCE(sales_totals.net_sold_quantity,0) DESC,p.online_sort_order,p.name_th
+            LIMIT 200""",
         params,
     ).fetchall()
     return online_product_availability(rows, settings)
@@ -354,8 +359,10 @@ def customer_change_pin():
 def catalog():
     expire_pending_orders()
     settings = online_settings()
+    query = request.args.get("q", "").strip()
+    selected_category_id = None if query else request.args.get("category_id", type=int)
     products = customer_product_payloads(
-        available_products(request.args.get("q", "").strip(), request.args.get("category_id", type=int)), settings
+        available_products(query, selected_category_id), settings
     )
     categories = get_db().execute(
         """SELECT DISTINCT c.id,c.name_th,c.sort_order FROM categories c JOIN products p ON p.category_id=c.id
@@ -366,7 +373,8 @@ def catalog():
     return render_template(
         "online/catalog.html", settings=settings, products=products, categories=categories,
         repeat_products=repeat_products, is_open=ordering_open(settings),
-        allow_negative_stock=negative_stock_allowed(settings),
+        allow_negative_stock=negative_stock_allowed(settings), query=query,
+        selected_category_id=selected_category_id,
     )
 
 
