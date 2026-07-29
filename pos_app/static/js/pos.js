@@ -77,7 +77,7 @@
     $('#resultCount').textContent = `${products.length} สินค้า`;
     $('#productGrid').innerHTML = products.map((product) => `
       <button class="product-card-v2" type="button" data-product-uuid="${product.product_uuid}" aria-label="เพิ่ม ${escapeHtml(product.name_th)} ราคา ${money(product.price_satang)}">
-        ${product.image_path ? `<img src="/uploads/products/${encodeURIComponent(product.image_path)}" alt="">` : '<span class="product-placeholder-v2" aria-hidden="true">□</span>'}
+        ${product.image_path ? `<img src="/uploads/products/${encodeURIComponent(product.image_path)}" alt="">` : '<img src="/static/img/noimage.png" alt="ไม่มีรูปสินค้า">'}
         <span class="product-info-v2"><strong>${escapeHtml(product.name_th)}</strong><b>${money(product.price_satang)}</b></span>
       </button>`).join('') || '<div class="empty-state"><span>⌕</span><strong>ไม่พบสินค้า</strong><p>ลองค้นหาด้วยชื่อ บาร์โค้ด หรือเลือกหมวดอื่น</p></div>';
   }

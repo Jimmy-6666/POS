@@ -5,7 +5,7 @@
 <form method="post" enctype="multipart/form-data" class="form-card">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <section class="product-image-section" aria-label="รูปสินค้า">
-{% if product and product.image_path %}<figure id="currentProductImage" class="product-current-image"><img src="{{ url_for('pos.product_image', filename=product.image_path) }}" alt="รูปสินค้าปัจจุบันของ {{ product.name_th }}"><figcaption>รูปสินค้าปัจจุบัน</figcaption></figure>{% endif %}
+{% if product %}<figure id="currentProductImage" class="product-current-image"><img src="{{ url_for('pos.product_image', filename=product.image_path) if product.image_path else url_for('static', filename='img/noimage.png') }}" alt="{{ 'รูปสินค้าปัจจุบันของ ' + product.name_th if product.image_path else 'ไม่มีรูปของ ' + product.name_th }}"><figcaption>{{'รูปสินค้าปัจจุบัน' if product.image_path else 'สินค้านี้ยังไม่มีรูป'}}</figcaption></figure>{% endif %}
 <div class="product-image-actions"><label class="secondary-button capture-button" for="productImageBrowse">เลือกรูปสินค้า<input id="productImageBrowse" name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></label><label class="secondary-button capture-button" for="productImageCamera">ถ่ายรูปสินค้า<input id="productImageCamera" name="camera_image" type="file" accept="image/jpeg,image/png,image/webp,image/gif" capture="environment" hidden></label></div>
 <p class="muted">เลือกไฟล์หรือถ่ายรูปใหม่ ระบบจะบันทึกรูปเมื่อกดบันทึกสินค้าเท่านั้น</p><div id="productImagePreview" class="product-image-preview" hidden><img alt="ตัวอย่างรูปสินค้า"><button class="secondary-button" type="button" id="removeProductImage">ลบรูปที่เลือก</button></div>
 </section><div class="form-grid">

@@ -8,7 +8,7 @@ and detailed verification remain in their linked version documents and tests.
 |---|---|---|
 | Offline Flask/SQLite/Windows/LAN foundation | Implemented | phase 1 |
 | Staff auth | Pre-login CSRF; staff allowed on configured private LAN only; remote Admin host requires Admin role plus TOTP/recovery code | phase 2, 2FA, public host |
-| Product/catalog/images/pricing | Implemented; immutable UUID/XLSX flow, camera/file preview, shared menu actions, current/last receiving cost | product, XLSX, V2.4, V3.0.2 |
+| Product/catalog/images/pricing | Implemented; immutable UUID/XLSX flow, camera/file preview, approved no-image default, shared menu actions, current/last receiving cost | product, XLSX, V2.4, V3.0.2, V3.0.3 |
 | POS, sales, receipts, void/refund | Implemented; cashier initiation requires active Manager/Admin server PIN authorization with touch Void controls | phase 3–5, V2.4 |
 | Billing customers and payment | Implemented | billing |
 | Receiving, weighted-average cost, adjustment, ledger, suppliers | Implemented | inventory |
@@ -25,6 +25,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0 customer-delivery hardening | Approved; 151 passed, 1 capability skip | `RELEASE_3.0.md`, `VERSION_3.0.0.md` |
 | Release 3.0.1 private-LAN access hotfix | Released 2026-07-29; 153 passed, 1 capability skip | `VERSION_3.0.1.md`, public-host/runtime tests |
 | Release 3.0.2 product-image preview hotfix | Released 2026-07-29; 153 passed, 1 capability skip; no migration | `VERSION_3.0.2.md`, V2.4 form regression |
+| Release 3.0.3 default-image and online best-seller update | Released 2026-07-29; 156 passed, 1 capability skip; no migration | `VERSION_3.0.3.md`, online phases 2 and 6 |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -84,6 +85,21 @@ and detailed verification remain in their linked version documents and tests.
   iPad-size layout passed without console errors. Full suite: 153 passed with
   one existing filesystem-capability skip.
 - No schema migration and no server-side image-storage change.
+
+## Version 3.0.3 release baseline — 2026-07-29
+
+- Products without saved images use the approved local `noimage.png` asset in
+  POS, customer ordering/cart/repeat items, staff order detail, and product
+  edit views. The asset SHA-256 is pinned by a release-identity regression.
+- `/order` defaults to “สินค้าขายดี”; ranking uses all-time
+  `quantity - voided_quantity` across shared POS/online sale items. Unsold
+  products remain visible after sold products, category pages retain scope,
+  and non-empty search ignores category so it stays global.
+- Focused suite: 30 passed. Full suite: 157 tests completed—156 passed and one
+  existing filesystem-capability skip. Browser reached the local `/order` page, but
+  deeper browser inspection was not performed because its security policy
+  prohibited the connected LINE access.
+- No schema migration.
 
 ## Approved online sprint 1 verification — 2026-07-28
 

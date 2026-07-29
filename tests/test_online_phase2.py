@@ -5,6 +5,7 @@ from pathlib import Path
 from pos_app import create_app
 from pos_app.database import get_db
 from pos_app.routes.online import safe_customer_next_url
+from pos_app.services.sales import complete_sale, void_sale
 from tests.online_helpers import register_customer
 
 
@@ -38,6 +39,63 @@ class OnlinePhase2Tests(unittest.TestCase):
         self.assertNotIn("<h2>ซ่อน</h2>", html)
         self.assertNotIn("<h2>ปิด</h2>", html)
         self.assertIn("สินค้าราคา UAT", html)
+
+    def test_catalog_defaults_to_best_sellers_and_uses_default_product_image(self):
+        html = self.client.get("/order").get_data(as_text=True)
+        self.assertIn(">สินค้าขายดี</a>", html)
+        self.assertNotIn(">ทั้งหมด</a>", html)
+        self.assertIn('aria-current="page">สินค้าขายดี</a>', html)
+        self.assertIn('placeholder="ค้นหาสินค้าทุกหมวด"', html)
+        self.assertIn("/static/img/noimage.png", html)
+        self.assertTrue(
+            (Path(__file__).resolve().parents[1] / "pos_app" / "static" / "img" / "noimage.png").is_file()
+        )
+
+    def test_best_sellers_use_net_quantity_after_voids(self):
+        with self.app.app_context():
+            db = get_db()
+            zero_uuid = db.execute("SELECT product_uuid FROM products WHERE barcode='000'").fetchone()[0]
+            sale_id = complete_sale({
+                "items": [{"product_uuid": self.product_uuid, "quantity": 4}],
+                "payment_method": "cash", "amount_received_satang": 10000,
+            }, 1)[0]
+            complete_sale({
+                "items": [{"product_uuid": zero_uuid, "quantity": 2}],
+                "payment_method": "cash", "amount_received_satang": 0,
+            }, 1)
+            sale_item_id = db.execute(
+                "SELECT id FROM sale_items WHERE sale_id=?", (sale_id,)
+            ).fetchone()[0]
+            void_sale(sale_id, {
+                "void_type": "partial", "reason": "ทดสอบอันดับขายสุทธิ",
+                "items": [{"sale_item_id": sale_item_id, "quantity": 3}],
+            }, 1)
+
+        names = [row["name_th"] for row in self.client.get("/order/api/products").get_json()]
+        self.assertEqual(names[:2], ["สินค้าราคา UAT", "ออนไลน์"])
+
+    def test_search_is_global_even_when_a_category_is_in_the_url(self):
+        with self.app.app_context():
+            db = get_db()
+            original_category = db.execute("SELECT id FROM categories LIMIT 1").fetchone()[0]
+            unit = db.execute("SELECT id FROM units LIMIT 1").fetchone()[0]
+            other_category = db.execute(
+                "INSERT INTO categories(name_th,sort_order) VALUES('หมวดค้นหา',99)"
+            ).lastrowid
+            db.execute(
+                """INSERT INTO products
+                   (barcode,name_th,category_id,unit_id,price_satang,stock_quantity,is_online_available)
+                   VALUES('444','ค้นหาข้ามหมวด',?,?,1000,5,1)""",
+                (other_category, unit),
+            )
+            db.commit()
+
+        filtered = self.client.get(f"/order/api/products?category_id={other_category}").get_json()
+        self.assertEqual([row["name_th"] for row in filtered], ["ค้นหาข้ามหมวด"])
+        global_results = self.client.get(
+            f"/order/api/products?category_id={original_category}&q=ข้ามหมวด"
+        ).get_json()
+        self.assertEqual([row["name_th"] for row in global_results], ["ค้นหาข้ามหมวด"])
 
     def test_cart_uses_server_price_and_validates_stock(self):
         response = self.client.post("/order/api/cart/validate", json={"items": [{"product_uuid": self.product_uuid, "quantity": 2, "price_satang": 1}]})

@@ -100,7 +100,7 @@
         {% if item.image_path %}
         <img src="{{url_for('pos.product_image',filename=item.image_path)}}" alt="{{item.product_name_snapshot}}">
         {% else %}
-        <div class="staff-product-placeholder" aria-hidden="true">สินค้า</div>
+        <img src="{{url_for('static',filename='img/noimage.png')}}" alt="ไม่มีรูปของ {{item.product_name_snapshot}}">
         {% endif %}
         <div class="staff-item-copy">
           <strong>{{item.product_name_snapshot}}</strong>

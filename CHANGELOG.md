@@ -1,3 +1,20 @@
+# Release 3.0.3 — 2026-07-29
+
+- Added the approved local `noimage.png` default for products without a saved
+  image across POS, customer ordering, cart/repeat items, staff order detail,
+  and product edit views.
+- Replaced the online “สินค้าทั้งหมด” filter with “สินค้าขายดี” as the
+  default and ranked products by all-time net sold quantity from POS and
+  completed online sales, subtracting Void quantities.
+- Kept unsold products visible after sold products and retained global search
+  across every category.
+- Preserved the Release 3.0.1 private-LAN policy and Release 3.0.2 image upload
+  behavior. No database migration.
+- Verification: 30 focused tests passed; the full suite completed 157 tests
+  (156 passed, one existing filesystem-capability skip). Browser loaded the local
+  `/order` page, while deeper interaction was skipped because browser policy
+  prohibited the connected LINE access.
+
 # Release 3.0.2 — 2026-07-29
 
 - Fixed the product add/edit form so file selection and camera capture display
