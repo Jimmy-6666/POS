@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>นโยบายความเป็นส่วนตัว (PDPA)</title>
+<title>เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว (PDPA)</title>
 
 <style>
 body{
@@ -42,6 +42,74 @@ table th{
     font-size:14px;
     color:#666;
 }
+.back-link{
+    display:inline-flex;
+    min-height:44px;
+    margin-bottom:16px;
+    padding:8px 14px;
+    align-items:center;
+    color:#146c43;
+    border:1px solid #b8d8c6;
+    border-radius:10px;
+    text-decoration:none;
+    font-weight:700;
+}
+.back-link:hover,.back-link:focus-visible{
+    color:#fff;
+    background:#146c43;
+    outline:3px solid #146c4330;
+    outline-offset:2px;
+}
+.terms-card{
+    margin:28px 0;
+    padding:24px;
+    border:2px solid #d4a02c;
+    border-radius:14px;
+    background:#fff9e9;
+}
+.terms-card h2{
+    margin-top:0;
+}
+.terms-card li+li{
+    margin-top:8px;
+}
+.contact-notice{
+    margin:20px 0 12px;
+    padding-top:18px;
+    border-top:1px solid #e7cf93;
+}
+.policy-contacts{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px;
+}
+.policy-contact{
+    display:grid;
+    min-height:58px;
+    padding:10px 14px;
+    align-content:center;
+    color:#146c43;
+    border:1px solid #b8d8c6;
+    border-radius:12px;
+    background:#fff;
+    text-decoration:none;
+}
+.policy-contact small{
+    color:#66756d;
+}
+.policy-contact strong{
+    overflow-wrap:anywhere;
+}
+.pdpa-heading{
+    margin-top:34px;
+    padding-top:24px;
+    border-top:2px solid #e5ece8;
+}
+@media(max-width:600px){
+    .container{margin:0;padding:24px 18px;border-radius:0}
+    .terms-card{padding:18px}
+    .policy-contacts{grid-template-columns:1fr}
+}
 </style>
 
 </head>
@@ -49,10 +117,45 @@ table th{
 
 <div class="container">
 
-<h1>นโยบายความเป็นส่วนตัว (Privacy Policy)</h1>
+<a class="back-link" href="{{url_for('online.catalog')}}">← กลับไปหน้าสั่งสินค้า</a>
+
+<h1>เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว (PDPA)</h1>
 
 <p>
-ร้านแสนงาม มินิมาร์ท ("ร้านค้า", "เรา") ให้ความสำคัญกับการคุ้มครองข้อมูลส่วนบุคคลของลูกค้า
+โปรดอ่านเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัวฉบับนี้ก่อนเลือกซื้อสินค้า
+ผ่านระบบสั่งซื้อออนไลน์ของร้าน
+</p>
+
+<section class="terms-card" aria-labelledby="product-image-disclaimer">
+<h2 id="product-image-disclaimer">เงื่อนไขการใช้งานและข้อจำกัดเรื่องภาพสินค้า</h2>
+
+<ul>
+  <li><strong>บรรจุภัณฑ์ ฉลาก และรูปลักษณ์ของสินค้าอาจแตกต่างจากภาพที่แสดง</strong></li>
+  <li>ผู้ผลิตหรือผู้จัดจำหน่ายอาจปรับเปลี่ยนรูปแบบบรรจุภัณฑ์โดยไม่แจ้งให้ทราบล่วงหน้า</li>
+  <li>ปริมาณและหน่วยของสินค้าจะเป็นไปตามรายละเอียดที่ระบุในรายการสินค้าและคำสั่งซื้อ</li>
+</ul>
+
+<p class="contact-notice">
+หากได้รับสินค้าไม่ตรงกับรายการ หรือสอบถามเกี่ยวกับสินค้า
+สามารถติดต่อร้านค้าได้โดยตรงผ่านช่องทางด้านล่างนี้
+</p>
+
+<div class="policy-contacts">
+<a class="policy-contact" href="tel:{{customer_contact.phone|replace('-','')|replace(' ','')}}">
+<small>โทรศัพท์</small>
+<strong>{{customer_contact.phone}}</strong>
+</a>
+<a class="policy-contact" href="https://line.me/R/ti/p/{{customer_contact.line|urlencode}}" target="_blank" rel="noopener">
+<small>LINE</small>
+<strong>{{customer_contact.line}}</strong>
+</a>
+</div>
+</section>
+
+<h2 class="pdpa-heading">นโยบายความเป็นส่วนตัว (Privacy Policy / PDPA)</h2>
+
+<p>
+ร้าน{{customer_store_name_lines|join(' ')}} ("ร้านค้า", "เรา") ให้ความสำคัญกับการคุ้มครองข้อมูลส่วนบุคคลของลูกค้า
 ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)
 นโยบายฉบับนี้อธิบายว่าร้านค้าเก็บ ใช้ เปิดเผย และดูแลข้อมูลของท่านอย่างไร
 เมื่อท่านใช้งานระบบสั่งซื้อสินค้าออนไลน์ของร้าน
@@ -174,8 +277,8 @@ table th{
 <p>
 หากท่านมีข้อสงสัยเกี่ยวกับนโยบายความเป็นส่วนตัว
 หรือต้องการใช้สิทธิของเจ้าของข้อมูล
-กรุณาติดต่อร้านผ่านช่องทางที่ร้านประกาศไว้
-เช่น LINE Official Account หรือหมายเลขโทรศัพท์ของร้าน
+กรุณาติดต่อร้านผ่านหมายเลขโทรศัพท์ {{customer_contact.phone}}
+หรือ LINE {{customer_contact.line}}
 </p>
 
 <div class="footer">

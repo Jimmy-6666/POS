@@ -51,12 +51,31 @@ class OnlinePhase1Tests(unittest.TestCase):
         self.assertEqual(self.client.post("/order/api/account/login", json={}).status_code, 410)
 
     def test_privacy_policy_is_public_without_line_authentication(self):
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE settings SET value='@shoptest' WHERE key='online_contact_line'")
+            db.execute("UPDATE settings SET value='099-111-2222' WHERE key='online_contact_phone'")
+            db.commit()
         response = self.client.get("/order/policy")
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("นโยบายความเป็นส่วนตัว (Privacy Policy)", page)
+        self.assertIn("เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว (PDPA)", page)
+        self.assertIn("บรรจุภัณฑ์ ฉลาก และรูปลักษณ์ของสินค้าอาจแตกต่างจากภาพที่แสดง", page)
+        self.assertIn("ผู้ผลิตหรือผู้จัดจำหน่ายอาจปรับเปลี่ยนรูปแบบบรรจุภัณฑ์", page)
+        self.assertIn("ปริมาณและหน่วยของสินค้าจะเป็นไปตามรายละเอียดที่ระบุ", page)
+        self.assertIn("สามารถติดต่อร้านค้าได้โดยตรงผ่านช่องทางด้านล่างนี้", page)
+        self.assertIn('href="tel:0991112222"', page)
+        self.assertIn("099-111-2222", page)
+        self.assertIn("@shoptest", page)
         self.assertIn("ปรับปรุงล่าสุด: กรกฎาคม 2569", page)
         self.assertNotIn("online-line-auth.js", page)
+
+    def test_customer_header_has_one_combined_terms_and_pdpa_button(self):
+        page = self.client.get("/order").get_data(as_text=True)
+        self.assertEqual(page.count('class="consent-policy-button"'), 1)
+        self.assertIn('href="/order/policy"', page)
+        self.assertIn("เงื่อนไขการใช้งานและ PDPA", page)
+        self.assertIn("online.css?v=5", page)
 
     def test_catalog_loads_line_auth_without_exposing_contact_configuration(self):
         with self.app.app_context():
