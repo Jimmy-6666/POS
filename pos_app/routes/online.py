@@ -25,6 +25,11 @@ from ..services.online_orders import (
 bp = Blueprint("online", __name__, url_prefix="/order")
 
 
+@bp.get("/policy")
+def privacy_policy():
+    return render_template("online/policy.html")
+
+
 @bp.context_processor
 def customer_contact_context():
     settings = online_settings()

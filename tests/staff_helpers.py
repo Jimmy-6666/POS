@@ -8,6 +8,7 @@ def staff_login(
     *,
     headers=None,
     base_url=None,
+    environ_overrides=None,
     follow_redirects=False,
 ):
     request_options = {}
@@ -15,6 +16,8 @@ def staff_login(
         request_options["headers"] = headers
     if base_url is not None:
         request_options["base_url"] = base_url
+    if environ_overrides is not None:
+        request_options["environ_overrides"] = environ_overrides
     page = client.get("/login", **request_options)
     match = re.search(
         r'name="login_csrf_token" value="([^"]+)"',

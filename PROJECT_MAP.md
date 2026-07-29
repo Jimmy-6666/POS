@@ -29,7 +29,7 @@ Release 2.2 server. Batch files select the port and runtime root.
 | Online settings/customers/locations | `routes/online_admin.py`, online admin/customer templates |
 | Shared UI | `pos_app/templates/base.html`, `static/css/app.css`, `static/css/v2.css`, `static/js/sidebar.js` |
 | Receipt UI | `receipt.html`, `static/css/receipt.css`, `receipt-popup.js` |
-| Windows launch/display | `pos_desktop.py`, `pos_app/launcher.py`, `pos_app/display_state.py`, `start-*.bat`, `install-*.bat` |
+| Windows launch/display/network | `pos_desktop.py`, `pos_app/launcher.py`, `pos_app/display_state.py`, `production-common.ps1`, `configure-production-network.ps1`, `start-*.bat`, `install-*.bat` |
 | Production backup/recovery | `pos_app/services/backup.py`, `pos_app/services/file_sync.py`, `pos_app/services/remote_backup.py`, `pos_app/backup_cli.py`, `backup-production.ps1`, `scripts/*recovery*.ps1` |
 | VPS provisioning | `deploy/vps/*.sh` |
 | UAT fixtures | `seed_uat.py`, `start-uat.bat`, `install-uat.bat`, `uat_runtime/` (generated) |
@@ -68,6 +68,9 @@ See `MODULE_DEPENDENCIES.md` for cross-module impact.
 
 Production lifecycle files are kept at the repository root for operator use.
 They use production-common.ps1 and never modify start-uat.bat.
+
+The sanitized, crash-resumable customer-machine workflow and reusable Codex
+prompt are in `docs/CUSTOMER_MACHINE_DEPLOYMENT_PLAYBOOK_3.0.md`.
 
 The backup service is independent of Flask requests. It uses the SQLite online
 backup API, publishes only verified archives, and never restores over the

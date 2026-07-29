@@ -11,6 +11,7 @@ try {
     $context = Get-ProductionContext $InstallRoot $RuntimeRoot $Port
     $systemPython = Get-SupportedPython
     Ensure-RuntimeDirectories $context
+    Write-ProductionRuntimeConfig $context
     Ensure-VirtualEnvironment $context $systemPython
     Initialize-ProductionApplication $context
     Register-ProductionStartup $context
@@ -25,6 +26,7 @@ try {
     }
     Write-InstallationReport $context "ok" "Production installation completed."
     Write-Output "Production installation succeeded: http://127.0.0.1:$($context.Port)"
+    Write-Output "Private-LAN POS URL: http://$($context.ServerIp):$($context.Port)"
     exit 0
 } catch {
     if ($context) {

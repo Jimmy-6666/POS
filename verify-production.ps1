@@ -24,6 +24,9 @@ try {
     $backupTask = Get-ScheduledTask -TaskName $context.BackupTaskName -ErrorAction SilentlyContinue
     if ($backupTask) { throw "Legacy backup task is still registered and may create duplicate backups." }
     if (-not $report.checks.backup_schedule.ok) { throw "In-process backup schedule is invalid." }
+    if (-not $report.lan_access_enabled) { throw "Private-LAN staff access is disabled." }
+    if ($report.server_ip -ne $context.ServerIp) { throw "Runtime server IP does not match $($context.ServerIp)." }
+    if (-not (Test-ProductionServerNetwork $context)) { throw "Static POS network configuration is missing or incorrect." }
     if (-not (Test-ProductionFirewall $context)) { throw "Private-LAN firewall rule is missing or unsafe." }
     if (-not (Test-ProductionHealth $context -Attempts 3)) { throw "Health endpoint is not ready." }
     Write-Output "Production verification passed."

@@ -42,7 +42,11 @@ function Get-ProductionContext {
         InstallRoot = $resolvedInstallRoot
         RuntimeRoot = $resolvedRuntimeRoot
         Port = $Port
-        AppVersion = "3.0.0"
+        AppVersion = "3.0.1"
+        ServerIp = "192.168.0.200"
+        LanNetworks = "192.168.0.0/24"
+        DefaultGateway = "192.168.0.1"
+        DnsServers = @("8.8.8.8", "8.8.4.4")
         Python = Join-Path $resolvedInstallRoot ".venv\Scripts\python.exe"
         LockFile = Join-Path $resolvedInstallRoot "requirements.lock.txt"
         StartScript = Join-Path $resolvedInstallRoot "start-production.ps1"
@@ -62,6 +66,16 @@ function Set-ProductionEnvironment {
     $env:POS_BIND_HOST = "0.0.0.0"
     $env:POS_PRODUCTION = "1"
     $env:POS_APP_VERSION = $Context.AppVersion
+    $env:POS_SERVER_IP = $Context.ServerIp
+    $env:POS_LAN_ACCESS_ENABLED = "1"
+    $env:POS_LAN_NETWORKS = $Context.LanNetworks
+    $trustedHosts = @(
+        @($env:POS_TRUSTED_HOSTS -split ",") |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ }
+    )
+    $env:POS_TRUSTED_HOSTS = (@($trustedHosts + $Context.ServerIp + "localhost" + "127.0.0.1") |
+        Select-Object -Unique) -join ","
 }
 
 function Invoke-Checked {
@@ -103,6 +117,32 @@ function Ensure-RuntimeDirectories {
     foreach ($relative in $directories) {
         New-Item -ItemType Directory -Force -Path (Join-Path $Context.RuntimeRoot $relative) | Out-Null
     }
+}
+
+function Write-ProductionRuntimeConfig {
+    param($Context)
+    $configPath = Join-Path $Context.RuntimeRoot "config\production.json"
+    $config = [ordered]@{}
+    if (Test-Path -LiteralPath $configPath) {
+        $existing = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+        foreach ($property in $existing.PSObject.Properties) {
+            $config[$property.Name] = $property.Value
+        }
+    }
+    $config["runtime_root"] = $Context.RuntimeRoot
+    $config["bind_host"] = "0.0.0.0"
+    $config["port"] = $Context.Port
+    $config["app_version"] = $Context.AppVersion
+    $config["production"] = $true
+    $config["server_ip"] = $Context.ServerIp
+    $config["lan_access_enabled"] = $true
+    $config["lan_networks"] = $Context.LanNetworks
+    $config["default_gateway"] = $Context.DefaultGateway
+    $config["dns_servers"] = $Context.DnsServers
+    $temporary = "$configPath.tmp"
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($temporary, ($config | ConvertTo-Json -Depth 10), $encoding)
+    Move-Item -LiteralPath $temporary -Destination $configPath -Force
 }
 
 function Ensure-VirtualEnvironment {
@@ -183,6 +223,141 @@ function Test-ProductionFirewall {
     )
 }
 
+function Get-ProductionNetworkAdapter {
+    param([string]$InterfaceAlias)
+    if ($InterfaceAlias) {
+        $adapter = Get-NetAdapter -Name $InterfaceAlias -ErrorAction Stop
+        if ($adapter.Status -ne "Up") {
+            throw "Selected network adapter is not connected: $InterfaceAlias"
+        }
+        return $adapter
+    }
+    $candidates = @(
+        Get-NetIPConfiguration |
+            Where-Object {
+                $_.NetAdapter.Status -eq "Up" -and
+                $_.IPv4Address -and
+                $_.IPv4DefaultGateway
+            }
+    )
+    if ($candidates.Count -ne 1) {
+        throw "Unable to select one active LAN adapter. Re-run with -InterfaceAlias."
+    }
+    return $candidates[0].NetAdapter
+}
+
+function Set-ProductionServerNetwork {
+    param(
+        $Context,
+        [string]$InterfaceAlias,
+        [int]$PrefixLength = 24,
+        [string]$DefaultGateway = "192.168.0.1",
+        [string[]]$DnsServers = @("8.8.8.8", "8.8.4.4")
+    )
+    $adapter = Get-ProductionNetworkAdapter $InterfaceAlias
+    $addresses = @(Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction Stop)
+    $target = @($addresses | Where-Object { $_.IPAddress -eq $Context.ServerIp })
+    if (-not $target) {
+        $responds = Test-Connection -ComputerName $Context.ServerIp -Count 1 -Quiet -ErrorAction SilentlyContinue
+        $neighbor = Get-NetNeighbor -InterfaceIndex $adapter.ifIndex -IPAddress $Context.ServerIp -ErrorAction SilentlyContinue
+        $neighborInUse = $neighbor -and $neighbor.State -notin @("Unreachable", "Incomplete")
+        if ($responds -or $neighborInUse) {
+            throw "The fixed POS address $($Context.ServerIp) appears to be in use by another device."
+        }
+    }
+
+    Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -Dhcp Disabled
+    foreach ($address in $addresses) {
+        if ($address.IPAddress -ne $Context.ServerIp -and $address.PrefixOrigin -ne "WellKnown") {
+            Remove-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $address.IPAddress -Confirm:$false
+        }
+    }
+    if (-not $target -or $target[0].PrefixLength -ne $PrefixLength) {
+        foreach ($address in $target) {
+            Remove-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $address.IPAddress -Confirm:$false
+        }
+        Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+            Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+        New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $Context.ServerIp -PrefixLength $PrefixLength -DefaultGateway $DefaultGateway | Out-Null
+    } else {
+        $defaultRoutes = @(Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue)
+        $defaultRoutes | Where-Object { $_.NextHop -ne $DefaultGateway } |
+            Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+        if (-not ($defaultRoutes | Where-Object { $_.NextHop -eq $DefaultGateway })) {
+            New-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop $DefaultGateway | Out-Null
+        }
+    }
+    Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $DnsServers
+    $profile = Get-NetConnectionProfile -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue
+    if ($profile -and $profile.NetworkCategory -ne "DomainAuthenticated") {
+        $profile | Set-NetConnectionProfile -NetworkCategory Private
+    }
+    $verification = Get-ProductionServerNetworkStatus $Context $adapter.Name $PrefixLength $DefaultGateway $DnsServers
+    if (-not $verification.ok) {
+        throw "Static POS network verification failed: $($verification | ConvertTo-Json -Compress)"
+    }
+    return [pscustomobject]@{
+        interface_alias = $adapter.Name
+        server_ip = $Context.ServerIp
+        prefix_length = $PrefixLength
+        default_gateway = $DefaultGateway
+        dns_servers = $DnsServers
+    }
+}
+
+function Test-ProductionServerNetwork {
+    param(
+        $Context,
+        [string]$InterfaceAlias,
+        [int]$PrefixLength = 24,
+        [string]$DefaultGateway = "192.168.0.1",
+        [string[]]$DnsServers = @("8.8.8.8", "8.8.4.4")
+    )
+    return (Get-ProductionServerNetworkStatus $Context $InterfaceAlias $PrefixLength $DefaultGateway $DnsServers).ok
+}
+
+function Get-ProductionServerNetworkStatus {
+    param(
+        $Context,
+        [string]$InterfaceAlias,
+        [int]$PrefixLength = 24,
+        [string]$DefaultGateway = "192.168.0.1",
+        [string[]]$DnsServers = @("8.8.8.8", "8.8.4.4")
+    )
+    try {
+        $adapter = Get-ProductionNetworkAdapter $InterfaceAlias
+        $address = @(Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -IPAddress $Context.ServerIp -ErrorAction Stop) |
+            Select-Object -First 1
+        $route = @(Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction Stop |
+            Where-Object { $_.NextHop -eq $DefaultGateway })
+        $dns = @((Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction Stop).ServerAddresses)
+        $missingDns = @($DnsServers | Where-Object { $_ -notin $dns })
+        $profile = Get-NetConnectionProfile -InterfaceIndex $adapter.ifIndex -ErrorAction Stop
+        $profileIsPrivate = $profile.NetworkCategory -in @("Private", "DomainAuthenticated")
+        return [pscustomobject]@{
+            ok = (
+                [bool]$address -and
+                ($address.PrefixLength -eq $PrefixLength) -and
+                ($route.Count -gt 0) -and
+                ($missingDns.Count -eq 0) -and
+                $profileIsPrivate
+            )
+            interface_alias = $adapter.Name
+            server_ip = if ($address) { $address.IPAddress } else { $null }
+            prefix_length = if ($address) { $address.PrefixLength } else { $null }
+            default_gateway = @($route | ForEach-Object { $_.NextHop })
+            dns_servers = $dns
+            missing_dns_servers = $missingDns
+            network_category = $profile.NetworkCategory
+        }
+    } catch {
+        return [pscustomobject]@{
+            ok = $false
+            error = $_.Exception.Message
+        }
+    }
+}
+
 function Test-ProductionHealth {
     param($Context, [int]$Attempts = 20)
     for ($i = 0; $i -lt $Attempts; $i++) {
@@ -211,6 +386,9 @@ function Write-InstallationReport {
         install_root = $Context.InstallRoot
         runtime_root = $Context.RuntimeRoot
         port = $Context.Port
+        server_ip = $Context.ServerIp
+        lan_networks = $Context.LanNetworks
+        lan_url = "http://$($Context.ServerIp):$($Context.Port)"
         task_name = $Context.TaskName
         firewall_rule = $Context.FirewallName
     }

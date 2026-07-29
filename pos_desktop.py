@@ -1,4 +1,4 @@
-"""Friendly Windows launcher for Saengngam Minimart POS 3.0.0."""
+"""Friendly Windows launcher for Saengngam Minimart POS 3.0.1."""
 import ctypes
 import json
 import os
@@ -13,18 +13,22 @@ from pathlib import Path
 from ctypes import wintypes
 from tkinter import messagebox
 
-from pos_app.runtime_paths import RuntimePaths
+from pos_app.runtime_paths import DEFAULT_LAN_NETWORKS, DEFAULT_SERVER_IP, RuntimePaths, load_runtime_config
 
 
 ROOT = Path(__file__).resolve().parent
 RUNTIME_PATHS = RuntimePaths.from_root(os.environ.get("POS_RUNTIME_ROOT", ROOT / "runtime"))
 RUNTIME = RUNTIME_PATHS.root
+RUNTIME_CONFIG = load_runtime_config(ROOT, {**os.environ, "POS_RUNTIME_ROOT": str(RUNTIME)})
 STATE_FILE = RUNTIME_PATHS.display_state
 LOG_FILE = RUNTIME_PATHS.launcher_log
 PORT = int(os.environ.get("POS_PORT", "8002"))
 URL = f"http://127.0.0.1:{PORT}"
-LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 3.0.0")
-MUTEX_NAME = os.environ.get("POS_LAUNCHER_MUTEX", "SaengngamPOS30DesktopLauncher")
+SERVER_IP = os.environ.get("POS_SERVER_IP", RUNTIME_CONFIG.server_ip or DEFAULT_SERVER_IP)
+LAN_NETWORKS = os.environ.get("POS_LAN_NETWORKS", RUNTIME_CONFIG.lan_networks or DEFAULT_LAN_NETWORKS)
+LAN_URL = f"http://{SERVER_IP}:{PORT}"
+LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 3.0.1")
+MUTEX_NAME = os.environ.get("POS_LAUNCHER_MUTEX", "SaengngamPOS301DesktopLauncher")
 CREATE_NO_WINDOW = 0x08000000
 ERROR_ALREADY_EXISTS = 183
 SW_RESTORE = 9
@@ -85,7 +89,7 @@ class PosDesktop:
         header.pack(fill="x")
         header.pack_propagate(False)
         tk.Label(header, text="แสนงาม มินิมาร์ท", fg="white", bg="#0b3d2a", font=("Tahoma", 20, "bold")).pack(anchor="w", padx=24, pady=(15, 0))
-        tk.Label(header, text="POS Desktop Launcher · Version 3.0.0", fg="#cce6d5", bg="#0b3d2a", font=("Tahoma", 9)).pack(anchor="w", padx=25)
+        tk.Label(header, text="POS Desktop Launcher · Version 3.0.1", fg="#cce6d5", bg="#0b3d2a", font=("Tahoma", 9)).pack(anchor="w", padx=25)
 
         content = tk.Frame(self.root, bg="#eef4ef")
         content.pack(fill="both", expand=True, padx=24, pady=20)
@@ -93,7 +97,7 @@ class PosDesktop:
         self.status_dot.grid(row=0, column=0, sticky="w")
         self.status = tk.Label(content, text="กำลังเริ่มระบบ…", fg="#24372c", bg="#eef4ef", font=("Tahoma", 12, "bold"))
         self.status.grid(row=0, column=1, sticky="w", padx=(5, 0))
-        tk.Label(content, text=f"ที่อยู่ระบบ: {URL}", fg="#617067", bg="#eef4ef", font=("Tahoma", 10)).grid(row=1, column=0, columnspan=3, sticky="w", pady=(4, 18))
+        tk.Label(content, text=f"เครื่องหลัก: {URL} · เครื่องอื่น/iPad: {LAN_URL}", fg="#617067", bg="#eef4ef", font=("Tahoma", 10)).grid(row=1, column=0, columnspan=3, sticky="w", pady=(4, 18))
 
         self.open_button = tk.Button(content, text="เปิดหน้าร้าน", command=self.open_browser, state="disabled", bg="#176b46", fg="white", activebackground="#0d4b30", activeforeground="white", relief="flat", font=("Tahoma", 11, "bold"), padx=20, pady=11, cursor="hand2")
         self.open_button.grid(row=2, column=0, columnspan=3, sticky="ew")
@@ -122,6 +126,9 @@ class PosDesktop:
         env.update(
             POS_PORT=str(PORT), POS_RUNTIME_ROOT=str(RUNTIME),
             POS_DISPLAY_STATE_FILE=str(STATE_FILE), POS_PRINT_AGENT_TOKEN=self.print_agent_token,
+            POS_BIND_HOST="0.0.0.0", POS_SERVER_IP=SERVER_IP,
+            POS_LAN_ACCESS_ENABLED="1", POS_LAN_NETWORKS=LAN_NETWORKS,
+            POS_APP_VERSION="3.0.1",
         )
         try:
             LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -153,7 +160,7 @@ class PosDesktop:
     def server_failed(self, detail):
         self.status.config(text="ไม่สามารถเริ่มระบบได้")
         self.status_dot.config(fg="#ad2929")
-        messagebox.showerror("POS 3.0.0", f"เริ่มเซิร์ฟเวอร์ไม่สำเร็จ\n\n{detail}\n\nดูรายละเอียดที่ runtime\\launcher.log")
+        messagebox.showerror("POS 3.0.1", f"เริ่มเซิร์ฟเวอร์ไม่สำเร็จ\n\n{detail}\n\nดูรายละเอียดที่ runtime\\launcher.log")
 
     def open_browser(self):
         if not self.browser_exe:

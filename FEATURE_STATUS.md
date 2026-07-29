@@ -7,7 +7,7 @@ and detailed verification remain in their linked version documents and tests.
 | Capability | State | Main verification |
 |---|---|---|
 | Offline Flask/SQLite/Windows/LAN foundation | Implemented | phase 1 |
-| Staff auth | Pre-login CSRF; Manager/Cashier localhost-only; remote Admin host requires Admin role plus TOTP/recovery code | phase 2, 2FA, public host |
+| Staff auth | Pre-login CSRF; staff allowed on configured private LAN only; remote Admin host requires Admin role plus TOTP/recovery code | phase 2, 2FA, public host |
 | Product/catalog/images/pricing | Implemented; immutable UUID/XLSX flow, camera capture, shared menu actions, current/last receiving cost | product, XLSX, V2.4 |
 | POS, sales, receipts, void/refund | Implemented; cashier initiation requires active Manager/Admin server PIN authorization with touch Void controls | phase 3–5, V2.4 |
 | Billing customers and payment | Implemented | billing |
@@ -23,7 +23,8 @@ and detailed verification remain in their linked version documents and tests.
 | Version 2.4.1 product-form hotfix | Released 2026-07-28 | direct price, product-image layout/current preview, touch camera control |
 | Version 2.4.2 online-alert update | Released 2026-07-28 | list badge, scoped sound/polling, sidebar gesture retry, auto-refresh |
 | Release 3.0 customer-delivery hardening | Approved; 151 passed, 1 capability skip | `RELEASE_3.0.md`, `VERSION_3.0.0.md` |
-| Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6 |
+| Release 3.0.1 private-LAN access hotfix | Released 2026-07-29; 153 passed, 1 capability skip | `VERSION_3.0.1.md`, public-host/runtime tests |
+| Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
 ## Version 2.3 baseline — 2026-07-28
@@ -56,6 +57,19 @@ and detailed verification remain in their linked version documents and tests.
   recovery-bundle verification, empty-target restore, and product-image
   recovery. Physical peripherals and live Cloudflare/LINE/provider checks
   remain customer-site operational gates.
+
+## Version 3.0.1 release baseline — 2026-07-29
+
+- Staff POS login and authenticated sessions are allowed from
+  `192.168.0.0/24`; requests outside that configured private LAN remain
+  blocked. Public customer/Admin hostname isolation and remote Admin 2FA are
+  unchanged.
+- Server Wi-Fi is static `192.168.0.200/24`, gateway `192.168.0.1`, DNS
+  `8.8.8.8`/`8.8.4.4`; firewall is inbound TCP `8002`, Private profile,
+  LocalSubnet only.
+- Live runtime checks passed local and LAN `/health` plus LAN `/login`.
+  Focused suite: 29 passed; full suite: 153 passed with one existing
+  filesystem-capability skip. No schema migration.
 
 ## Approved online sprint 1 verification — 2026-07-28
 

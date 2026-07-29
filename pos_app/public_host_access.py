@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from ipaddress import ip_address
+from ipaddress import ip_address, ip_network
 from datetime import datetime, timezone
 
 from flask import abort, current_app, g, request
@@ -48,6 +48,25 @@ def is_remote_admin_request() -> bool:
 def is_local_request() -> bool:
     try:
         return ip_address(request.remote_addr or "").is_loopback
+    except ValueError:
+        return False
+
+
+def is_allowed_lan_request() -> bool:
+    """Return whether the direct client belongs to an explicitly allowed LAN."""
+
+    if is_local_request():
+        return True
+    if not current_app.config.get("POS_LAN_ACCESS_ENABLED"):
+        return False
+    try:
+        client = ip_address(request.remote_addr or "")
+        networks = (
+            ip_network(item.strip(), strict=False)
+            for item in str(current_app.config.get("POS_LAN_NETWORKS", "")).split(",")
+            if item.strip()
+        )
+        return any(client in network for network in networks)
     except ValueError:
         return False
 
@@ -103,7 +122,7 @@ def enforce_public_host_access():
             abort(404)
         return None
     if surface is None:
-        if not is_local_request() and (request.endpoint == "auth.login" or getattr(g, "staff", None)):
+        if not is_allowed_lan_request() and (request.endpoint == "auth.login" or getattr(g, "staff", None)):
             abort(403)
         return None
     if _is_admin_blocked_endpoint(request.endpoint):
