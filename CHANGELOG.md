@@ -1,3 +1,20 @@
+# Release 3.0.5 — 2026-07-30
+
+- Replaced the customer-header policy button with a required acceptance
+  checkbox on first-time LINE profile completion.
+- The terms/PDPA text is a link that opens the public combined policy in a
+  responsive modal, with normal page navigation as a no-dialog fallback.
+- Enforced acceptance on the server during the profile review/confirmation
+  flow while leaving completed customer profile edits unchanged.
+- Changed the registration labels to “ชื่อสำหรับติดต่อ (สามารถใช้ชื่อเล่นได้)”
+  and “สถานที่จัดส่ง (เปลี่ยนแปลงตอนสั่งซื้อได้)”.
+- No stored consent record or database migration.
+- Verification: 33 focused LINE-auth/online/public-host/release-identity tests
+  passed. Browser verification passed at mobile, tablet, and desktop widths
+  with no horizontal overflow; popup use leaves the checkbox unchanged. The
+  full suite completed 158 tests (157 passed, one existing
+  filesystem-capability skip).
+
 # Release 3.0.4 — 2026-07-30
 
 - Added one touch-friendly “เงื่อนไขการใช้งานและ PDPA” button to the customer

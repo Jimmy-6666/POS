@@ -10,6 +10,7 @@
     <strong class="confirmed-phone">{{pending_profile.phone}}</strong>
     <dl><div><dt>ชื่อสำหรับติดต่อ</dt><dd>{{pending_profile.registered_name}}</dd></div></dl>
     <dl><div><dt>สถานที่จัดส่ง</dt><dd>{{pending_profile.location_name}}</dd></div><div><dt>ห้อง / จุดรับ</dt><dd>{{pending_profile.room_reference}}</dd></div></dl>
+    {% if pending_profile.policy_accepted %}<p class="consent-confirmed">✓ ยอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว (PDPA) แล้ว</p>{% endif %}
     <form method="post" class="confirmation-actions">
       <input type="hidden" name="csrf_token" value="{{g.customer_session.csrf_token}}">
       <input type="hidden" name="phone" value="{{pending_profile.phone}}">
@@ -23,12 +24,27 @@
   {% else %}
   <form method="post" class="form-card">
     <input type="hidden" name="csrf_token" value="{{g.customer_session.csrf_token}}">
-    <label>ชื่อสำหรับติดต่อ<input name="registered_name" autocomplete="name" required value="{{form_values.get('registered_name', g.customer.registered_name or '')}}"></label>
+    <label>ชื่อสำหรับติดต่อ (สามารถใช้ชื่อเล่นได้)<input name="registered_name" autocomplete="name" required value="{{form_values.get('registered_name', g.customer.registered_name or '')}}"></label>
     <label>เบอร์มือถือ<input name="phone" inputmode="tel" autocomplete="tel" required value="{{form_values.get('phone', '' if g.customer.phone_normalized.startswith('line:') else g.customer.phone_normalized)}}"></label>
-    <label>สถานที่จัดส่ง<select name="delivery_location_id" required><option value="">เลือกสถานที่</option>{% for location in locations %}<option value="{{location.id}}" {% if form_values.get('delivery_location_id', g.customer.default_delivery_location_id|string)==location.id|string %}selected{% endif %}>{{location.name}}</option>{% endfor %}</select></label>
+    <label>สถานที่จัดส่ง (เปลี่ยนแปลงตอนสั่งซื้อได้)<select name="delivery_location_id" required><option value="">เลือกสถานที่</option>{% for location in locations %}<option value="{{location.id}}" {% if form_values.get('delivery_location_id', g.customer.default_delivery_location_id|string)==location.id|string %}selected{% endif %}>{{location.name}}</option>{% endfor %}</select></label>
     <label>ห้อง / วิลล่า / จุดรับ<input name="room_reference" required value="{{form_values.get('room_reference', g.customer.default_room_reference or '')}}"></label>
+    {% if not g.customer.profile_completed %}
+    <div class="profile-consent">
+      <input id="policyAccepted" name="policy_accepted" type="checkbox" value="yes" required aria-describedby="policyConsentTerms" {% if form_values.get('policy_accepted')=='yes' %}checked{% endif %}>
+      <div class="profile-consent-copy"><label for="policyAccepted">ฉันยอมรับ</label> <a id="policyConsentTerms" class="policy-popup-link" href="{{url_for('online.privacy_policy')}}" aria-haspopup="dialog" aria-controls="policyDialog">เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว (PDPA)</a></div>
+    </div>
+    {% endif %}
     <button class="primary" type="submit" name="profile_action" value="review">ดำเนินการต่อ</button>
   </form>
+  {% if not g.customer.profile_completed %}
+  <dialog id="policyDialog" class="policy-dialog" aria-labelledby="policyDialogTitle">
+    <div class="policy-dialog-heading">
+      <h2 id="policyDialogTitle">เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว (PDPA)</h2>
+      <form method="dialog"><button class="policy-dialog-close" aria-label="ปิดหน้าต่างเงื่อนไข">×</button></form>
+    </div>
+    <iframe title="เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว" src="{{url_for('online.privacy_policy',embedded=1)}}"></iframe>
+  </dialog>
+  {% endif %}
   {% endif %}
 </section>
 {% endblock %}

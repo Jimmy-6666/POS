@@ -26,7 +26,8 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0.1 private-LAN access hotfix | Released 2026-07-29; 153 passed, 1 capability skip | `VERSION_3.0.1.md`, public-host/runtime tests |
 | Release 3.0.2 product-image preview hotfix | Released 2026-07-29; 153 passed, 1 capability skip; no migration | `VERSION_3.0.2.md`, V2.4 form regression |
 | Release 3.0.3 default-image and online best-seller update | Released 2026-07-29; 156 passed, 1 capability skip; no migration | `VERSION_3.0.3.md`, online phases 2 and 6 |
-| Release 3.0.4 combined terms/PDPA notice | Implemented 2026-07-30; 157 passed, 1 capability skip; no migration | `VERSION_3.0.4.md`, online phase 1, public-host tests |
+| Release 3.0.4 combined terms/PDPA notice | Released 2026-07-30; 157 passed, 1 capability skip; no migration | `VERSION_3.0.4.md`, online phase 1, public-host tests |
+| Release 3.0.5 registration consent popup | Implemented 2026-07-30; 157 passed, 1 capability skip; no migration | `VERSION_3.0.5.md`, LINE auth, online phase 1 |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -116,6 +117,22 @@ and detailed verification remain in their linked version documents and tests.
   horizontal overflow or console warnings/errors. Full suite: 158 tests
   completed—157 passed and one existing filesystem-capability skip.
 - No schema migration.
+
+## Version 3.0.5 release baseline — 2026-07-30
+
+- First-time LINE profile completion requires acceptance of the combined terms
+  and PDPA through a server-validated checkbox.
+- The linked policy opens in a responsive modal with a standalone-page
+  fallback; the customer-header policy button is removed.
+- Registration labels clarify that a nickname is allowed and that the delivery
+  location can be changed while ordering. Existing completed profiles are not
+  asked to accept again.
+- Focused LINE-auth/online/public-host/release-identity suite: 33 passed.
+  Browser verification passed at mobile, tablet, and desktop widths without
+  horizontal overflow; the popup link does not alter checkbox state. Full
+  suite: 158 tests completed—157 passed and one existing filesystem-capability
+  skip.
+- No stored consent record and no schema migration.
 
 ## Approved online sprint 1 verification — 2026-07-28
 

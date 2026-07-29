@@ -27,7 +27,7 @@ bp = Blueprint("online", __name__, url_prefix="/order")
 
 @bp.get("/policy")
 def privacy_policy():
-    return render_template("online/policy.html")
+    return render_template("online/policy.html", embedded=request.args.get("embedded") == "1")
 
 
 @bp.context_processor
@@ -506,6 +506,7 @@ def customer_profile():
     locations = db.execute(
         "SELECT * FROM delivery_locations WHERE is_active=1 AND is_available=1 ORDER BY sort_order,name"
     ).fetchall()
+    requires_policy_acceptance = not bool(g.customer["profile_completed"])
     if request.method == "POST":
         if not valid_customer_csrf(request.form.get("csrf_token")):
             return ("คำขอไม่ถูกต้อง", 400)
@@ -514,6 +515,8 @@ def customer_profile():
             session.pop("pending_customer_profile", None)
             return render_template("online/profile.html", locations=locations, form_values=request.form)
         try:
+            if action == "review" and requires_policy_acceptance and request.form.get("policy_accepted") != "yes":
+                raise ValueError("กรุณายอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว (PDPA) ก่อนดำเนินการต่อ")
             phone = normalize_phone(request.form.get("phone"))
             registered_name = str(request.form.get("registered_name") or g.customer["registered_name"] or g.customer["line_display_name"] or g.customer["display_name"] or "").strip()[:120]
             if not registered_name:
@@ -533,6 +536,7 @@ def customer_profile():
                     "registered_name": registered_name,
                     "location_id": location_id, "location_name": location["name"],
                     "room_reference": room_reference,
+                    "policy_accepted": not requires_policy_acceptance or request.form.get("policy_accepted") == "yes",
                 }
                 session["pending_customer_profile"] = pending_profile
                 return render_template("online/profile.html", locations=locations, pending_profile=pending_profile)
@@ -545,6 +549,7 @@ def customer_profile():
                 or pending_profile["registered_name"] != registered_name
                 or pending_profile["location_id"] != location_id
                 or pending_profile["room_reference"] != room_reference
+                or (requires_policy_acceptance and not pending_profile.get("policy_accepted"))
             ):
                 flash("กรุณาตรวจสอบเบอร์อีกครั้งก่อนยืนยัน", "error")
                 return redirect(url_for("online.customer_profile"))

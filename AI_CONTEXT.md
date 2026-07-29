@@ -16,7 +16,7 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- Release 3.0.4 desktop launcher uses port `8002`, `runtime/`, and fixed server
+- Release 3.0.5 desktop launcher uses port `8002`, `runtime/`, and fixed server
   address `192.168.0.200` on the trusted `192.168.0.0/24` private LAN.
 - UAT launcher uses port `8001` and `uat_runtime/`.
 - Legacy launcher uses port `8000` and the repository root runtime.
@@ -46,7 +46,8 @@ production-ready without barcode and price approval.
 ## Current health
 
 On 2026-07-30, `python -m unittest discover -s tests -q` completed 158 tests:
-157 passed with one filesystem-capability skip, including the Release 3.0.4
+157 passed with one filesystem-capability skip, including the Release 3.0.5
+first-time registration consent popup and server validation, Release 3.0.4
 combined terms/PDPA notice, product-image disclaimer, POS-configured customer
 contact links, Release 3.0.3 default-product-image, net-best-seller,
 global-search, Release 3.0.2 product browse/camera preview, private-LAN staff login/session
@@ -89,14 +90,15 @@ No new product scope should be invented. Follow the user's next feature
 priority. If catalog deployment is selected, first complete owner approval of
 selling prices and real barcodes and make the import input path portable.
 
-Version 3.0.4 is the current customer-delivery baseline. Customer online pages
-provide one public “เงื่อนไขการใช้งานและ PDPA” link. The combined notice
-explains that packaging, labels, and appearance may differ from displayed
-images and that quantity/unit follow product and order text. It displays
-phone/LINE values from POS settings and does not
-store consent or require an acceptance checkbox. It retains Version 3.0.3
-default-image and net-best-seller behavior, Version 3.0.2 image-preview
-behavior, Version 3.0.1 private-LAN access, and Version 3.0.0 hardening.
+Version 3.0.5 is the current customer-delivery baseline. First-time LINE
+profile completion requires a server-validated acceptance checkbox whose
+policy link opens the combined terms/PDPA notice in a responsive modal. The
+former customer-header policy button is removed, and registration labels
+clarify nickname use and delivery-location changes at checkout. Acceptance is
+not stored as a database record. It retains Version 3.0.4 policy/disclaimer
+content, Version 3.0.3 default-image and net-best-seller behavior, Version
+3.0.2 image-preview behavior, Version 3.0.1 private-LAN access, and Version
+3.0.0 hardening.
 Requests outside `192.168.0.0/24` remain blocked.
 The Windows server address is static
 `192.168.0.200/24`; firewall exposure stays Private/LocalSubnet only. It also
