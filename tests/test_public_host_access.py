@@ -90,12 +90,22 @@ class PublicHostAccessTests(unittest.TestCase):
 
     def test_customer_host_allows_only_customer_routes(self):
         self.assertEqual(self.customer.get("/order", headers=self.host(ORDER_HOST)).status_code, 200)
-        self.assertEqual(self.customer.get("/order/policy", headers=self.host(ORDER_HOST)).status_code, 200)
+        standalone_policy = self.customer.get("/order/policy", headers=self.host(ORDER_HOST))
+        self.assertEqual(standalone_policy.status_code, 200)
+        self.assertEqual(standalone_policy.headers["X-Frame-Options"], "DENY")
+        self.assertIn("frame-ancestors 'none'", standalone_policy.headers["Content-Security-Policy"])
+        embedded_policy = self.customer.get("/order/policy?embedded=1", headers=self.host(ORDER_HOST))
+        self.assertEqual(embedded_policy.status_code, 200)
+        self.assertEqual(embedded_policy.headers["X-Frame-Options"], "SAMEORIGIN")
+        self.assertIn("frame-ancestors 'self'", embedded_policy.headers["Content-Security-Policy"])
         self.assertEqual(self.customer.get("/api/auth/config", headers=self.host(ORDER_HOST)).status_code, 200)
         static_response = self.customer.get("/static/css/online.css", headers=self.host(ORDER_HOST))
         self.assertEqual(static_response.status_code, 200)
         static_response.close()
-        for path in ("/login", "/", "/pos", "/online-orders", "/maintenance", "/health", "/print-agent"):
+        for path in (
+            "/login", "/", "/pos", "/products/quick-edit", "/online-orders",
+            "/maintenance", "/health", "/print-agent",
+        ):
             with self.subTest(path=path):
                 self.assertEqual(self.customer.get(path, headers=self.host(ORDER_HOST)).status_code, 404)
 

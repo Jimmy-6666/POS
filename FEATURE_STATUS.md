@@ -28,6 +28,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0.3 default-image and online best-seller update | Released 2026-07-29; 156 passed, 1 capability skip; no migration | `VERSION_3.0.3.md`, online phases 2 and 6 |
 | Release 3.0.4 combined terms/PDPA notice | Released 2026-07-30; 157 passed, 1 capability skip; no migration | `VERSION_3.0.4.md`, online phase 1, public-host tests |
 | Release 3.0.5 registration consent popup | Implemented 2026-07-30; 157 passed, 1 capability skip; no migration | `VERSION_3.0.5.md`, LINE auth, online phase 1 |
+| Release 3.0.6 quick product editor, collapsible sidebar, embedded-policy fix | Deployed 2026-07-30; 165 passed, 1 capability skip; no migration | `VERSION_3.0.6.md`, release 3.0.6, public-host tests |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -105,34 +106,33 @@ and detailed verification remain in their linked version documents and tests.
 
 ## Version 3.0.4 release baseline — 2026-07-30
 
-- Customer online pages provide one touch-friendly link to the public combined
-  terms-and-PDPA page.
-- The policy states that packaging, labels, and appearance may differ from
-  displayed images, explains that quantity/unit follow product and order text,
-  and shows phone/LINE contact values from POS settings.
-- The page remains public without LINE authentication. This release does not
-  store consent or require an acceptance checkbox.
-- Focused public-policy/public-host and release-identity suites: 25 passed.
-  Browser verification passed at desktop and mobile breakpoints with no
-  horizontal overflow or console warnings/errors. Full suite: 158 tests
-  completed—157 passed and one existing filesystem-capability skip.
+- Public combined terms/PDPA includes the product-image disclaimer and POS
+  phone/LINE contacts. It remains public without stored consent.
+- Focused: 25 passed; browser desktop/mobile passed; full suite: 157 passed,
+  one existing filesystem-capability skip.
 - No schema migration.
 
 ## Version 3.0.5 release baseline — 2026-07-30
 
-- First-time LINE profile completion requires acceptance of the combined terms
-  and PDPA through a server-validated checkbox.
-- The linked policy opens in a responsive modal with a standalone-page
-  fallback; the customer-header policy button is removed.
-- Registration labels clarify that a nickname is allowed and that the delivery
-  location can be changed while ordering. Existing completed profiles are not
-  asked to accept again.
-- Focused LINE-auth/online/public-host/release-identity suite: 33 passed.
-  Browser verification passed at mobile, tablet, and desktop widths without
-  horizontal overflow; the popup link does not alter checkbox state. Full
-  suite: 158 tests completed—157 passed and one existing filesystem-capability
-  skip.
+- First-time LINE profile completion requires a server-validated policy
+  checkbox; its link opens the responsive policy modal. Registration labels
+  include nickname and editable-delivery-location guidance.
+- Focused: 33 passed; browser mobile/tablet/desktop passed; full suite:
+  157 passed, one existing filesystem-capability skip.
 - No stored consent record and no schema migration.
+
+## Version 3.0.6 release baseline — 2026-07-30
+
+- Manager/Admin quick edit handles no-image products by exact barcode, remembers
+  whole-baht price per staff, saves transactionally with audit, and masks
+  already-imaged products as “ไม่พบสินค้า”.
+- A found product uses a compact full-viewport mobile dialog; 393×873 and
+  360×640 browser QA keep image controls, fields, and save on one screen
+  without document/form overflow.
+- Sidebar groups collapse independently. Embedded policy permits same-origin
+  framing only; all other public pages remain frame-denied.
+- See `VERSION_3.0.6.md` for fields and verification.
+- No schema migration.
 
 ## Approved online sprint 1 verification — 2026-07-28
 
