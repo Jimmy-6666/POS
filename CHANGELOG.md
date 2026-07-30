@@ -1,3 +1,64 @@
+# Release 3.0.7 — 2026-07-30
+
+- Added “สแกนด้วยกล้อง” to `/products/quick-edit`, using the bundled
+  BarcodeDetector/ZXing capability already used by stock count.
+- Extracted one shared local camera-scanner helper for quick edit and stock
+  count. It stops live streams on result, close, and page exit, prevents
+  duplicate lookup submission, and keeps manual/USB/Bluetooth entry.
+- Added automatic native photo-capture fallback for quick edit when the shop
+  LAN's HTTP origin cannot use the secure-context live camera API.
+- On phones, an eligible scan now opens a whole-baht price numpad immediately
+  while keeping product name and barcode visible. The first digit replaces
+  the remembered/current price; confirm reveals the existing one-screen editor
+  and the keypad can be reopened from the price field.
+- Fixed quick-edit image preview by moving file/camera event ownership into
+  `product-quick-edit.js` and forcing an explicit visible state.
+- Replaced the CSP-blocked quick-preview `blob:` URL with an allowed `data:`
+  URL, added stale asynchronous-read protection, and constrained preview,
+  actions, and long filenames to the mobile image grid. Cache keys are now
+  quick-edit JS `v=6` and v3.0.7 CSS `v=3`.
+- Changed quick-edit scan outcomes: an already-imaged product now shows
+  “สินค้านี้มีรูปแล้ว” before returning to scan, while an unknown barcode
+  opens the editor so Manager/Admin can create the missing product immediately.
+- Quick-created products receive a UUID, zero cost/stock, server-enforced
+  active status, and a `create_product` audit. Barcode/reference/price checks
+  and the image-eligibility recheck remain inside the write transaction.
+- Quick edit now remembers the last successful category and unit per staff in
+  addition to whole-baht price; inactive remembered references are ignored.
+  The quick-edit JavaScript cache key is now `v=5`.
+- Fixed blind stock count so an unknown barcode shows a visible error, clears
+  the rejected code, and immediately restores focus to the barcode input
+  without opening quantity entry. Successful lookup still focuses quantity.
+- Price control now treats an exact barcode as a scan loop: Enter saves once,
+  clears the completed lookup, and focuses barcode entry for the next item.
+  Name/SKU searches and failed saves retain their existing query.
+- Missing price-control searches now open a responsive add-product popup with
+  whole-baht price, Thai name, category, and unit but no image controls. Save
+  creates an active, audited UUID product with zero cost/stock and returns to
+  an empty focused scanner; duplicate protection is transactional and the
+  quick-edit workflow remains independent.
+- Price-control creation remembers only the last successful category and unit
+  per staff session. Price/name reset, inactive references are ignored, and
+  quick-edit memory keys remain separate.
+- No database migration. Focused suites: 21 passed. Full suite: 173 tests
+  completed (172 passed, one existing filesystem-capability skip); `pip check`
+  passed.
+- Browser QA at 360×640 passed first-digit replacement, multi-digit entry,
+  keypad reopen, visible product identity, and the complete editor with no
+  document/form overflow or console error. Isolated browser QA also passed the
+  stock-count focus paths. Playwright Edge under the Admin-equivalent CSP
+  passed browse/camera preview, remove/restore, a real 576×1280 JPEG with a
+  long filename, bounded columns, and zero console errors.
+- Restarted canonical Production port 8000 onto Release 3.0.7. Health is `ok`;
+  the live v3.0.7 CSS and scanner/quick-edit/stock-count/price JavaScript
+  match verified source exactly. Read-only QA preserved the current 479
+  products (362 zero-price, 463 no-image, all zero-stock, 10
+  online-enabled); SQLite quick check and foreign keys are clean.
+- Site-LAN verification is deferred because the server is temporarily on
+  another LAN. By owner instruction the accepted `192.168.0.200/24` POS
+  config remains unchanged. `SaengngamPOS-Production` is absent from Task
+  Scheduler and requires an Administrator PowerShell session to restore.
+
 # Release 3.0.6 — 2026-07-30
 
 - Added Manager/Admin “แก้ไขสินค้าด่วน” under “สินค้าและคลัง” with exact

@@ -11,5 +11,83 @@
   {% if query %}<a class="secondary-button" href="{{url_for('products.prices',category_id=selected_category)}}">ล้าง</a>{% endif %}
 </form>
 <p class="lookup-help">เครื่องสแกน USB/Bluetooth: สแกนแล้วระบบจะค้นหาให้เมื่อเครื่องส่ง Enter</p>
-<form method="post" class="form-card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="confirm"><input type="hidden" name="return_q" value="{{query}}"><input type="hidden" name="return_category_id" value="{{selected_category or ''}}"><div class="price-list">{% for product in products %}<div class="price-row"><input type="hidden" name="product_uuid" value="{{ product.product_uuid }}"><div><strong>{{ product.name_th }}</strong><small>{{ product.category_name }} · {{ product.barcode }}{% if product.sku %} · {{product.sku}}{% endif %}</small><small>ต้นทุนเฉลี่ยปัจจุบัน: {{'{:,.2f}'.format(product.cost_satang/100)}} บาท</small><small>ราคาทุนล่าสุด: {% if product.latest_cost_satang is not none %}{{'{:,.2f}'.format(product.latest_cost_satang/100)}} บาท{% else %}-{% endif %}</small></div><label>ราคาขาย (บาท)<input name="price_{{ product.product_uuid }}" type="number" min="0" step="1" value="{{ (product.price_satang/100)|round|int }}" required {% if product.product_uuid==exact_barcode_uuid %}autofocus onfocus="this.select()"{% endif %}></label></div>{% else %}<p class="empty">ไม่พบสินค้าที่ค้นหา</p>{% endfor %}</div>{% if products %}<button class="primary-button">บันทึกราคา</button>{% endif %}</form>
+<form method="post" class="form-card" data-price-save-form><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="confirm"><input type="hidden" name="return_q" value="{{query}}"><input type="hidden" name="return_category_id" value="{{selected_category or ''}}"><div class="price-list">{% for product in products %}<div class="price-row"><input type="hidden" name="product_uuid" value="{{ product.product_uuid }}"><div><strong>{{ product.name_th }}</strong><small>{{ product.category_name }} · {{ product.barcode }}{% if product.sku %} · {{product.sku}}{% endif %}</small><small>ต้นทุนเฉลี่ยปัจจุบัน: {{'{:,.2f}'.format(product.cost_satang/100)}} บาท</small><small>ราคาทุนล่าสุด: {% if product.latest_cost_satang is not none %}{{'{:,.2f}'.format(product.latest_cost_satang/100)}} บาท{% else %}-{% endif %}</small></div><label>ราคาขาย (บาท)<input name="price_{{ product.product_uuid }}" type="number" min="0" step="1" value="{{ (product.price_satang/100)|round|int }}" required {% if product.product_uuid==exact_barcode_uuid %}autofocus onfocus="this.select()" data-exact-barcode-price-input{% endif %}></label></div>{% else %}<p class="empty">ไม่พบสินค้าที่ค้นหา</p>{% endfor %}</div>{% if products %}<button class="primary-button" type="submit">บันทึกราคา</button>{% endif %}</form>
+
+{% if missing_product %}
+{% set create_price=create_form_values.get('price', 0) %}
+{% set create_name=create_form_values.get('name_th', '') %}
+{% set create_category=create_form_values.get('category_id') or default_create_category_id %}
+{% set create_unit=create_form_values.get('unit_id') or default_create_unit_id %}
+<dialog
+  id="priceMissingProductDialog"
+  class="quick-product-editor-dialog price-product-create-dialog"
+  data-price-create-dialog
+  aria-labelledby="priceMissingProductTitle"
+  open
+>
+  <header class="quick-product-editor-header">
+    <div>
+      <h2 id="priceMissingProductTitle">เพิ่มสินค้าใหม่</h2>
+      <strong class="quick-product-current-name" data-price-create-current-name>{{create_name or 'ยังไม่ได้ระบุชื่อสินค้า'}}</strong>
+      <p>ไม่พบสินค้าเดิม • บาร์โค้ด {{query}}</p>
+    </div>
+    <a
+      class="quick-product-editor-close"
+      href="{{url_for('products.prices',category_id=selected_category)}}"
+      data-price-create-close
+      aria-label="ปิดและกลับไปสแกนสินค้าชิ้นอื่น"
+    >×</a>
+  </header>
+
+  <form method="post" class="form-card quick-product-editor price-product-create-editor" data-price-create-form>
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <input type="hidden" name="action" value="create_missing">
+    <input type="hidden" name="barcode" value="{{query}}">
+    <input type="hidden" name="return_category_id" value="{{selected_category or ''}}">
+
+    <section class="quick-price-entry" data-price-create-price-entry aria-labelledby="priceCreatePriceTitle" hidden>
+      <div>
+        <span class="eyebrow dark">สินค้าใหม่ที่สแกน</span>
+        <h3 id="priceCreatePriceTitle" data-price-create-current-name>{{create_name or 'ยังไม่ได้ระบุชื่อสินค้า'}}</h3>
+        <p>กำหนดราคาขายเป็นจำนวนเต็มบาท</p>
+      </div>
+      <output class="quick-price-output" data-price-create-output for="priceCreatePrice">{{create_price}} บาท</output>
+      <div class="quick-price-numpad" aria-label="แป้นตัวเลขสำหรับกรอกราคาขาย">
+        {% for number in range(1,10) %}<button type="button" data-create-price-key="{{number}}">{{number}}</button>{% endfor %}
+        <button type="button" class="price-clear" data-create-price-action="clear">ล้าง</button>
+        <button type="button" data-create-price-key="0">0</button>
+        <button type="button" class="price-backspace" data-create-price-action="backspace" aria-label="ลบตัวเลขล่าสุด">⌫</button>
+      </div>
+      <button class="primary-button quick-price-confirm" type="button" data-price-create-confirm>ยืนยันราคาและกรอกข้อมูลต่อ</button>
+    </section>
+
+    <div class="quick-product-editor-details" data-price-create-details>
+      <div class="quick-product-fields">
+        <label class="quick-product-price">ราคาขาย (บาท)
+          <span class="quick-product-price-control">
+            <input id="priceCreatePrice" name="price" type="number" inputmode="numeric" min="0" step="1" required value="{{create_price}}" data-price-create-input autofocus>
+            <button class="secondary-button" type="button" data-price-create-open-numpad aria-label="เปิดแป้นตัวเลขกรอกราคา">⌨</button>
+          </span>
+        </label>
+        <label class="quick-product-name">ชื่อสินค้าภาษาไทย
+          <textarea name="name_th" rows="3" required data-price-create-name>{{create_name}}</textarea>
+        </label>
+        <label class="quick-product-category">หมวดสินค้า
+          <select name="category_id" required>
+            {% for row in categories %}<option value="{{row.id}}" {% if create_category|int==row.id %}selected{% endif %}>{{row.name_th}}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="quick-product-unit">หน่วย
+          <select name="unit_id" required>
+            {% for row in units %}<option value="{{row.id}}" {% if create_unit|int==row.id %}selected{% endif %}>{{row.name_th}}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+      <button id="priceMissingProductSave" class="primary-button quick-product-save" type="submit">เพิ่มสินค้า</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+
+<script src="{{url_for('static',filename='js/product-prices.js',v=2)}}"></script>
 {% endblock %}

@@ -16,13 +16,18 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- Release 3.0.6 desktop launcher uses port `8002`, `runtime/`, and fixed server
-  address `192.168.0.200` on the trusted `192.168.0.0/24` private LAN.
+- The active Release 3.0.7 Production instance uses port `8000`, `runtime/`,
+  and is configured for fixed server address `192.168.0.200` on the trusted
+  `192.168.0.0/24` private LAN. Windows currently reports
+  `192.168.1.200/24` on a Public profile because the server is temporarily on
+  another LAN; by owner instruction the accepted POS network config remains
+  unchanged and site-LAN verification is deferred.
 - UAT launcher uses port `8001` and `uat_runtime/`.
-- Legacy launcher uses port `8000` and the repository root runtime.
+- The port `8002` profile is not the canonical customer Production instance.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
-  at `/online-orders`. Products default to online-enabled; UAT permits zero-price
-  catalogue items while inactive products remain hidden.
+  at `/online-orders`. Products default to online-enabled, except the current
+  Production catalog snapshot: 479 products are active, 362 have zero price,
+  463 have no image, all have zero stock, and 10 are online-enabled.
 
 An auxiliary Makro catalog preparation pipeline lives in
 `work/makro-pos-import/`. It uses Node and Codex spreadsheet tooling only for
@@ -45,9 +50,14 @@ production-ready without barcode and price approval.
 
 ## Current health
 
-On 2026-07-30, `python -m unittest discover -s tests -q` completed 166 tests:
-165 passed with one filesystem-capability skip, including the Release 3.0.6
-quick product editor, per-staff whole-baht price memory, collapsible sidebar,
+On 2026-07-30, `python -m unittest discover -s tests -q` completed 173 tests:
+172 passed with one filesystem-capability skip, including the Release 3.0.7
+camera barcode scan, CSP-safe bounded image preview, missing-product quick
+creation, already-imaged rejection, per-staff price/category/unit memory,
+shared stock-count scanner, price-control missing-product creation with
+per-staff category/unit memory and save/refocus, mobile price numpad,
+Release 3.0.6 quick editor,
+collapsible sidebar,
 embedded-policy header fix, Release 3.0.5 registration consent, Release 3.0.4
 combined terms/PDPA notice, product-image disclaimer, POS-configured customer
 contact links, Release 3.0.3 default-product-image, net-best-seller,
@@ -60,7 +70,10 @@ regressions cover pre-login CSRF, configured private-LAN staff access, remote Ad
 host isolation and 2FA, signed-update reauthentication, and structured support
 redaction. Release 3 recovery and runtime regressions cover the full
 database-and-product-image bundle and in-process schedule validation. Flask
-3.1.3 is installed and the dependency set passes `pip check`.
+3.1.3 is installed and the dependency set passes `pip check`. Local Release
+3.0.7 runtime/health/assets pass. The expected `SaengngamPOS-Production`
+startup task is currently absent and requires an Administrator PowerShell
+session to restore.
 LINE LIFF verifies customer identity before the POS
 creates a customer session and delivery profile. Staff can add or reduce order items before picking;
 price/total changes retain the customer's confirmed price snapshot and show a
@@ -70,10 +83,10 @@ administration supports phone/name/public-ID search, admin-PIN-confirmed
 anonymizing deletion, and customer re-registration after deletion. Suspended
 LINE customers receive a stable blocked page instead of a LIFF login loop.
 
-The UAT database passes SQLite integrity and foreign-key checks. It contains
-386 products; all active products now have mock selling prices calculated as
-unit cost plus at least 20%, rounded up to the next 5 baht. Some still use
-synthetic barcodes, so this remains test/catalog-preparation data only.
+The canonical Production database contains 479 active products. The read-only
+post-deploy snapshot is 362 zero-price, 463 no-image, all zero-stock, and 10
+online-enabled products.
+SQLite quick check and foreign-key verification pass.
 
 ## Canonical references
 
@@ -87,20 +100,24 @@ synthetic barcodes, so this remains test/catalog-preparation data only.
 
 ## Default next priority
 
-No new product scope should be invented. Follow the user's next feature
-priority. If catalog deployment is selected, first complete owner approval of
-selling prices and real barcodes and make the import input path portable.
+No new product scope should be invented. The next catalog task remains
+customer selling-price entry and photography, followed by an explicit decision
+to enable selected products online.
 
-Version 3.0.6 is the current implementation baseline. Manager/Admin users can
-scan an exact barcode and quickly update image, whole-baht selling price, Thai
-name, category, and unit only while the product has no saved image. The last
-quick-edit price is remembered per signed-in staff account; already-imaged
-products use the same “ไม่พบสินค้า” flow as unknown barcodes and are rechecked
-inside the write transaction. On phones, a found product opens in a compact
-full-viewport dialog that keeps photo controls, fields, and save action on one
-screen at normal mobile heights. Sidebar sections are collapsible, with online
-orders and POS sales expanded by default. The embedded customer policy permits
-same-origin framing while every other public response remains frame-denied.
+Version 3.0.7 is the current implementation baseline. Manager/Admin quick edit
+accepts manual/USB/Bluetooth barcode input plus a shared local
+BarcodeDetector/ZXing camera action. Normal HTTP LAN access automatically
+falls back to native barcode photo capture. On phones, a found product opens
+directly to a whole-baht numpad while keeping its name and barcode visible.
+Already-imaged products are named and rejected; an unknown barcode opens the
+same editor to create an audited, active UUID product. Price, category, and
+unit memory are isolated per staff. Quick edit owns its file/camera preview
+lifecycle, uses Admin-CSP-compatible data URLs, and bounds the mobile grid;
+sidebar and embedded-policy behavior remain.
+Blind stock count keeps the barcode input active after an unknown
+scan and opens quantity input only after a successful lookup. Canonical
+port-8000 Production was restarted onto Release 3.0.7
+with live asset, database-integrity, and catalog-preservation verification.
 It retains Version 3.0.5 first-time LINE profile consent, Version 3.0.4
 policy/disclaimer content, Version 3.0.3 default-image and net-best-seller
 behavior, Version 3.0.2 image-preview behavior, Version 3.0.1 private-LAN
