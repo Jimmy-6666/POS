@@ -5,7 +5,9 @@
   const csrf = app.dataset.csrf;
   const money = (satang) => `${Math.round(satang / 100).toLocaleString('th-TH')} บาท`;
   const escapeHtml = (text) => { const node = document.createElement('div'); node.textContent = text || ''; return node.innerHTML; };
-  let products = [], cart = [], total = 0, paymentMethod = 'cash', activeCategory = '', completing = false, searchTimer, scannerTimer, scannerStream = [];
+  const manualPriceDialog = $('#manualPriceDialog');
+  const manualBarcode = 'MANUALPRICE';
+  let products = [], cart = [], total = 0, paymentMethod = 'cash', activeCategory = '', completing = false, manualPriceSaving = false, manualPriceContext = null, searchTimer, scannerTimer, scannerStream = [];
 
   // Keyboard-wedge barcode readers emit physical keyboard codes.  Those codes
   // remain stable even when Windows/iOS has a Thai keyboard layout selected.
@@ -15,7 +17,7 @@
     if (/^Key[A-Z]$/.test(code)) return code.slice(-1);
     return ({ Minus: '-', NumpadSubtract: '-', Slash: '/', NumpadDivide: '/', Period: '.', NumpadDecimal: '.' })[code] || '';
   };
-  const scannerBlocked = () => ['#paymentDialog', '#saleSuccessDialog', '#heldDialog'].some((selector) => $(selector)?.open);
+  const scannerBlocked = () => ['#manualPriceDialog', '#paymentDialog', '#saleSuccessDialog', '#heldDialog'].some((selector) => $(selector)?.open);
   const scannerEntryTarget = (target) => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
   function resetScannerStream() { scannerStream = []; clearTimeout(scannerTimer); }
   function scannerIsFast() {
@@ -27,7 +29,38 @@
     if (stream.target.setSelectionRange && stream.selectionStart !== null) stream.target.setSelectionRange(stream.selectionStart, stream.selectionEnd);
     stream.target.dispatchEvent(new Event('input', { bubbles: true }));
   }
+  function blockScannerInsideManualPrice(event) {
+    if (!manualPriceDialog.open) return false;
+    if (event.ctrlKey || event.altKey || event.metaKey || event.isComposing) {
+      resetScannerStream();
+      return true;
+    }
+    if (event.key === 'Enter') {
+      if (scannerIsFast()) {
+        const stream = scannerStream[0];
+        event.preventDefault();
+        event.stopPropagation();
+        restoreScannerTarget(stream);
+        $('#manualPriceError').textContent = 'กรุณาระบุราคาให้เสร็จก่อนสแกนสินค้าชิ้นถัดไป';
+        $('#manualPriceInput').focus({ preventScroll: true });
+      }
+      resetScannerStream();
+      return true;
+    }
+    const character = scannerCharacter(event.code);
+    if (!character || event.key.length !== 1) {
+      resetScannerStream();
+      return true;
+    }
+    if (!scannerStream.length) {
+      scannerStream.push({ code: event.code, at: performance.now(), target: event.target, value: scannerEntryTarget(event.target) ? event.target.value : '', selectionStart: scannerEntryTarget(event.target) ? event.target.selectionStart : null, selectionEnd: scannerEntryTarget(event.target) ? event.target.selectionEnd : null });
+    } else scannerStream.push({ code: event.code, at: performance.now() });
+    clearTimeout(scannerTimer);
+    scannerTimer = setTimeout(resetScannerStream, 120);
+    return true;
+  }
   function receiveScannerKey(event) {
+    if (blockScannerInsideManualPrice(event)) return;
     if (scannerBlocked() || event.ctrlKey || event.altKey || event.metaKey || event.isComposing) { resetScannerStream(); return; }
     if (event.key === 'Enter') {
       if (!scannerIsFast()) { resetScannerStream(); return; }
@@ -42,7 +75,7 @@
       lookup.value = value;
       lookup.focus({ preventScroll: true });
       clearTimeout(searchTimer);
-      addFromLookup();
+      addFromLookup({ scanner: true });
       return;
     }
     const character = scannerCharacter(event.code);
@@ -66,6 +99,13 @@
     box.textContent = text;
     box.className = `pos-message ${text ? (error ? 'error' : 'success') : ''}`;
   }
+  function playManualPriceAlert(shortPrompt = false) {
+    const audio = shortPrompt ? $('#manualPriceAudio') : $('#missingProductPriceAudio');
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+  }
   async function loadProducts() {
     try {
       const query = encodeURIComponent($('#productLookup').value.trim());
@@ -81,37 +121,86 @@
         <span class="product-info-v2"><strong>${escapeHtml(product.name_th)}</strong><b>${money(product.price_satang)}</b></span>
       </button>`).join('') || '<div class="empty-state"><span>⌕</span><strong>ไม่พบสินค้า</strong><p>ลองค้นหาด้วยชื่อ บาร์โค้ด หรือเลือกหมวดอื่น</p></div>';
   }
-  function addProduct(product) {
-    const item = cart.find((row) => row.product_uuid === product.product_uuid);
+  function openManualPrice(product, barcode, reason) {
+    if (manualPriceDialog.open || manualPriceSaving) return;
+    const normalizedBarcode = String(barcode || product?.barcode || '').trim();
+    manualPriceContext = { product: product || null, barcode: normalizedBarcode, reason };
+    $('#manualPriceProductName').textContent = reason === 'manual_price_barcode'
+      ? 'รายการระบุราคาเอง'
+      : product?.name_th || 'ไม่พบสินค้าในระบบ';
+    $('#manualPriceBarcode').textContent = `บาร์โค้ด ${normalizedBarcode}`;
+    $('#manualPriceInput').value = '';
+    $('#manualPriceError').textContent = '';
+    $('#manualPriceSubmit').disabled = false;
+    manualPriceDialog.showModal();
+    playManualPriceAlert(reason === 'manual_price_barcode');
+    setTimeout(() => $('#manualPriceInput').focus({ preventScroll: true }), 40);
+  }
+  function addProduct(product, manualPrice = null) {
+    if (!product) return;
+    if (!manualPrice && (Number(product.price_satang) <= 0 || product.barcode === manualBarcode)) {
+      openManualPrice(
+        product,
+        product.barcode,
+        product.barcode === manualBarcode ? 'manual_price_barcode' : 'zero_catalog_price',
+      );
+      return;
+    }
+    const effectivePrice = manualPrice?.price_satang ?? product.price_satang;
+    const reference = manualPrice?.reference || '';
+    const item = cart.find((row) => (
+      row.product_uuid === product.product_uuid
+      && (row.manual_price_reference || '') === reference
+    ));
     if (item) item.quantity += 1;
-    else cart.push({ product_uuid: product.product_uuid, name: product.name_th, price_satang: product.price_satang, quantity: 1, discount_satang: 0, allow_decimal: product.allow_decimal_quantity });
+    else cart.push({
+      product_uuid: product.product_uuid,
+      name: product.name_th,
+      price_satang: effectivePrice,
+      manual_price_satang: manualPrice?.price_satang ?? null,
+      manual_price_reference: reference || null,
+      manual_price_reason: manualPrice?.reason || null,
+      quantity: 1,
+      discount_satang: 0,
+      allow_decimal: product.allow_decimal_quantity,
+    });
     renderCart();
-    message(`เพิ่ม ${product.name_th} แล้ว`);
+    message(reference ? `เพิ่มรายการ ${reference} แล้ว` : `เพิ่ม ${product.name_th} แล้ว`);
     $('#productLookup').select();
   }
-  async function addFromLookup() {
+  async function addFromLookup({ scanner = false } = {}) {
     const value = $('#productLookup').value.trim();
     if (!value) return;
+    if (value.toUpperCase() === manualBarcode) {
+      openManualPrice(null, manualBarcode, 'manual_price_barcode');
+      return;
+    }
     try {
       const exactRows = await api(`/api/pos/products?barcode=${encodeURIComponent(value)}`);
       if (exactRows.length) {
         addProduct(exactRows[0]);
         $('#productLookup').value = '';
-        await loadProducts();
+        if (!manualPriceDialog.open) await loadProducts();
         return;
       }
       const matching = await api(`/api/pos/products?q=${encodeURIComponent(value)}&category_id=${activeCategory}`);
       if (matching.length === 1) {
         addProduct(matching[0]);
         $('#productLookup').value = '';
-        await loadProducts();
+        if (!manualPriceDialog.open) await loadProducts();
       } else {
         products = matching;
         renderProducts();
-        message(matching.length ? 'เลือกสินค้าจากผลการค้นหา' : 'ไม่พบสินค้านี้', !matching.length);
+        const looksLikeBarcode = /^[A-Za-z0-9][A-Za-z0-9._/-]{2,127}$/.test(value);
+        if (!matching.length && (scanner || looksLikeBarcode)) {
+          message('ไม่พบสินค้า กรุณาระบุราคา', true);
+          openManualPrice(null, value, 'missing_product');
+        } else {
+          message(matching.length ? 'เลือกสินค้าจากผลการค้นหา' : 'ไม่พบสินค้านี้', !matching.length);
+        }
       }
     } catch (error) { message(error.message, true); }
-    finally { $('#productLookup').focus(); }
+    finally { if (!manualPriceDialog.open) $('#productLookup').focus(); }
   }
   async function quote() {
     if (!cart.length) {
@@ -139,7 +228,7 @@
   function renderCart() {
     $('#cartItems').innerHTML = cart.map((item, index) => `
       <article class="cart-row-v2">
-        <div class="cart-row-main"><strong>${escapeHtml(item.name)}</strong><span>${money(item.price_satang)} × ${item.quantity}</span></div>
+        <div class="cart-row-main"><strong>${escapeHtml(item.name)}</strong>${item.manual_price_reference ? `<small>${escapeHtml(item.manual_price_reference)}</small>` : ''}<span>${money(item.price_satang)} × ${item.quantity}</span></div>
         <strong class="line-total">${money(item.price_satang * item.quantity - item.discount_satang)}</strong>
         <div class="quantity-v2"><button type="button" data-action="minus" data-i="${index}" aria-label="ลดจำนวน">−</button><input aria-label="จำนวน ${escapeHtml(item.name)}" data-action="qty" data-i="${index}" type="number" min="${item.allow_decimal ? '.001' : '1'}" step="${item.allow_decimal ? '.001' : '1'}" value="${item.quantity}"><button type="button" data-action="plus" data-i="${index}" aria-label="เพิ่มจำนวน">+</button></div>
         <div class="row-tools"><button class="remove" type="button" data-action="remove" data-i="${index}">ลบ</button></div>
@@ -192,7 +281,7 @@
       const payload = { items: cart, bill_discount_satang: 0, customer_note: $('#customerNote').value, payment_method: paymentMethod, amount_received_satang: Math.round((Number($('#receivedInput').value) || 0) * 100), payment_confirmed: paymentMethod === 'scan', billing_customer_id: $('#billingCustomer').value, billing_note: $('#billingNote').value };
       const result = await api('/api/pos/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       $('#successReceipt').textContent = result.receipt_number;
-      $('#successItems').innerHTML = reviewItems.map((item) => `<div><span>${escapeHtml(item.name)} × ${item.quantity}</span><strong>${money(item.price_satang * item.quantity - item.discount_satang)}</strong></div>`).join('');
+      $('#successItems').innerHTML = reviewItems.map((item) => `<div><span>${escapeHtml(item.manual_price_reference ? `รายการระบุราคา ${item.manual_price_reference}` : item.name)} × ${item.quantity}</span><strong>${money(item.price_satang * item.quantity - item.discount_satang)}</strong></div>`).join('');
       $('#successTotal').textContent = money(reviewTotal);
       $('#successChange').textContent = paymentMethod === 'cash' ? money(result.change_satang) : '—';
       const manualReceiptLink = $('#manualReceiptLink');
@@ -241,6 +330,60 @@
   $('#mobileCartBar').onclick = openMobileCart;
   $('#closeMobileCart').onclick = closeMobileCart;
   $('#cartBackdrop').onclick = closeMobileCart;
+  manualPriceDialog.addEventListener('cancel', (event) => event.preventDefault());
+  $('#manualPriceNumpad').addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    if (!button || manualPriceSaving) return;
+    const input = $('#manualPriceInput');
+    const current = input.value.replace(/\D/g, '');
+    if (button.dataset.manualPriceKey !== undefined) {
+      input.value = `${current}${button.dataset.manualPriceKey}`.slice(0, 7);
+    } else if (button.dataset.manualPriceAction === 'backspace') {
+      input.value = current.slice(0, -1);
+    } else if (button.dataset.manualPriceAction === 'clear') {
+      input.value = '';
+    }
+    $('#manualPriceError').textContent = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus({ preventScroll: true });
+  });
+  $('#manualPriceForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!manualPriceContext || manualPriceSaving) return;
+    manualPriceSaving = true;
+    $('#manualPriceSubmit').disabled = true;
+    $('#manualPriceError').textContent = '';
+    try {
+      const result = await api('/api/pos/manual-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          barcode: manualPriceContext.barcode,
+          price_baht: $('#manualPriceInput').value,
+        }),
+      });
+      const product = result.product;
+      const manualPrice = result.uses_catalog_price ? null : {
+        price_satang: result.manual_price_satang,
+        reference: result.manual_price_reference,
+        reason: result.manual_price_reason,
+      };
+      manualPriceDialog.close();
+      manualPriceContext = null;
+      addProduct(product, manualPrice);
+      $('#productLookup').value = '';
+      await loadProducts();
+      $('#productLookup').focus({ preventScroll: true });
+      $('#productLookup').select();
+    } catch (error) {
+      $('#manualPriceError').textContent = error.message;
+      $('#manualPriceInput').focus({ preventScroll: true });
+      $('#manualPriceInput').select();
+    } finally {
+      manualPriceSaving = false;
+      $('#manualPriceSubmit').disabled = false;
+    }
+  });
   window.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMobileCart(); });
   loadProducts();
   renderCart();

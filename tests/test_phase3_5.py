@@ -101,7 +101,7 @@ class Phase3To5Tests(unittest.TestCase):
         self.assertEqual(pos_page.status_code, 200)
         self.assertIn(b'id="productLookup"', pos_page.data)
         self.assertIn(b'id="mobileCartBar"', pos_page.data)
-        self.assertIn(b'js/pos.js?v=28', pos_page.data)
+        self.assertIn(b'js/pos.js?v=30', pos_page.data)
         self.assertIn("จัดการออเดอร์ออนไลน์".encode(), pos_page.data)
         self.assertIn(b'css/v2.css', pos_page.data)
         self.assertIn("ตั้งราคาขาย".encode(), self.client.get("/products").data)

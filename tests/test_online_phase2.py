@@ -55,13 +55,15 @@ class OnlinePhase2Tests(unittest.TestCase):
         with self.app.app_context():
             db = get_db()
             zero_uuid = db.execute("SELECT product_uuid FROM products WHERE barcode='000'").fetchone()[0]
+            db.execute("UPDATE products SET price_satang=100 WHERE product_uuid=?", (zero_uuid,))
+            db.commit()
             sale_id = complete_sale({
                 "items": [{"product_uuid": self.product_uuid, "quantity": 4}],
                 "payment_method": "cash", "amount_received_satang": 10000,
             }, 1)[0]
             complete_sale({
                 "items": [{"product_uuid": zero_uuid, "quantity": 2}],
-                "payment_method": "cash", "amount_received_satang": 0,
+                "payment_method": "cash", "amount_received_satang": 200,
             }, 1)
             sale_item_id = db.execute(
                 "SELECT id FROM sale_items WHERE sale_id=?", (sale_id,)

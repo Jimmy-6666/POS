@@ -30,6 +30,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0.5 registration consent popup | Implemented 2026-07-30; 157 passed, 1 capability skip; no migration | `VERSION_3.0.5.md`, LINE auth, online phase 1 |
 | Release 3.0.6 quick product editor, collapsible sidebar, embedded-policy fix | Deployed 2026-07-30; 165 passed, 1 capability skip; no migration | `VERSION_3.0.6.md`, release 3.0.6, public-host tests |
 | Release 3.0.7 scan/create/preview and focus workflows | Deployed 2026-07-30; 172 passed, 1 capability skip; no migration | `VERSION_3.0.7.md`, release 3.0.7, price/stock-count tests |
+| Release 3.0.8 blocking POS manual price and audit export | Deployed 2026-07-30; 178 passed, 1 capability skip; additive migration 27 | `VERSION_3.0.8.md`, release 3.0.8, sales/runtime tests |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -137,33 +138,29 @@ and detailed verification remain in their linked version documents and tests.
 
 ## Version 3.0.7 release baseline — 2026-07-30
 
-- Quick product editing adds a camera-scan action while retaining manual,
-  USB, and Bluetooth barcode entry. Quick edit and stock count share one local
-  BarcodeDetector/ZXing helper, and quick edit falls back to native photo
-  capture on normal HTTP LAN origins.
-- Mobile found-product flow opens directly to a custom whole-baht price
-  numpad with the product name/barcode pinned above it. First-digit
-  replacement and confirm/reopen remain. File/camera preview uses a CSP-safe
-  data URL and stays bounded inside the mobile image grid.
-- Already-imaged scans show their own rejection. Unknown barcodes open create
-  mode; save creates an audited active UUID product with zero cost/stock.
-  Price, category, and unit memory are isolated per staff.
-- Blind stock restores focus after unknown barcodes. Price control saves exact
-  scans on Enter; missing searches open an audited no-image create popup then
-  return to scan. Category/unit memory is per staff; price/name reset.
-- Focused suites: quick-edit 26 and price-control 7 passed. Full suite: 173
-  completed — 172 passed and one existing filesystem-capability skip.
-- Playwright Edge at 360×640 under Admin-equivalent CSP passed browse/camera
-  preview, real JPEG/long filename, remove/restore, bounded columns, and zero
-  overflow/console errors. Stock-count focus also passed; physical camera
-  focus remains a customer-device operational check.
-- Canonical port-8000 health and served-asset checks passed. Read-only QA made
-  no product save; the pre-restart 479-product snapshot and integrity remain.
-- Site-LAN verification is deferred while the server is temporarily on
-  another LAN; the owner retained configured `192.168.0.200/24`/Private
-  behavior unchanged. The startup Scheduled Task is absent and requires
-  Administrator elevation to restore.
-- No schema migration.
+- Camera barcode quick edit, a mobile whole-baht numpad, CSP-safe bounded image
+  preview, unknown-product creation, already-imaged rejection, per-staff field
+  memory, stock-count recovery, and price-control create/refocus shipped.
+- Full suite: 173 completed — 172 passed and one capability skip. Headless
+  360×640 preview/numpad/focus checks and port-8000 health/assets passed.
+- No schema migration; see `VERSION_3.0.7.md` for the retained details.
+
+## Version 3.0.8 implementation baseline — 2026-07-30
+
+- Zero-price, unknown-barcode, and `MANUALPRICE` POS lines require a blocking
+  positive whole-baht Cashier price. Local Thai audio prompts, scan suspension,
+  touch numpad, and search refocus support the next-item loop. The deployed
+  voice follow-up uses the owner-approved Thai audio at true 1.2× speed.
+- Confirmed unknown barcodes create offline-only zero-price placeholders.
+  Receipt lines store and show one-use audit-backed `MP-########` references.
+- Audit Log filters by action and exports permission/CSRF-protected UTF-8 CSV.
+  Migration 27 adds nullable unique manual-price references without rewriting
+  existing sale items.
+- Full suite: 179 completed — 178 passed and one existing capability skip.
+  Headless mobile/desktop plus Production-LAN popup, scan-lock, focus, audio,
+  and asset checks passed without confirming a price or creating a sale.
+- Production migration 27, localhost/LAN health, SQLite quick check, foreign
+  keys, and data preservation passed: 668 products and 0 sales remain.
 
 ## Online ordering operating model
 
