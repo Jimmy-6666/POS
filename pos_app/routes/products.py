@@ -271,133 +271,238 @@ def edit(product_uuid):
 @bp.route("/quick-edit", methods=("GET", "POST"))
 @permission_required("products.manage")
 def quick_edit():
-    """Scan and update only products that do not have a saved image yet."""
+    """Scan, update no-image products, or quickly create a missing product."""
 
     db = get_db()
     categories, units = reference_data()
     price_memory_key = f"quick_product_last_price_baht_{g.staff['id']}"
+    category_memory_key = f"quick_product_last_category_id_{g.staff['id']}"
+    unit_memory_key = f"quick_product_last_unit_id_{g.staff['id']}"
     remembered_price_baht = session.get(price_memory_key)
+    try:
+        remembered_price_baht = int(remembered_price_baht)
+        if remembered_price_baht < 0:
+            remembered_price_baht = None
+    except (TypeError, ValueError):
+        remembered_price_baht = None
+
+    active_category_ids = {row["id"] for row in categories}
+    active_unit_ids = {row["id"] for row in units}
+
+    def remembered_reference_id(key, active_ids):
+        try:
+            value = int(session.get(key))
+        except (TypeError, ValueError):
+            return None
+        return value if value in active_ids else None
+
+    remembered_category_id = remembered_reference_id(category_memory_key, active_category_ids)
+    remembered_unit_id = remembered_reference_id(unit_memory_key, active_unit_ids)
+
+    def new_product_stub(barcode):
+        return {
+            "product_uuid": "",
+            "barcode": barcode,
+            "name_th": "",
+            "category_id": remembered_category_id or (categories[0]["id"] if categories else 0),
+            "unit_id": remembered_unit_id or (units[0]["id"] if units else 0),
+            "price_satang": (remembered_price_baht or 0) * 100,
+            "image_path": None,
+        }
+
+    def render_quick_page(
+        *,
+        product=None,
+        form_values=None,
+        creating_new=False,
+        already_imaged=False,
+    ):
+        return render_template(
+            "product_quick_edit.html",
+            categories=categories,
+            units=units,
+            product=product,
+            form_values=form_values or {},
+            creating_new=creating_new,
+            already_imaged=already_imaged,
+            remembered_price_baht=remembered_price_baht,
+            remembered_category_id=remembered_category_id,
+            remembered_unit_id=remembered_unit_id,
+        )
+
+    def validate_quick_fields():
+        name_th = request.form.get("name_th", "").strip()
+        if not name_th:
+            raise ValueError("กรุณากรอกชื่อสินค้าภาษาไทย")
+        category_id = int(request.form.get("category_id") or 0)
+        unit_id = int(request.form.get("unit_id") or 0)
+        if category_id not in active_category_ids:
+            raise ValueError("หมวดสินค้าไม่ถูกต้อง")
+        if unit_id not in active_unit_ids:
+            raise ValueError("หน่วยสินค้าไม่ถูกต้อง")
+        price_text = request.form.get("price", "").strip()
+        try:
+            price_baht = int(price_text)
+        except (TypeError, ValueError):
+            raise ValueError("ราคาขายต้องเป็นจำนวนเต็มบาท") from None
+        if price_baht < 0:
+            raise ValueError("ราคาขายต้องไม่ติดลบ")
+        return name_th, category_id, unit_id, price_baht, price_baht * 100
+
     if request.method == "POST":
         if not valid_csrf(request.form.get("csrf_token")):
             return ("คำขอไม่ถูกต้อง", 400)
         barcode = request.form.get("barcode", "").strip()
         product_uuid = request.form.get("product_uuid", "").strip()
-        product = db.execute(
-            """SELECT * FROM products
-               WHERE product_uuid=? AND barcode=?
-                 AND COALESCE(TRIM(image_path), '')=''""",
-            (product_uuid, barcode),
+        creating_new = request.form.get("create_new") == "1"
+        if not barcode:
+            flash("กรุณากรอกบาร์โค้ดสินค้า", "error")
+            return render_quick_page()
+
+        barcode_product = db.execute(
+            "SELECT * FROM products WHERE barcode=?",
+            (barcode,),
         ).fetchone()
-        if not product:
-            return render_template(
-                "product_quick_edit.html",
-                categories=categories,
-                units=units,
-                product=None,
-                form_values={},
-                not_found=True,
-                remembered_price_baht=remembered_price_baht,
-            )
+        if barcode_product and (barcode_product["image_path"] or "").strip():
+            return render_quick_page(already_imaged=True)
+        if creating_new and barcode_product:
+            flash("พบบาร์โค้ดนี้ในระบบแล้ว กรุณาตรวจสอบและบันทึกข้อมูลต่อ", "info")
+            product = barcode_product
+            creating_new = False
+        elif creating_new:
+            product = new_product_stub(barcode)
+        else:
+            product = db.execute(
+                "SELECT * FROM products WHERE product_uuid=? AND barcode=?",
+                (product_uuid, barcode),
+            ).fetchone()
+            if not product:
+                flash("ไม่พบสินค้าที่ต้องการแก้ไข กรุณาสแกนใหม่", "error")
+                return redirect(url_for("products.quick_edit"))
 
         new_image_path = None
         try:
-            name_th = request.form.get("name_th", "").strip()
-            if not name_th:
-                raise ValueError("กรุณากรอกชื่อสินค้า")
-            category_id = int(request.form.get("category_id") or 0)
-            unit_id = int(request.form.get("unit_id") or 0)
-            if not db.execute(
-                "SELECT 1 FROM categories WHERE id=? AND is_active=1",
-                (category_id,),
-            ).fetchone():
-                raise ValueError("หมวดสินค้าไม่ถูกต้อง")
-            if not db.execute(
-                "SELECT 1 FROM units WHERE id=? AND is_active=1",
-                (unit_id,),
-            ).fetchone():
-                raise ValueError("หน่วยสินค้าไม่ถูกต้อง")
-            price_text = request.form.get("price", "").strip()
-            try:
-                price_baht = int(price_text)
-            except (TypeError, ValueError):
-                raise ValueError("ราคาขายต้องเป็นจำนวนเต็มบาท") from None
-            if price_baht < 0:
-                raise ValueError("ราคาขายต้องไม่ติดลบ")
-            price_satang = price_baht * 100
+            name_th, category_id, unit_id, price_baht, price_satang = validate_quick_fields()
 
             db.execute("BEGIN IMMEDIATE")
-            current = db.execute(
-                """SELECT * FROM products
-                   WHERE product_uuid=? AND barcode=?
-                     AND COALESCE(TRIM(image_path), '')=''""",
-                (product_uuid, barcode),
-            ).fetchone()
-            if not current:
-                db.rollback()
-                return render_template(
-                    "product_quick_edit.html",
-                    categories=categories,
-                    units=units,
-                    product=None,
-                    form_values={},
-                    not_found=True,
-                    remembered_price_baht=remembered_price_baht,
+            if creating_new:
+                if db.execute(
+                    "SELECT 1 FROM products WHERE barcode=?",
+                    (barcode,),
+                ).fetchone():
+                    db.rollback()
+                    return redirect(url_for("products.quick_edit", barcode=barcode))
+                new_image_path = save_image(submitted_product_image())
+                created_uuid = new_product_uuid()
+                db.execute(
+                    """INSERT INTO products
+                       (product_uuid,barcode,name_th,category_id,unit_id,cost_satang,
+                        price_satang,stock_quantity,minimum_stock,image_path,is_active)
+                       VALUES (?,?,?,?,?,0,?,0,0,?,1)""",
+                    (
+                        created_uuid,
+                        barcode,
+                        name_th,
+                        category_id,
+                        unit_id,
+                        price_satang,
+                        new_image_path,
+                    ),
                 )
-
-            new_image_path = save_image(submitted_product_image())
-            image_path = new_image_path or current["image_path"]
-            db.execute(
-                """UPDATE products
-                   SET name_th=?,category_id=?,unit_id=?,price_satang=?,image_path=?,
-                       updated_at=CURRENT_TIMESTAMP
-                   WHERE id=?""",
-                (name_th, category_id, unit_id, price_satang, image_path, current["id"]),
-            )
-            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-            old_value = {
-                "name_th": current["name_th"],
-                "category_id": current["category_id"],
-                "unit_id": current["unit_id"],
-                "price_satang": current["price_satang"],
-                "image_path": current["image_path"],
-            }
-            new_value = {
-                "name_th": name_th,
-                "category_id": category_id,
-                "unit_id": unit_id,
-                "price_satang": price_satang,
-                "image_path": image_path,
-            }
-            db.execute(
-                """INSERT INTO audit_logs
-                   (staff_id,action,entity_type,entity_id,old_value,new_value,ip_address,created_at)
-                   VALUES (?, 'quick_edit_product', 'product', ?, ?, ?, ?, ?)""",
-                (
-                    g.staff["id"],
-                    current["product_uuid"],
-                    json.dumps(old_value, ensure_ascii=False),
-                    json.dumps(new_value, ensure_ascii=False),
-                    request.remote_addr,
-                    now,
-                ),
-            )
-            if current["price_satang"] != price_satang:
+                now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                new_value = {
+                    "barcode": barcode,
+                    "name_th": name_th,
+                    "category_id": category_id,
+                    "unit_id": unit_id,
+                    "price_satang": price_satang,
+                    "image_path": new_image_path,
+                    "is_active": 1,
+                    "source": "quick_edit",
+                }
                 db.execute(
                     """INSERT INTO audit_logs
-                       (staff_id,action,entity_type,entity_id,old_value,new_value,ip_address,created_at)
-                       VALUES (?, 'change_price', 'product', ?, ?, ?, ?, ?)""",
+                       (staff_id,action,entity_type,entity_id,new_value,ip_address,created_at)
+                       VALUES (?, 'create_product', 'product', ?, ?, ?, ?)""",
                     (
                         g.staff["id"],
-                        current["product_uuid"],
-                        str(current["price_satang"]),
-                        str(price_satang),
+                        created_uuid,
+                        json.dumps(new_value, ensure_ascii=False),
                         request.remote_addr,
                         now,
                     ),
                 )
+                success_message = "เพิ่มสินค้าใหม่เรียบร้อยแล้ว สแกนสินค้าชิ้นถัดไปได้เลย"
+            else:
+                current = db.execute(
+                    "SELECT * FROM products WHERE product_uuid=? AND barcode=?",
+                    (product["product_uuid"], barcode),
+                ).fetchone()
+                if not current:
+                    db.rollback()
+                    flash("ไม่พบสินค้าที่ต้องการแก้ไข กรุณาสแกนใหม่", "error")
+                    return redirect(url_for("products.quick_edit"))
+                if (current["image_path"] or "").strip():
+                    db.rollback()
+                    return render_quick_page(already_imaged=True)
+
+                new_image_path = save_image(submitted_product_image())
+                image_path = new_image_path or current["image_path"]
+                db.execute(
+                    """UPDATE products
+                       SET name_th=?,category_id=?,unit_id=?,price_satang=?,image_path=?,
+                           updated_at=CURRENT_TIMESTAMP
+                       WHERE id=?""",
+                    (name_th, category_id, unit_id, price_satang, image_path, current["id"]),
+                )
+                now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                old_value = {
+                    "name_th": current["name_th"],
+                    "category_id": current["category_id"],
+                    "unit_id": current["unit_id"],
+                    "price_satang": current["price_satang"],
+                    "image_path": current["image_path"],
+                }
+                new_value = {
+                    "name_th": name_th,
+                    "category_id": category_id,
+                    "unit_id": unit_id,
+                    "price_satang": price_satang,
+                    "image_path": image_path,
+                }
+                db.execute(
+                    """INSERT INTO audit_logs
+                       (staff_id,action,entity_type,entity_id,old_value,new_value,ip_address,created_at)
+                       VALUES (?, 'quick_edit_product', 'product', ?, ?, ?, ?, ?)""",
+                    (
+                        g.staff["id"],
+                        current["product_uuid"],
+                        json.dumps(old_value, ensure_ascii=False),
+                        json.dumps(new_value, ensure_ascii=False),
+                        request.remote_addr,
+                        now,
+                    ),
+                )
+                if current["price_satang"] != price_satang:
+                    db.execute(
+                        """INSERT INTO audit_logs
+                           (staff_id,action,entity_type,entity_id,old_value,new_value,ip_address,created_at)
+                           VALUES (?, 'change_price', 'product', ?, ?, ?, ?, ?)""",
+                        (
+                            g.staff["id"],
+                            current["product_uuid"],
+                            str(current["price_satang"]),
+                            str(price_satang),
+                            request.remote_addr,
+                            now,
+                        ),
+                    )
+                success_message = "บันทึกสินค้าเรียบร้อยแล้ว สแกนสินค้าชิ้นถัดไปได้เลย"
             db.commit()
             session[price_memory_key] = price_baht
-            flash("บันทึกสินค้าเรียบร้อยแล้ว สแกนสินค้าชิ้นถัดไปได้เลย", "success")
+            session[category_memory_key] = category_id
+            session[unit_memory_key] = unit_id
+            flash(success_message, "success")
             return redirect(url_for("products.quick_edit"))
         except Exception as exc:
             db.rollback()
@@ -406,35 +511,33 @@ def quick_edit():
                     (current_app.config["RUNTIME_PATHS"].product_images / new_image_path).unlink(missing_ok=True)
                 except OSError:
                     current_app.logger.warning("Could not remove failed quick-edit image %s", new_image_path)
-            flash(str(exc), "error")
-            return render_template(
-                "product_quick_edit.html",
-                categories=categories,
-                units=units,
+            message = "บาร์โค้ดนี้มีสินค้าอยู่แล้ว กรุณาสแกนใหม่" if "UNIQUE constraint" in str(exc) else str(exc)
+            flash(message, "error")
+            return render_quick_page(
                 product=product,
                 form_values=request.form,
-                not_found=False,
-                remembered_price_baht=remembered_price_baht,
+                creating_new=creating_new,
             )
 
     barcode = request.args.get("barcode", "").strip()
     product = None
-    not_found = False
+    creating_new = False
+    already_imaged = False
     if barcode:
         product = db.execute(
-            """SELECT * FROM products
-               WHERE barcode=? AND COALESCE(TRIM(image_path), '')=''""",
+            "SELECT * FROM products WHERE barcode=?",
             (barcode,),
         ).fetchone()
-        not_found = product is None
-    return render_template(
-        "product_quick_edit.html",
-        categories=categories,
-        units=units,
+        if product and (product["image_path"] or "").strip():
+            product = None
+            already_imaged = True
+        elif product is None:
+            product = new_product_stub(barcode)
+            creating_new = True
+    return render_quick_page(
         product=product,
-        form_values={},
-        not_found=not_found,
-        remembered_price_baht=remembered_price_baht,
+        creating_new=creating_new,
+        already_imaged=already_imaged,
     )
 
 
@@ -492,6 +595,166 @@ def save_references(table):
     return redirect(url_for("products.references"))
 
 
+def price_create_memory_key(reference_name):
+    return f"price_control_create_last_{reference_name}_id_{g.staff['id']}"
+
+
+def remembered_price_create_reference(reference_name, active_ids):
+    key = price_create_memory_key(reference_name)
+    try:
+        value = int(session.get(key))
+    except (TypeError, ValueError):
+        session.pop(key, None)
+        return None
+    if value not in active_ids:
+        session.pop(key, None)
+        return None
+    return value
+
+
+def render_price_page(db, category_id, query, create_form_values=None):
+    rows = price_rows(db, category_id, query)
+    categories, units = reference_data()
+    exact_barcode_uuid = next(
+        (row["product_uuid"] for row in rows if row["barcode"] == query),
+        None,
+    ) if query else None
+    barcode_exists = db.execute(
+        "SELECT 1 FROM products WHERE barcode=?",
+        (query,),
+    ).fetchone() if query else None
+    active_category_ids = {row["id"] for row in categories}
+    active_unit_ids = {row["id"] for row in units}
+    remembered_category_id = remembered_price_create_reference(
+        "category",
+        active_category_ids,
+    )
+    remembered_unit_id = remembered_price_create_reference(
+        "unit",
+        active_unit_ids,
+    )
+    default_create_category_id = (
+        remembered_category_id
+        or (category_id if category_id in active_category_ids else None)
+        or (categories[0]["id"] if categories else 0)
+    )
+    return render_template(
+        "product_prices.html",
+        products=rows,
+        categories=categories,
+        units=units,
+        selected_category=category_id,
+        query=query,
+        exact_barcode_uuid=exact_barcode_uuid,
+        missing_product=bool(query and not rows and not barcode_exists),
+        create_form_values=create_form_values or {},
+        default_create_category_id=default_create_category_id,
+        default_create_unit_id=(
+            remembered_unit_id
+            or (units[0]["id"] if units else 0)
+        ),
+    )
+
+
+def create_missing_price_product(db):
+    barcode = request.form.get("barcode", "").strip()
+    return_category_id = request.form.get("return_category_id", type=int)
+    try:
+        name_th = request.form.get("name_th", "").strip()
+        if not barcode:
+            raise ValueError("กรุณากรอกบาร์โค้ดสินค้า")
+        if not name_th:
+            raise ValueError("กรุณากรอกชื่อสินค้าภาษาไทย")
+        try:
+            category_id = int(request.form.get("category_id") or 0)
+            unit_id = int(request.form.get("unit_id") or 0)
+        except (TypeError, ValueError):
+            raise ValueError("หมวดสินค้าและหน่วยไม่ถูกต้อง") from None
+        categories, units = reference_data()
+        if category_id not in {row["id"] for row in categories}:
+            raise ValueError("หมวดสินค้าไม่ถูกต้อง")
+        if unit_id not in {row["id"] for row in units}:
+            raise ValueError("หน่วยสินค้าไม่ถูกต้อง")
+        price_text = request.form.get("price", "").strip()
+        try:
+            price_baht = int(price_text)
+        except (TypeError, ValueError):
+            raise ValueError("ราคาขายต้องเป็นจำนวนเต็มบาท") from None
+        if price_baht < 0:
+            raise ValueError("ราคาขายต้องไม่ติดลบ")
+
+        db.execute("BEGIN IMMEDIATE")
+        if db.execute(
+            "SELECT 1 FROM products WHERE barcode=?",
+            (barcode,),
+        ).fetchone():
+            db.rollback()
+            flash("พบบาร์โค้ดนี้ในระบบแล้ว กรุณาตรวจสอบราคาสินค้าเดิม", "info")
+            return redirect(url_for("products.prices", q=barcode))
+
+        created_uuid = new_product_uuid()
+        price_satang = price_baht * 100
+        db.execute(
+            """INSERT INTO products
+               (product_uuid,barcode,name_th,category_id,unit_id,cost_satang,
+                price_satang,stock_quantity,minimum_stock,image_path,is_active)
+               VALUES (?,?,?,?,?,0,?,0,0,NULL,1)""",
+            (
+                created_uuid,
+                barcode,
+                name_th,
+                category_id,
+                unit_id,
+                price_satang,
+            ),
+        )
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        new_value = {
+            "barcode": barcode,
+            "name_th": name_th,
+            "category_id": category_id,
+            "unit_id": unit_id,
+            "price_satang": price_satang,
+            "image_path": None,
+            "is_active": 1,
+            "source": "price_control",
+        }
+        db.execute(
+            """INSERT INTO audit_logs
+               (staff_id,action,entity_type,entity_id,new_value,ip_address,created_at)
+               VALUES (?, 'create_product', 'product', ?, ?, ?, ?)""",
+            (
+                g.staff["id"],
+                created_uuid,
+                json.dumps(new_value, ensure_ascii=False),
+                request.remote_addr,
+                now,
+            ),
+        )
+        db.commit()
+        session[price_create_memory_key("category")] = category_id
+        session[price_create_memory_key("unit")] = unit_id
+        flash("เพิ่มสินค้าใหม่เรียบร้อยแล้ว สแกนสินค้าชิ้นถัดไปได้เลย", "success")
+        return redirect(url_for(
+            "products.prices",
+            category_id=return_category_id,
+        ))
+    except Exception as exc:
+        db.rollback()
+        message = (
+            "พบบาร์โค้ดนี้ในระบบแล้ว กรุณาตรวจสอบราคาสินค้าเดิม"
+            if "UNIQUE constraint" in str(exc)
+            else str(exc)
+        )
+        flash(message, "error")
+        return render_price_page(
+            db,
+            return_category_id,
+            barcode,
+            create_form_values=request.form,
+        )
+
+
 @bp.route("/prices", methods=("GET", "POST"))
 @permission_required("products.manage")
 def prices():
@@ -499,12 +762,19 @@ def prices():
     if request.method == "POST":
         if not valid_csrf(request.form.get("csrf_token")):
             return ("คำขอไม่ถูกต้อง", 400)
+        if request.form.get("action") == "create_missing":
+            return create_missing_price_product(db)
         changes=[]
+        submitted_barcodes = []
+        return_query = request.form.get("return_q", "").strip()
+        save_succeeded = False
         try:
             for product_uuid in request.form.getlist("product_uuid"):
                 price = baht_to_satang(request.form.get(f"price_{product_uuid}"))
                 old = product_by_uuid(db, product_uuid)
-                if old and old["price_satang"] != price:changes.append({"product_uuid":old["product_uuid"],"name":old["name_th"],"barcode":old["barcode"],"old":old["price_satang"],"new":price})
+                if old:
+                    submitted_barcodes.append(old["barcode"])
+                    if old["price_satang"] != price:changes.append({"product_uuid":old["product_uuid"],"name":old["name_th"],"barcode":old["barcode"],"old":old["price_satang"],"new":price})
             if request.form.get("action")!="confirm":
                 return render_template("product_price_confirm.html",changes=changes)
             db.execute("BEGIN IMMEDIATE")
@@ -518,24 +788,24 @@ def prices():
                         (g.staff["id"], change["product_uuid"], str(current[0]), str(change["new"]), request.remote_addr, datetime.now(timezone.utc).isoformat(timespec="seconds")),
                     )
             db.commit()
+            save_succeeded = True
             flash(f"บันทึกราคาขาย {len(changes)} รายการเรียบร้อยแล้ว", "success")
         except Exception as exc:
             db.rollback()
             flash(str(exc), "error")
+        return_to_scan = (
+            save_succeeded
+            and len(submitted_barcodes) == 1
+            and submitted_barcodes[0] == return_query
+        )
         return redirect(url_for(
             "products.prices",
-            q=request.form.get("return_q", "").strip() or None,
+            q=None if return_to_scan else return_query or None,
             category_id=request.form.get("return_category_id", type=int),
         ))
     category_id = request.args.get("category_id", type=int)
     query = request.args.get("q", "").strip()
-    rows = price_rows(db, category_id, query)
-    categories = db.execute("SELECT id,name_th FROM categories WHERE is_active=1 ORDER BY sort_order,name_th").fetchall()
-    exact_barcode_uuid = next((row["product_uuid"] for row in rows if row["barcode"] == query), None) if query else None
-    return render_template(
-        "product_prices.html", products=rows, categories=categories,
-        selected_category=category_id, query=query, exact_barcode_uuid=exact_barcode_uuid,
-    )
+    return render_price_page(db, category_id, query)
 
 
 def price_rows(db, category_id, query):

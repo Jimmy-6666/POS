@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 import zipfile
@@ -70,9 +71,134 @@ class Phase6To10Tests(unittest.TestCase):
         self.assertIn('ค้นหา / สแกนบาร์โค้ด',price_page)
         self.assertIn(f'name="price_{self.product_uuid}"',price_page)
         self.assertIn('autofocus onfocus="this.select()"',price_page)
+        self.assertIn('data-exact-barcode-price-input',price_page)
+        self.assertIn('js/product-prices.js?v=2',price_page)
         save=self.client.post('/products/prices',data={'csrf_token':self.csrf,'action':'confirm','product_uuid':self.product_uuid,f'price_{self.product_uuid}':'25','return_q':'20001'});self.assertEqual(save.status_code,302)
-        self.assertIn('q=20001',save.headers['Location'])
+        self.assertEqual(save.headers['Location'],'/products/prices')
         with self.app.app_context():self.assertEqual(get_db().execute("SELECT price_satang FROM products WHERE id=1").fetchone()[0],2500)
+        scan_page=self.client.get(save.headers['Location']).get_data(as_text=True)
+        self.assertIn('name="q" value=""',scan_page)
+        self.assertIn('autocomplete="off" autofocus',scan_page)
+        with self.app.app_context():
+            get_db().execute("UPDATE products SET sku='SKU-20001' WHERE id=1")
+            get_db().commit()
+        sku_page=self.client.get('/products/prices?q=SKU-20001').get_data(as_text=True)
+        self.assertNotIn('data-exact-barcode-price-input',sku_page)
+        sku_save=self.client.post('/products/prices',data={'csrf_token':self.csrf,'action':'confirm','product_uuid':self.product_uuid,f'price_{self.product_uuid}':'26','return_q':'SKU-20001'});self.assertEqual(sku_save.status_code,302)
+        self.assertIn('q=SKU-20001',sku_save.headers['Location'])
+
+    def test_price_control_missing_product_popup_creates_without_image(self):
+        with self.app.app_context():
+            db=get_db()
+            default_category_id=db.execute("SELECT id FROM categories WHERE is_active=1 ORDER BY sort_order,name_th LIMIT 1").fetchone()[0]
+            default_unit_id=db.execute("SELECT id FROM units WHERE is_active=1 ORDER BY sort_order,name_th LIMIT 1").fetchone()[0]
+            category_id=db.execute(
+                "INSERT INTO categories(name_th,sort_order) VALUES('หมวดจำจากควบคุมราคา',999)"
+            ).lastrowid
+            unit_id=db.execute(
+                "INSERT INTO units(name_th,sort_order) VALUES('หน่วยจำจากควบคุมราคา',999)"
+            ).lastrowid
+            manager_role_id=db.execute("SELECT id FROM roles WHERE code='manager'").fetchone()[0]
+            manager_id=db.execute(
+                "INSERT INTO staff(display_name,pin_hash,role_id,must_change_pin) VALUES(?,?,?,0)",
+                ('Price Memory Manager',generate_password_hash('4321'),manager_role_id),
+            ).lastrowid
+            db.commit()
+        missing_page=self.client.get('/products/prices?q=price-control-new').get_data(as_text=True)
+        self.assertIn('id="priceMissingProductDialog"',missing_page)
+        self.assertIn('name="action" value="create_missing"',missing_page)
+        self.assertIn('name="barcode" value="price-control-new"',missing_page)
+        self.assertIn('ชื่อสินค้าภาษาไทย',missing_page)
+        self.assertIn('data-price-create-price-entry',missing_page)
+        self.assertNotIn('name="image"',missing_page)
+        self.assertNotIn('name="camera_image"',missing_page)
+        self.assertIn('js/product-prices.js?v=2',missing_page)
+
+        invalid=self.client.post('/products/prices',data={
+            'csrf_token':self.csrf,'action':'create_missing','barcode':'price-control-new',
+            'name_th':'สินค้าเพิ่มจากควบคุมราคา','price':'20.50',
+            'category_id':category_id,'unit_id':unit_id,'return_category_id':category_id,
+        })
+        self.assertEqual(invalid.status_code,200)
+        invalid_html=invalid.get_data(as_text=True)
+        self.assertIn('ราคาขายต้องเป็นจำนวนเต็มบาท',invalid_html)
+        self.assertIn('สินค้าเพิ่มจากควบคุมราคา',invalid_html)
+        self.assertIn('id="priceMissingProductDialog"',invalid_html)
+        before_success=self.client.get('/products/prices?q=price-control-before-success').get_data(as_text=True)
+        self.assertNotIn(f'<option value="{category_id}" selected>',before_success)
+        self.assertNotIn(f'<option value="{unit_id}" selected>',before_success)
+
+        created=self.client.post('/products/prices',data={
+            'csrf_token':self.csrf,'action':'create_missing','barcode':'price-control-new',
+            'name_th':'สินค้าเพิ่มจากควบคุมราคา','price':'27',
+            'category_id':category_id,'unit_id':unit_id,'return_category_id':category_id,
+        })
+        self.assertEqual(created.status_code,302)
+        self.assertIn('/products/prices',created.headers['Location'])
+        self.assertIn(f'category_id={category_id}',created.headers['Location'])
+        self.assertNotIn('q=',created.headers['Location'])
+        clean_page=self.client.get(created.headers['Location']).get_data(as_text=True)
+        self.assertIn('autocomplete="off" autofocus',clean_page)
+        self.assertNotIn('id="priceMissingProductDialog"',clean_page)
+        remembered_page=self.client.get('/products/prices?q=price-control-next').get_data(as_text=True)
+        self.assertIn(f'<option value="{category_id}" selected>หมวดจำจากควบคุมราคา</option>',remembered_page)
+        self.assertIn(f'<option value="{unit_id}" selected>หน่วยจำจากควบคุมราคา</option>',remembered_page)
+        self.assertIn('required value="0" data-price-create-input',remembered_page)
+
+        with self.app.app_context():
+            db=get_db()
+            product=db.execute(
+                """SELECT product_uuid,name_th,price_satang,cost_satang,stock_quantity,
+                          image_path,is_active
+                   FROM products WHERE barcode='price-control-new'"""
+            ).fetchone()
+            self.assertEqual(product["name_th"],'สินค้าเพิ่มจากควบคุมราคา')
+            self.assertEqual(product["price_satang"],2700)
+            self.assertEqual(product["cost_satang"],0)
+            self.assertEqual(product["stock_quantity"],0)
+            self.assertIsNone(product["image_path"])
+            self.assertEqual(product["is_active"],1)
+            audit=db.execute(
+                """SELECT new_value FROM audit_logs
+                   WHERE action='create_product' AND entity_id=? ORDER BY id DESC LIMIT 1""",
+                (product["product_uuid"],),
+            ).fetchone()
+            self.assertEqual(json.loads(audit["new_value"])["source"],"price_control")
+
+        duplicate=self.client.post('/products/prices',data={
+            'csrf_token':self.csrf,'action':'create_missing','barcode':'20001',
+            'name_th':'ห้ามสร้างซ้ำ','price':'30',
+            'category_id':category_id,'unit_id':unit_id,
+        })
+        self.assertEqual(duplicate.status_code,302)
+        self.assertIn('q=20001',duplicate.headers['Location'])
+        with self.app.app_context():
+            self.assertEqual(get_db().execute("SELECT COUNT(*) FROM products WHERE barcode='20001'").fetchone()[0],1)
+
+        quick_edit=self.client.get('/products/quick-edit?barcode=quick-edit-stays-independent').get_data(as_text=True)
+        self.assertIn('name="image"',quick_edit)
+        self.assertIn('name="camera_image"',quick_edit)
+        self.assertNotIn(f'<option value="{category_id}" selected>',quick_edit)
+        self.assertNotIn(f'<option value="{unit_id}" selected>',quick_edit)
+
+        manager=self.app.test_client()
+        self.assertEqual(staff_login(manager,manager_id,'4321').status_code,302)
+        manager_page=manager.get('/products/prices?q=price-control-manager').get_data(as_text=True)
+        self.assertNotIn(f'<option value="{category_id}" selected>',manager_page)
+        self.assertNotIn(f'<option value="{unit_id}" selected>',manager_page)
+
+        with self.app.app_context():
+            db=get_db()
+            db.execute("UPDATE categories SET is_active=0 WHERE id=?",(category_id,))
+            db.execute("UPDATE units SET is_active=0 WHERE id=?",(unit_id,))
+            db.commit()
+        inactive_page=self.client.get('/products/prices?q=price-control-inactive-memory').get_data(as_text=True)
+        inactive_category_select=inactive_page.split('<select name="category_id" required>',1)[1].split('</select>',1)[0]
+        inactive_unit_select=inactive_page.split('<select name="unit_id" required>',1)[1].split('</select>',1)[0]
+        self.assertNotIn(f'<option value="{category_id}"',inactive_category_select)
+        self.assertNotIn(f'<option value="{unit_id}"',inactive_unit_select)
+        self.assertIn(f'<option value="{default_category_id}" selected>',inactive_category_select)
+        self.assertIn(f'<option value="{default_unit_id}" selected>',inactive_unit_select)
 
     def test_product_edit_can_change_price_without_price_shortcut(self):
         edit_page=self.client.get(f'/products/{self.product_uuid}/edit').get_data(as_text=True)

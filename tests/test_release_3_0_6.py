@@ -30,6 +30,12 @@ class Release306Tests(unittest.TestCase):
             self.unit_id = db.execute(
                 "SELECT id FROM units WHERE is_active=1 ORDER BY id LIMIT 1"
             ).fetchone()[0]
+            self.remembered_category_id = db.execute(
+                "INSERT INTO categories(name_th,sort_order) VALUES('หมวดที่ใช้ต่อเนื่อง',999)"
+            ).lastrowid
+            self.remembered_unit_id = db.execute(
+                "INSERT INTO units(name_th,sort_order) VALUES('หน่วยที่ใช้ต่อเนื่อง',999)"
+            ).lastrowid
             db.execute(
                 """INSERT INTO products
                    (barcode,name_th,category_id,unit_id,cost_satang,price_satang,image_path)
@@ -81,20 +87,28 @@ class Release306Tests(unittest.TestCase):
             ).fetchone()[0]
         return client, csrf
 
-    def quick_payload(self, csrf, *, product_uuid=None, barcode="quick-blank"):
+    def quick_payload(
+        self,
+        csrf,
+        *,
+        product_uuid=None,
+        barcode="quick-blank",
+        create_new=False,
+    ):
         return {
             "csrf_token": csrf,
-            "product_uuid": product_uuid or self.blank_uuid,
+            "product_uuid": "" if create_new else (product_uuid or self.blank_uuid),
             "barcode": barcode,
+            "create_new": "1" if create_new else "0",
             "price": "20",
             "name_th": "ชื่อสินค้าที่แก้แบบด่วน",
             "category_id": str(self.category_id),
             "unit_id": str(self.unit_id),
         }
 
-    def assert_not_found_dialog(self, html):
-        self.assertIn('id="quickProductNotFound"', html)
-        self.assertIn("ไม่พบสินค้า", html)
+    def assert_already_imaged_dialog(self, html):
+        self.assertIn('id="quickProductAlreadyImaged"', html)
+        self.assertIn("สินค้านี้มีรูปแล้ว", html)
         self.assertIn('type="submit" autofocus>ยืนยัน</button>', html)
         self.assertNotIn('data-quick-product-form', html)
 
@@ -125,8 +139,8 @@ class Release306Tests(unittest.TestCase):
         self.assertIn('data-quick-product-dialog', found)
         self.assertIn('aria-labelledby="quickProductEditorTitle"', found)
         self.assertIn('aria-label="ปิดและกลับไปสแกนสินค้าชิ้นอื่น"', found)
-        self.assertIn("product-form.js?v=3", found)
-        self.assertIn("product-quick-edit.js?v=2", found)
+        self.assertNotIn("product-form.js", found)
+        self.assertIn("product-quick-edit.js?v=6", found)
 
         quick_edit_js = (
             Path(self.app.static_folder) / "js" / "product-quick-edit.js"
@@ -135,7 +149,7 @@ class Release306Tests(unittest.TestCase):
         self.assertIn("editorDialog.showModal()", quick_edit_js)
         self.assertIn("quick-product-modal-open", quick_edit_js)
 
-    def test_unknown_and_already_imaged_barcodes_have_the_same_not_found_result(self):
+    def test_unknown_barcode_opens_new_product_editor_and_imaged_product_is_blocked(self):
         admin, _ = self.client_for()
         unknown = admin.get(
             "/products/quick-edit",
@@ -145,9 +159,52 @@ class Release306Tests(unittest.TestCase):
             "/products/quick-edit",
             query_string={"barcode": "quick-imaged"},
         ).get_data(as_text=True)
-        self.assert_not_found_dialog(unknown)
-        self.assert_not_found_dialog(imaged)
-        self.assertNotIn("สินค้ามีรูปแล้ว", imaged)
+        self.assertIn("เพิ่มสินค้าใหม่", unknown)
+        self.assertIn("ไม่พบสินค้าเดิม", unknown)
+        self.assertIn('name="product_uuid" value=""', unknown)
+        self.assertIn('name="barcode" value="missing-product"', unknown)
+        self.assertIn('name="create_new" value="1"', unknown)
+        self.assertIn("ชื่อสินค้าภาษาไทย", unknown)
+        self.assertIn('value="0" id="quickProductPrice"', unknown)
+        self.assertIn('data-quick-product-form', unknown)
+        self.assertNotIn('id="quickProductAlreadyImaged"', unknown)
+        self.assert_already_imaged_dialog(imaged)
+
+    def test_unknown_barcode_can_be_saved_as_an_active_new_product(self):
+        admin, csrf = self.client_for()
+        payload = self.quick_payload(
+            csrf,
+            barcode="quick-created",
+            create_new=True,
+        )
+        payload["name_th"] = "สินค้าเพิ่มใหม่แบบด่วน"
+        response = admin.post("/products/quick-edit", data=payload)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/products/quick-edit"))
+        with self.app.app_context():
+            db = get_db()
+            product = db.execute(
+                """SELECT product_uuid,name_th,category_id,unit_id,price_satang,
+                          stock_quantity,cost_satang,is_active,image_path
+                   FROM products WHERE barcode='quick-created'"""
+            ).fetchone()
+            self.assertIsNotNone(product)
+            self.assertTrue(product["product_uuid"])
+            self.assertEqual(product["name_th"], "สินค้าเพิ่มใหม่แบบด่วน")
+            self.assertEqual(product["category_id"], self.category_id)
+            self.assertEqual(product["unit_id"], self.unit_id)
+            self.assertEqual(product["price_satang"], 2000)
+            self.assertEqual(product["stock_quantity"], 0)
+            self.assertEqual(product["cost_satang"], 0)
+            self.assertEqual(product["is_active"], 1)
+            self.assertIsNone(product["image_path"])
+            audit = db.execute(
+                """SELECT new_value FROM audit_logs
+                   WHERE action='create_product' AND entity_id=? ORDER BY id DESC LIMIT 1""",
+                (product["product_uuid"],),
+            ).fetchone()
+            self.assertEqual(json.loads(audit["new_value"])["source"], "quick_edit")
+            self.assertEqual(json.loads(audit["new_value"])["is_active"], 1)
 
     def test_quick_edit_saves_image_and_fields_then_returns_to_scanner(self):
         admin, csrf = self.client_for()
@@ -187,17 +244,28 @@ class Release306Tests(unittest.TestCase):
             "/products/quick-edit",
             query_string={"barcode": "quick-blank"},
         ).get_data(as_text=True)
-        self.assert_not_found_dialog(repeat)
+        self.assert_already_imaged_dialog(repeat)
 
-    def test_last_integer_baht_price_is_remembered_per_logged_in_staff(self):
+    def test_last_price_category_and_unit_are_remembered_per_logged_in_staff(self):
         admin, csrf = self.client_for()
-        response = admin.post("/products/quick-edit", data=self.quick_payload(csrf))
+        payload = self.quick_payload(csrf)
+        payload["category_id"] = str(self.remembered_category_id)
+        payload["unit_id"] = str(self.remembered_unit_id)
+        response = admin.post("/products/quick-edit", data=payload)
         self.assertEqual(response.status_code, 302)
         admin_next = admin.get(
             "/products/quick-edit",
             query_string={"barcode": "quick-next"},
         ).get_data(as_text=True)
         self.assertIn('name="price" type="number" inputmode="numeric" min="0" step="1" required value="20"', admin_next)
+        self.assertIn(
+            f'<option value="{self.remembered_category_id}" selected>หมวดที่ใช้ต่อเนื่อง</option>',
+            admin_next,
+        )
+        self.assertIn(
+            f'<option value="{self.remembered_unit_id}" selected>หน่วยที่ใช้ต่อเนื่อง</option>',
+            admin_next,
+        )
 
         manager, _ = self.client_for(self.manager_id, "4321")
         manager_next = manager.get(
@@ -205,6 +273,14 @@ class Release306Tests(unittest.TestCase):
             query_string={"barcode": "quick-next"},
         ).get_data(as_text=True)
         self.assertIn('name="price" type="number" inputmode="numeric" min="0" step="1" required value="7"', manager_next)
+        self.assertNotIn(
+            f'<option value="{self.remembered_category_id}" selected>',
+            manager_next,
+        )
+        self.assertNotIn(
+            f'<option value="{self.remembered_unit_id}" selected>',
+            manager_next,
+        )
 
     def test_quick_edit_rejects_satang_input(self):
         admin, csrf = self.client_for()
@@ -231,7 +307,7 @@ class Release306Tests(unittest.TestCase):
         )
         response = admin.post("/products/quick-edit", data=payload)
         self.assertEqual(response.status_code, 200)
-        self.assert_not_found_dialog(response.get_data(as_text=True))
+        self.assert_already_imaged_dialog(response.get_data(as_text=True))
         with self.app.app_context():
             product = get_db().execute(
                 "SELECT name_th,price_satang,image_path FROM products WHERE product_uuid=?",

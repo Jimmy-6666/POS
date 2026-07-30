@@ -29,6 +29,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0.4 combined terms/PDPA notice | Released 2026-07-30; 157 passed, 1 capability skip; no migration | `VERSION_3.0.4.md`, online phase 1, public-host tests |
 | Release 3.0.5 registration consent popup | Implemented 2026-07-30; 157 passed, 1 capability skip; no migration | `VERSION_3.0.5.md`, LINE auth, online phase 1 |
 | Release 3.0.6 quick product editor, collapsible sidebar, embedded-policy fix | Deployed 2026-07-30; 165 passed, 1 capability skip; no migration | `VERSION_3.0.6.md`, release 3.0.6, public-host tests |
+| Release 3.0.7 scan/create/preview and focus workflows | Deployed 2026-07-30; 172 passed, 1 capability skip; no migration | `VERSION_3.0.7.md`, release 3.0.7, price/stock-count tests |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -134,41 +135,40 @@ and detailed verification remain in their linked version documents and tests.
 - See `VERSION_3.0.6.md` for fields and verification.
 - No schema migration.
 
-## Approved online sprint 1 verification — 2026-07-28
+## Version 3.0.7 release baseline — 2026-07-30
 
-- Customer item layout, five-stage progress, payment-status removal, and
-  two-link customer header are covered by an added online phase 3 regression.
-- `python -m unittest tests.test_online_phase1 tests.test_online_phase2 tests.test_online_phase3 tests.test_online_phase4 tests.test_online_phase5 tests.test_online_phase6 -v`: 33 passed.
-
-## Approved online sprint 1.1 verification — 2026-07-28
-
-- Added online phase 3–4 regressions for the customer refresh/cancelled
-  display, hidden availability with both online negative-stock modes, and the
-  staff cancellation confirmation/transaction path.
-- Focused phase 3–4: 16 passed; full online phases 1–6: 33 passed.
-
-## Approved online sprint 2 verification — 2026-07-28
-
-- Added phase 4–5 regressions for Thai staff-list status/payment labels and
-  reconciliation card ordering after barcode and manual confirmation.
-- Focused phase 4–5: 8 passed; full suite: 119 passed.
-
-## Approved online sprint 3 verification — 2026-07-28
-
-- POS alert UI now presents submitted-order count and attention at the online
-  order shortcut instead of the sidebar. Local looping audio uses the existing
-  15-second summary poll, mute preference, and browser-gesture retry path.
-- Focused phases 4–5: 9 passed; full suite: 120 passed.
-
-## Approved online delivery cancellation follow-up — 2026-07-28
-
-- Cashier cancellation is available only from `submitted` through `ready`.
-  Server-side status revalidation blocks orders that are delivering or final;
-  successful cancellation keeps the existing reservation release, status
-  history, and staff audit record.
-- Focused phases 4–6: 14 passed; full suite: 121 passed.
+- Quick product editing adds a camera-scan action while retaining manual,
+  USB, and Bluetooth barcode entry. Quick edit and stock count share one local
+  BarcodeDetector/ZXing helper, and quick edit falls back to native photo
+  capture on normal HTTP LAN origins.
+- Mobile found-product flow opens directly to a custom whole-baht price
+  numpad with the product name/barcode pinned above it. First-digit
+  replacement and confirm/reopen remain. File/camera preview uses a CSP-safe
+  data URL and stays bounded inside the mobile image grid.
+- Already-imaged scans show their own rejection. Unknown barcodes open create
+  mode; save creates an audited active UUID product with zero cost/stock.
+  Price, category, and unit memory are isolated per staff.
+- Blind stock restores focus after unknown barcodes. Price control saves exact
+  scans on Enter; missing searches open an audited no-image create popup then
+  return to scan. Category/unit memory is per staff; price/name reset.
+- Focused suites: quick-edit 26 and price-control 7 passed. Full suite: 173
+  completed — 172 passed and one existing filesystem-capability skip.
+- Playwright Edge at 360×640 under Admin-equivalent CSP passed browse/camera
+  preview, real JPEG/long filename, remove/restore, bounded columns, and zero
+  overflow/console errors. Stock-count focus also passed; physical camera
+  focus remains a customer-device operational check.
+- Canonical port-8000 health and served-asset checks passed. Read-only QA made
+  no product save; the pre-restart 479-product snapshot and integrity remain.
+- Site-LAN verification is deferred while the server is temporarily on
+  another LAN; the owner retained configured `192.168.0.200/24`/Private
+  behavior unchanged. The startup Scheduled Task is absent and requires
+  Administrator elevation to restore.
+- No schema migration.
 
 ## Online ordering operating model
+
+Sprint-specific verification history remains in `CHANGELOG.md` and the
+focused online test modules.
 
 - Lifecycle: submitted → accepted → preparing → reconciling → ready →
   delivering → completed. Rejection, cancellation, and expiry retain history.
