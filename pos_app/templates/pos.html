@@ -19,6 +19,29 @@
 <div id="cartBackdrop" class="cart-backdrop"></div>
 <button id="mobileCartBar" class="mobile-cart-bar" type="button"><span><b id="mobileCartCount">0</b> รายการ</span><strong id="mobileCartTotal">0 บาท</strong><em>ดูตะกร้า →</em></button>
 
+<dialog id="manualPriceDialog" class="manual-price-dialog" aria-labelledby="manualPriceTitle">
+  <div class="manual-price-alert" aria-hidden="true">฿</div>
+  <span class="eyebrow">ต้องระบุราคาก่อนขาย</span>
+  <h2 id="manualPriceTitle">กรุณาระบุราคา</h2>
+  <strong id="manualPriceProductName"></strong>
+  <span id="manualPriceBarcode" class="manual-price-barcode"></span>
+  <form id="manualPriceForm">
+    <label>ราคาขาย (บาท)
+      <input id="manualPriceInput" name="manual_price_baht" type="number" inputmode="numeric" min="1" max="9999999" step="1" autocomplete="off" required>
+    </label>
+    <div id="manualPriceNumpad" class="manual-price-numpad" aria-label="แป้นตัวเลขสำหรับกรอกราคาขาย">
+      {% for number in range(1,10) %}<button type="button" data-manual-price-key="{{number}}">{{number}}</button>{% endfor %}
+      <button type="button" class="manual-price-clear" data-manual-price-action="clear">ล้าง</button>
+      <button type="button" data-manual-price-key="0">0</button>
+      <button type="button" class="manual-price-backspace" data-manual-price-action="backspace" aria-label="ลบตัวเลขล่าสุด">⌫</button>
+    </div>
+    <div id="manualPriceError" class="field-error" role="alert"></div>
+    <button id="manualPriceSubmit" class="primary-button" type="submit">ยืนยันราคาและเพิ่มสินค้า</button>
+  </form>
+</dialog>
+<audio id="missingProductPriceAudio" preload="auto" src="{{url_for('static',filename='audio/missing-product-price-required.wav',v=2)}}"></audio>
+<audio id="manualPriceAudio" preload="auto" src="{{url_for('static',filename='audio/manual-price-required.wav',v=2)}}"></audio>
+
 <dialog id="paymentDialog" class="payment-dialog payment-v2" aria-labelledby="paymentTitle"><form method="dialog"><button class="dialog-close" value="cancel" aria-label="ปิด">×</button></form><header><span class="eyebrow">ขั้นตอนสุดท้าย</span><h2 id="paymentTitle">รับชำระเงิน</h2></header>
   <div class="payment-tabs" role="tablist" aria-label="วิธีชำระเงิน"><button id="cashTab" role="tab" aria-selected="true" aria-controls="cashPanel" data-method="cash" class="active">เงินสด</button><button id="scanTab" role="tab" aria-selected="false" aria-controls="confirmationPanel" data-method="scan">สแกนจ่าย</button><button id="billingTab" role="tab" aria-selected="false" aria-controls="billingPanel" data-method="billing">วางบิล</button></div>
   <div class="payment-columns">
@@ -34,5 +57,5 @@
 
 <dialog id="saleSuccessDialog" class="success-dialog success-v2" aria-labelledby="successTitle"><div class="success-mark">✓</div><span id="printStatus" class="eyebrow">บันทึกการขายแล้ว</span><h2 id="successTitle">ชำระเงินสำเร็จ</h2><strong id="successReceipt"></strong><div id="successItems" class="success-items"></div><div class="success-review"><span>ยอดรวม</span><strong id="successTotal"></strong><span>เงินทอน</span><strong id="successChange"></strong></div><div class="success-actions"><a id="manualReceiptLink" class="secondary-button" target="_blank" rel="noopener" hidden>เปิดใบเสร็จเพื่อพิมพ์</a><button id="closeSuccessButton" class="primary-button" type="button">ขายรายการถัดไป</button></div></dialog>
 <dialog id="heldDialog" class="held-dialog"><form method="dialog"><button class="dialog-close" value="cancel">×</button></form><h2>บิลที่พักไว้</h2><div id="heldList"></div></dialog>
-<script src="{{url_for('static',filename='js/pos.js',v=28)}}"></script>
+<script src="{{url_for('static',filename='js/pos.js',v=30)}}"></script>
 {% endblock %}

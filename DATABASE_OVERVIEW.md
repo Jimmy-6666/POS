@@ -27,6 +27,10 @@ Version 26 adds `staff_sessions.two_factor_verified_at`. Only a session created
 after a successful Admin second-factor challenge receives this marker; existing
 sessions are preserved for LAN use but cannot be used on the public Admin host.
 
+Version 27 adds nullable `sale_items.manual_price_reference` and a partial
+unique index. Existing rows remain null. New POS manual-price lines store the
+audit-backed `MP-########` reference shown on their receipt.
+
 SQLite is the single local source of truth. `pos_app/schema.sql` defines new
 databases; `pos_app/database.py` initializes seed data and applies idempotent,
 data-preserving startup migrations. Current seeded `schema_version` is 19.
@@ -62,6 +66,9 @@ databases.
   `products.id` remains a private numeric foreign key for historic tables.
   SKU and barcode are unique mutable business fields, never identity keys.
 - Historical sale items snapshot product name, price, cost, and quantity.
+- A non-null `sale_items.manual_price_reference` is unique. Its numeric suffix
+  identifies the immutable `enter_pos_manual_price` audit record; checkout
+  validates Cashier, product, barcode, and whole-baht price before using it.
 - Stock changes have corresponding immutable movement records.
 - Foreign keys are enabled per connection; WAL is enabled for LAN concurrency.
 - A completed sale may be settled once through

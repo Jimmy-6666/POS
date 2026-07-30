@@ -1,3 +1,47 @@
+# Release 3.0.8 — 2026-07-30
+
+- Replaced both manual-price alerts with the owner-approved natural Thai
+  voice at true 1.2× speed. The missing-product alert keeps the approved pause
+  between “ไม่พบสินค้า” and “กรุณาระบุราคา”; the short alert is cut directly
+  from the latter phrase. SHA-256 and WAV duration are pinned by regression.
+- Added a 12-button touch numpad to the blocking Cashier price dialog:
+  digits 0–9, clear, and backspace. Entry remains whole-baht, capped at seven
+  digits, keyboard-compatible, and protected from fast hardware scans.
+- Headless Edge at 360×640 and 360×600 passed all numpad actions, seven-digit
+  cap, scanner restoration, save/refocus, zero overflow, and exact served
+  audio hashes.
+- Blocked zero-price POS sales from completing at 0. Zero-price products and
+  unknown scanned barcodes now require a positive whole-baht Cashier price in
+  a modal that suspends subsequent scanner input until confirmation.
+- Added reserved barcode `MANUALPRICE` for direct manual-price lines.
+- Added local Thai voice alerts for missing/zero-price items and the reserved
+  manual-price barcode; no browser speech service or network is required.
+- Unknown confirmed barcodes create active offline-only placeholder products
+  with zero master price/cost/stock. Repeated sales keep prompting until the
+  master price is set through product management.
+- Added audit-backed running references (`MP-########`) to manual-price receipt
+  lines. Server-side checkout revalidates Cashier, product, barcode, price,
+  audit record, and one-time reference use.
+- Added Audit Log action filtering and CSRF-protected UTF-8 CSV export, with
+  export actions recorded in the audit log.
+- Added migration 27: nullable `sale_items.manual_price_reference` plus a
+  partial unique index. Existing sale items remain unchanged.
+- Added a regression that starts from a simulated version-26 database, so
+  migration 27 adds its column before creating the unique index.
+- Full suite: 179 completed (178 passed, one existing capability skip);
+  `pip check`, Python/JavaScript syntax, and diff checks passed.
+- Headless Edge passed mobile/desktop popup bounds, hardware-scan rejection,
+  next-search focus, audio, running reference, Audit filter, and CSV download.
+- Deployed canonical Production on port 8000 after verified local backup
+  `backup-20260730T134948Z.zip`. Migration 27, localhost/LAN health, served
+  assets, SQLite quick check, foreign keys, and preservation of 668 products
+  with 0 sales passed. Production smoke opened the zero-price and
+  `MANUALPRICE` prompts without confirming, so it created no product, manual
+  audit, sale, or sale item.
+- Canonical verification reaches the existing operational warning that
+  `SaengngamPOS-Production` is absent from Task Scheduler; the running service,
+  version, migration, network, firewall/runtime checks before that gate pass.
+
 # Release 3.0.7 — 2026-07-30
 
 - Added “สแกนด้วยกล้อง” to `/products/quick-edit`, using the bundled

@@ -8,13 +8,37 @@ from flask import Blueprint, current_app, g, jsonify, render_template, request, 
 
 from ..auth import login_required, permission_required, valid_csrf, verify_void_authorizer_pin
 from ..database import get_db
-from ..product_identity import ProductIdentityError, canonical_product_uuid
+from ..product_identity import ProductIdentityError, canonical_product_uuid, new_product_uuid
 from ..services.money import change_breakdown
 from ..services.print_jobs import enqueue_print
 from ..services.sales import SaleError, calculate_cart, complete_sale, void_sale
 
 
 bp = Blueprint("pos", __name__)
+MANUAL_PRICE_BARCODE = "MANUALPRICE"
+MAX_MANUAL_PRICE_BAHT = 9_999_999
+
+
+def _manual_price_baht(value):
+    text = str(value or "").strip()
+    if not text.isdigit():
+        raise SaleError("ราคาขายต้องเป็นจำนวนเต็มบาท")
+    amount = int(text)
+    if amount <= 0:
+        raise SaleError("ราคาขายต้องมากกว่า 0 บาท")
+    if amount > MAX_MANUAL_PRICE_BAHT:
+        raise SaleError(f"ราคาขายต้องไม่เกิน {MAX_MANUAL_PRICE_BAHT:,} บาท")
+    return amount
+
+
+def _pos_product_row(db, product_id):
+    return db.execute(
+        """SELECT p.product_uuid,p.barcode,p.name_th,p.price_satang,p.stock_quantity,p.image_path,
+                  p.allow_decimal_quantity,p.is_favorite,u.name_th AS unit_name
+           FROM products p JOIN units u ON u.id=p.unit_id
+           WHERE p.id=?""",
+        (product_id,),
+    ).fetchone()
 
 
 @bp.get("/uploads/products/<path:filename>")
@@ -58,6 +82,142 @@ def products_api():
     return jsonify([dict(row) for row in rows])
 
 
+@bp.post("/api/pos/manual-price")
+@permission_required("pos.use")
+def manual_price_api():
+    data = request.get_json(silent=True) or {}
+    if not valid_csrf(request.headers.get("X-CSRF-Token")):
+        return jsonify(error="คำขอไม่ถูกต้อง"), 400
+    barcode = str(data.get("barcode") or "").strip()
+    if barcode.upper() == MANUAL_PRICE_BARCODE:
+        barcode = MANUAL_PRICE_BARCODE
+    if not barcode or len(barcode) > 128:
+        return jsonify(error="บาร์โค้ดไม่ถูกต้อง"), 400
+    try:
+        price_baht = _manual_price_baht(data.get("price_baht"))
+    except SaleError as exc:
+        return jsonify(error=str(exc)), 400
+
+    db = get_db()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        product = db.execute("SELECT * FROM products WHERE barcode=?", (barcode,)).fetchone()
+        if product and not product["is_active"]:
+            raise SaleError("สินค้านี้ถูกปิดใช้งาน กรุณาแจ้งผู้จัดการ")
+        is_manual_barcode = barcode == MANUAL_PRICE_BARCODE
+        if product and product["price_satang"] > 0 and not is_manual_barcode:
+            row = _pos_product_row(db, product["id"])
+            db.commit()
+            return jsonify(product=dict(row), uses_catalog_price=True)
+
+        created_placeholder = False
+        if not product:
+            category = db.execute(
+                "SELECT id FROM categories WHERE is_active=1 ORDER BY sort_order,name_th,id LIMIT 1"
+            ).fetchone()
+            unit = db.execute(
+                "SELECT id FROM units WHERE is_active=1 ORDER BY name_th,id LIMIT 1"
+            ).fetchone()
+            if not category or not unit:
+                raise SaleError("ไม่พบหมวดสินค้าหรือหน่วยที่เปิดใช้งาน กรุณาแจ้งผู้จัดการ")
+            product_uuid = new_product_uuid()
+            product_name = (
+                "สินค้าระบุราคาเอง"
+                if is_manual_barcode
+                else f"สินค้าไม่ทราบชื่อ ({barcode})"
+            )
+            cursor = db.execute(
+                """INSERT INTO products
+                   (product_uuid,barcode,name_th,category_id,unit_id,cost_satang,price_satang,
+                    stock_quantity,minimum_stock,is_active,is_favorite,allow_decimal_quantity,
+                    is_online_available,online_sort_order)
+                   VALUES (?,?,?,?,?,0,0,0,0,1,0,0,0,0)""",
+                (product_uuid, barcode, product_name, category["id"], unit["id"]),
+            )
+            product = db.execute("SELECT * FROM products WHERE id=?", (cursor.lastrowid,)).fetchone()
+            created_placeholder = True
+            db.execute(
+                """INSERT INTO audit_logs
+                   (staff_id,action,entity_type,entity_id,new_value,ip_address,created_at)
+                   VALUES (?,'create_pos_placeholder_product','product',?,?,?,?)""",
+                (
+                    g.staff["id"],
+                    product_uuid,
+                    json.dumps(
+                        {
+                            "barcode": barcode,
+                            "name_th": product_name,
+                            "price_satang": 0,
+                            "is_online_available": 0,
+                            "source": "pos_manual_price",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    request.remote_addr,
+                    now,
+                ),
+            )
+
+        reason = (
+            "manual_price_barcode"
+            if is_manual_barcode
+            else "missing_product"
+            if created_placeholder
+            else "zero_catalog_price"
+        )
+        manual_price_satang = price_baht * 100
+        manual_audit = db.execute(
+            """INSERT INTO audit_logs
+               (staff_id,action,entity_type,entity_id,new_value,ip_address,created_at)
+               VALUES (?,'enter_pos_manual_price','product',?,?,?,?)""",
+            (
+                g.staff["id"],
+                product["product_uuid"],
+                json.dumps(
+                    {
+                        "barcode": barcode,
+                        "manual_price_satang": manual_price_satang,
+                        "reason": reason,
+                        "placeholder_created": created_placeholder,
+                    },
+                    ensure_ascii=False,
+                ),
+                request.remote_addr,
+                now,
+            ),
+        )
+        manual_price_reference = f"MP-{manual_audit.lastrowid:08d}"
+        audit_payload = {
+            "barcode": barcode,
+            "manual_price_satang": manual_price_satang,
+            "reason": reason,
+            "placeholder_created": created_placeholder,
+            "manual_price_reference": manual_price_reference,
+        }
+        db.execute(
+            "UPDATE audit_logs SET new_value=? WHERE id=?",
+            (
+                json.dumps(audit_payload, ensure_ascii=False),
+                manual_audit.lastrowid,
+            ),
+        )
+        row = _pos_product_row(db, product["id"])
+        db.commit()
+        return jsonify(
+            product=dict(row),
+            manual_price_satang=manual_price_satang,
+            manual_price_reason=reason,
+            manual_price_reference=manual_price_reference,
+        )
+    except SaleError as exc:
+        db.rollback()
+        return jsonify(error=str(exc)), 400
+    except Exception:
+        db.rollback()
+        raise
+
+
 @bp.post("/api/pos/quote")
 @permission_required("pos.use")
 def quote_api():
@@ -65,7 +225,11 @@ def quote_api():
     if not valid_csrf(request.headers.get("X-CSRF-Token")):
         return jsonify(error="คำขอไม่ถูกต้อง"), 400
     try:
-        cart = calculate_cart(data.get("items"), data.get("bill_discount_satang"))
+        cart = calculate_cart(
+            data.get("items"),
+            data.get("bill_discount_satang"),
+            manual_price_staff_id=g.staff["id"],
+        )
         return jsonify({key: value for key, value in cart.items() if key != "items"})
     except SaleError as exc:
         return jsonify(error=str(exc)), 400
@@ -99,7 +263,9 @@ def complete_api():
         return jsonify(error="คำขอไม่ถูกต้อง"), 400
     try:
         data["evidence_image_path"] = save_evidence(data)
-        sale_id, receipt, cart, change = complete_sale(data, g.staff["id"])
+        sale_id, receipt, cart, change = complete_sale(
+            data, g.staff["id"], audit_ip=request.remote_addr
+        )
         print_queued = bool(enqueue_print("sale_receipt", sale_id))
         return jsonify(
             sale_id=sale_id, receipt_number=receipt, total_satang=cart["total_satang"],

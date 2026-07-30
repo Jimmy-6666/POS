@@ -1,9 +1,12 @@
+import csv
+import io
 import json
+import re
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Blueprint, current_app, flash, g, redirect, render_template, request, send_from_directory, url_for
+from flask import Blueprint, Response, current_app, flash, g, redirect, render_template, request, send_from_directory, url_for
 from werkzeug.security import generate_password_hash
 
 from ..auth import permission_required, valid_csrf
@@ -97,9 +100,110 @@ def save_setting_list(table):
 @bp.get("/audit-logs")
 @permission_required("audit.view")
 def audit_logs():
-    rows=get_db().execute("""SELECT a.*,st.display_name FROM audit_logs a LEFT JOIN staff st ON st.id=a.staff_id
-        ORDER BY a.created_at DESC,a.id DESC LIMIT 1000""").fetchall()
-    return render_template("audit_logs.html",logs=rows)
+    db = get_db()
+    selected_action = request.args.get("action", "").strip()
+    if len(selected_action) > 128:
+        selected_action = ""
+    actions = db.execute(
+        "SELECT DISTINCT action FROM audit_logs ORDER BY action"
+    ).fetchall()
+    params = []
+    where = ""
+    if selected_action:
+        where = "WHERE a.action=?"
+        params.append(selected_action)
+    rows = db.execute(
+        f"""SELECT a.*,st.display_name
+            FROM audit_logs a LEFT JOIN staff st ON st.id=a.staff_id
+            {where}
+            ORDER BY a.created_at DESC,a.id DESC LIMIT 1000""",
+        params,
+    ).fetchall()
+    return render_template(
+        "audit_logs.html",
+        logs=rows,
+        actions=actions,
+        selected_action=selected_action,
+    )
+
+
+@bp.post("/audit-logs/export")
+@permission_required("audit.view")
+def export_audit_logs():
+    if not valid_csrf(request.form.get("csrf_token")):
+        return ("คำขอไม่ถูกต้อง", 400)
+    db = get_db()
+    selected_action = request.form.get("action", "").strip()
+    if len(selected_action) > 128:
+        return ("ตัวกรองการกระทำไม่ถูกต้อง", 400)
+    params = []
+    where = ""
+    if selected_action:
+        where = "WHERE a.action=?"
+        params.append(selected_action)
+    rows = db.execute(
+        f"""SELECT a.id,a.created_at,st.display_name,a.action,a.entity_type,a.entity_id,
+                   a.old_value,a.new_value,a.ip_address
+            FROM audit_logs a LEFT JOIN staff st ON st.id=a.staff_id
+            {where}
+            ORDER BY a.created_at DESC,a.id DESC""",
+        params,
+    ).fetchall()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "audit_id",
+            "created_at",
+            "staff",
+            "action",
+            "entity_type",
+            "entity_id",
+            "old_value",
+            "new_value",
+            "ip_address",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row["id"],
+                row["created_at"],
+                row["display_name"] or "",
+                row["action"],
+                row["entity_type"],
+                row["entity_id"] or "",
+                row["old_value"] or "",
+                row["new_value"] or "",
+                row["ip_address"] or "",
+            ]
+        )
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    db.execute(
+        """INSERT INTO audit_logs
+           (staff_id,action,entity_type,entity_id,new_value,ip_address,created_at)
+           VALUES (?,'export_audit_logs','audit_log',?,?,?,?)""",
+        (
+            g.staff["id"],
+            selected_action or "all",
+            json.dumps(
+                {"action_filter": selected_action or None, "row_count": len(rows)},
+                ensure_ascii=False,
+            ),
+            request.remote_addr,
+            now,
+        ),
+    )
+    db.commit()
+    safe_action = re.sub(r"[^A-Za-z0-9_-]+", "-", selected_action).strip("-") or "all"
+    filename = f"audit-logs-{safe_action}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
+    return Response(
+        "\ufeff" + output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @bp.route("/backups",methods=("GET","POST"))

@@ -16,18 +16,15 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- The active Release 3.0.7 Production instance uses port `8000`, `runtime/`,
+- The active Release 3.0.8 Production instance uses port `8000`, `runtime/`,
   and is configured for fixed server address `192.168.0.200` on the trusted
-  `192.168.0.0/24` private LAN. Windows currently reports
-  `192.168.1.200/24` on a Public profile because the server is temporarily on
-  another LAN; by owner instruction the accepted POS network config remains
-  unchanged and site-LAN verification is deferred.
+  `192.168.0.0/24` private LAN. Local and site-LAN health pass.
 - UAT launcher uses port `8001` and `uat_runtime/`.
 - The port `8002` profile is not the canonical customer Production instance.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
   at `/online-orders`. Products default to online-enabled, except the current
-  Production catalog snapshot: 479 products are active, 362 have zero price,
-  463 have no image, all have zero stock, and 10 are online-enabled.
+  Production catalog snapshot: 668 products are active, 56 have zero price,
+  652 have no image, all have zero stock, and 199 are online-enabled.
 
 An auxiliary Makro catalog preparation pipeline lives in
 `work/makro-pos-import/`. It uses Node and Codex spreadsheet tooling only for
@@ -50,8 +47,10 @@ production-ready without barcode and price approval.
 
 ## Current health
 
-On 2026-07-30, `python -m unittest discover -s tests -q` completed 173 tests:
-172 passed with one filesystem-capability skip, including the Release 3.0.7
+On 2026-07-30, `python -m unittest discover -s tests -q` completed 179 tests:
+178 passed with one filesystem-capability skip, including Release 3.0.8
+blocking manual prices, audit-backed receipt references, Audit filtering/CSV,
+version-26 migration startup, and the Release 3.0.7
 camera barcode scan, CSP-safe bounded image preview, missing-product quick
 creation, already-imaged rejection, per-staff price/category/unit memory,
 shared stock-count scanner, price-control missing-product creation with
@@ -71,7 +70,8 @@ host isolation and 2FA, signed-update reauthentication, and structured support
 redaction. Release 3 recovery and runtime regressions cover the full
 database-and-product-image bundle and in-process schedule validation. Flask
 3.1.3 is installed and the dependency set passes `pip check`. Local Release
-3.0.7 runtime/health/assets pass. The expected `SaengngamPOS-Production`
+3.0.8 localhost/LAN runtime, migration 27, integrity, and assets pass. The
+expected `SaengngamPOS-Production`
 startup task is currently absent and requires an Administrator PowerShell
 session to restore.
 LINE LIFF verifies customer identity before the POS
@@ -83,9 +83,9 @@ administration supports phone/name/public-ID search, admin-PIN-confirmed
 anonymizing deletion, and customer re-registration after deletion. Suspended
 LINE customers receive a stable blocked page instead of a LIFF login loop.
 
-The canonical Production database contains 479 active products. The read-only
-post-deploy snapshot is 362 zero-price, 463 no-image, all zero-stock, and 10
-online-enabled products.
+The canonical Production database contains 668 active products. The read-only
+post-deploy snapshot is 56 zero-price, 652 no-image, all zero-stock, and 199
+online-enabled products; sales and sale items remain 0.
 SQLite quick check and foreign-key verification pass.
 
 ## Canonical references
@@ -104,7 +104,14 @@ No new product scope should be invented. The next catalog task remains
 customer selling-price entry and photography, followed by an explicit decision
 to enable selected products online.
 
-Version 3.0.7 is the current implementation baseline. Manager/Admin quick edit
+Version 3.0.8 is the current source and Production baseline. POS zero-price,
+unknown-barcode, and reserved `MANUALPRICE` lines now require a blocking,
+positive whole-baht Cashier entry with keyboard or touch numpad. Approved
+Thai alerts use the selected voice at true 1.2× speed. Each confirmed line receives a one-use
+audit-backed `MP-########` reference stored and printed on the receipt; Audit
+Log can filter by action and export CSV. Additive migration 27 stores the
+reference without rewriting existing sale items.
+Manager/Admin quick edit
 accepts manual/USB/Bluetooth barcode input plus a shared local
 BarcodeDetector/ZXing camera action. Normal HTTP LAN access automatically
 falls back to native barcode photo capture. On phones, a found product opens
@@ -116,7 +123,7 @@ lifecycle, uses Admin-CSP-compatible data URLs, and bounds the mobile grid;
 sidebar and embedded-policy behavior remain.
 Blind stock count keeps the barcode input active after an unknown
 scan and opens quantity input only after a successful lookup. Canonical
-port-8000 Production was restarted onto Release 3.0.7
+port-8000 Production was restarted onto Release 3.0.8
 with live asset, database-integrity, and catalog-preservation verification.
 It retains Version 3.0.5 first-time LINE profile consent, Version 3.0.4
 policy/disclaimer content, Version 3.0.3 default-image and net-best-seller

@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
@@ -10,6 +11,11 @@ from ..product_identity import ProductIdentityError, product_by_uuid
 
 class SaleError(ValueError):
     pass
+
+
+MANUAL_PRICE_BARCODE = "MANUALPRICE"
+MAX_MANUAL_PRICE_SATANG = 9_999_999 * 100
+MANUAL_PRICE_REFERENCE_PATTERN = re.compile(r"MP-(\d{8})")
 
 
 def negative_stock_allowed():
@@ -27,11 +33,74 @@ def _quantity(value, allow_decimal):
     return quantity
 
 
-def calculate_cart(items, bill_discount_satang=0, *, unit_price_overrides=None, reservation_order_id=None):
+def _validated_manual_price(db, raw, product, staff_id, seen_references):
+    reference = str(raw.get("manual_price_reference") or "").strip()
+    match = MANUAL_PRICE_REFERENCE_PATTERN.fullmatch(reference)
+    try:
+        raw_price = Decimal(str(raw.get("manual_price_satang")))
+        if raw_price != raw_price.to_integral_value():
+            raise InvalidOperation
+        price_satang = int(raw_price)
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise SaleError(f"กรุณาระบุราคาขายของ {product['name_th']}") from exc
+    if (
+        not match
+        or staff_id is None
+        or price_satang <= 0
+        or price_satang > MAX_MANUAL_PRICE_SATANG
+        or price_satang % 100
+    ):
+        raise SaleError(f"ราคาขายที่ระบุสำหรับ {product['name_th']} ไม่ถูกต้อง")
+    if reference in seen_references:
+        raise SaleError(f"เลขอ้างอิงราคาหน้างาน {reference} ซ้ำในตะกร้า")
+    if db.execute(
+        "SELECT 1 FROM sale_items WHERE manual_price_reference=?",
+        (reference,),
+    ).fetchone():
+        raise SaleError(f"เลขอ้างอิงราคาหน้างาน {reference} ถูกใช้แล้ว")
+    audit = db.execute(
+        """SELECT id,staff_id,entity_id,new_value FROM audit_logs
+           WHERE id=? AND action='enter_pos_manual_price'""",
+        (int(match.group(1)),),
+    ).fetchone()
+    if (
+        not audit
+        or audit["staff_id"] != staff_id
+        or audit["entity_id"] != product["product_uuid"]
+    ):
+        raise SaleError(f"ไม่สามารถยืนยันเลขอ้างอิงราคาหน้างาน {reference}")
+    try:
+        detail = json.loads(audit["new_value"] or "{}")
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise SaleError(f"ข้อมูลราคาหน้างาน {reference} ไม่ถูกต้อง") from exc
+    if (
+        detail.get("manual_price_reference") != reference
+        or detail.get("manual_price_satang") != price_satang
+        or detail.get("barcode") != product["barcode"]
+    ):
+        raise SaleError(f"ข้อมูลราคาหน้างาน {reference} ไม่ตรงกับรายการขาย")
+    seen_references.add(reference)
+    return {
+        "price_satang": price_satang,
+        "reference": reference,
+        "reason": detail.get("reason"),
+        "barcode": product["barcode"],
+    }
+
+
+def calculate_cart(
+    items,
+    bill_discount_satang=0,
+    *,
+    unit_price_overrides=None,
+    reservation_order_id=None,
+    manual_price_staff_id=None,
+):
     if not items:
         raise SaleError("ตะกร้าสินค้าว่าง")
     db = get_db()
     calculated = []
+    seen_manual_references = set()
     subtotal = item_discounts = total_cost = 0
     for raw in items:
         try:
@@ -56,8 +125,16 @@ def calculate_cart(items, bill_discount_satang=0, *, unit_price_overrides=None, 
                 raise SaleError(f"{product['name_th']} ถูกสำรองไว้สำหรับออเดอร์ออนไลน์")
             raise SaleError(f"{product['name_th']} มีสต็อกไม่เพียงพอ")
         unit_price = product["price_satang"]
+        manual_price = None
         if unit_price_overrides is not None and product["product_uuid"] in unit_price_overrides:
             unit_price = int(unit_price_overrides[product["product_uuid"]])
+        elif product["price_satang"] <= 0 or product["barcode"] == MANUAL_PRICE_BARCODE:
+            manual_price = _validated_manual_price(
+                db, raw, product, manual_price_staff_id, seen_manual_references
+            )
+            unit_price = manual_price["price_satang"]
+        elif raw.get("manual_price_satang") is not None or raw.get("manual_price_reference"):
+            raise SaleError(f"{product['name_th']} มีราคาขายในระบบแล้ว")
         line_subtotal = int((Decimal(unit_price) * quantity).quantize(Decimal("1")))
         discount = int(raw.get("discount_satang") or 0)
         if discount < 0 or discount > line_subtotal:
@@ -68,6 +145,7 @@ def calculate_cart(items, bill_discount_satang=0, *, unit_price_overrides=None, 
         calculated.append({
             "product": product, "quantity": float(quantity), "discount_satang": discount, "unit_price_satang": unit_price,
             "line_subtotal_satang": line_subtotal, "line_total_satang": line_subtotal - discount,
+            "manual_price": manual_price,
         })
     bill_discount_satang = int(bill_discount_satang or 0)
     after_items = subtotal - item_discounts
@@ -82,7 +160,15 @@ def calculate_cart(items, bill_discount_satang=0, *, unit_price_overrides=None, 
     }
 
 
-def complete_sale(payload, staff_id, *, manage_transaction=True, online_order_id=None, unit_price_overrides=None):
+def complete_sale(
+    payload,
+    staff_id,
+    *,
+    manage_transaction=True,
+    online_order_id=None,
+    unit_price_overrides=None,
+    audit_ip=None,
+):
     db = get_db()
     try:
         if manage_transaction:
@@ -91,7 +177,9 @@ def complete_sale(payload, staff_id, *, manage_transaction=True, online_order_id
             raise RuntimeError("complete_sale(manage_transaction=False) requires an active transaction")
         cart = calculate_cart(
             payload.get("items"), payload.get("bill_discount_satang"),
-            unit_price_overrides=unit_price_overrides, reservation_order_id=online_order_id,
+            unit_price_overrides=unit_price_overrides,
+            reservation_order_id=online_order_id,
+            manual_price_staff_id=staff_id,
         )
         delivery_fee_satang = int(payload.get("delivery_fee_satang") or 0)
         if delivery_fee_satang < 0 or (delivery_fee_satang and online_order_id is None):
@@ -153,12 +241,30 @@ def complete_sale(payload, staff_id, *, manage_transaction=True, online_order_id
         for item in cart["items"]:
             product = db.execute("SELECT * FROM products WHERE id = ?", (item["product"]["id"],)).fetchone()
             new_stock = product["stock_quantity"] - item["quantity"]
-            db.execute(
+            manual_reference = (
+                item["manual_price"]["reference"] if item["manual_price"] else None
+            )
+            sale_item_name = (
+                f"รายการระบุราคา {manual_reference}"
+                if manual_reference
+                else product["name_th"]
+            )
+            sale_item = db.execute(
                 """INSERT INTO sale_items
-                   (sale_id, product_id, product_name, quantity, unit_price_satang, discount_satang, cost_satang, line_total_satang)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (sale_id, product["id"], product["name_th"], item["quantity"], item["unit_price_satang"],
-                 item["discount_satang"], product["cost_satang"], item["line_total_satang"]),
+                   (sale_id, product_id, product_name, quantity, unit_price_satang, discount_satang,
+                    cost_satang, line_total_satang, manual_price_reference)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    sale_id,
+                    product["id"],
+                    sale_item_name,
+                    item["quantity"],
+                    item["unit_price_satang"],
+                    item["discount_satang"],
+                    product["cost_satang"],
+                    item["line_total_satang"],
+                    manual_reference,
+                ),
             )
             db.execute("UPDATE products SET stock_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_stock, product["id"]))
             db.execute(
@@ -169,6 +275,32 @@ def complete_sale(payload, staff_id, *, manage_transaction=True, online_order_id
                 (product["id"], product["stock_quantity"], -item["quantity"], new_stock,
                  product["cost_satang"], receipt_number, staff_id, now),
             )
+            if item["manual_price"]:
+                db.execute(
+                    """INSERT INTO audit_logs
+                       (staff_id,action,entity_type,entity_id,new_value,ip_address,created_at)
+                       VALUES (?,'sell_with_manual_price','sale_item',?,?,?,?)""",
+                    (
+                        staff_id,
+                        str(sale_item.lastrowid),
+                        json.dumps(
+                            {
+                                "sale_id": sale_id,
+                                "receipt_number": receipt_number,
+                                "manual_price_reference": manual_reference,
+                                "product_uuid": product["product_uuid"],
+                                "product_name": product["name_th"],
+                                "barcode": item["manual_price"]["barcode"],
+                                "manual_price_satang": item["unit_price_satang"],
+                                "quantity": item["quantity"],
+                                "reason": item["manual_price"]["reason"],
+                            },
+                            ensure_ascii=False,
+                        ),
+                        audit_ip,
+                        now,
+                    ),
+                )
         db.execute(
             """INSERT INTO audit_logs (staff_id, action, entity_type, entity_id, new_value, created_at)
                VALUES (?, 'complete_sale', 'sale', ?, ?, ?)""",

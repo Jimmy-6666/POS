@@ -194,6 +194,19 @@ def _add_staff_session_two_factor_assurance(db: sqlite3.Connection) -> None:
         db.execute("ALTER TABLE staff_sessions ADD COLUMN two_factor_verified_at TEXT")
 
 
+def _add_sale_item_manual_price_reference(db: sqlite3.Connection) -> None:
+    """Persist one traceable audit-backed reference for every manual-price line."""
+
+    columns = {row[1] for row in db.execute("PRAGMA table_info(sale_items)")}
+    if "manual_price_reference" not in columns:
+        db.execute("ALTER TABLE sale_items ADD COLUMN manual_price_reference TEXT")
+    db.execute(
+        """CREATE UNIQUE INDEX IF NOT EXISTS idx_sale_items_manual_price_reference
+           ON sale_items(manual_price_reference)
+           WHERE manual_price_reference IS NOT NULL"""
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(20, "enable configured negative stock", _enable_configured_negative_stock),
     Migration(21, "add LINE customer identity", _add_line_customer_identity),
@@ -202,6 +215,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(24, "add admin TOTP two-factor authentication", _add_admin_two_factor),
     Migration(25, "add reconciliation void total", _add_reconciliation_void_total),
     Migration(26, "record second-factor verified staff sessions", _add_staff_session_two_factor_assurance),
+    Migration(27, "add sale-item manual-price references", _add_sale_item_manual_price_reference),
 )
 
 

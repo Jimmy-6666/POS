@@ -1,1 +1,67 @@
-{% extends "base.html" %}{% block title %}ประวัติการใช้งาน{% endblock %}{% block content %}<div class="page-heading"><div><h1>Audit Log</h1><p>การดำเนินการสำคัญล่าสุด</p></div></div><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>พนักงาน</th><th>การกระทำ</th><th>ข้อมูล</th><th>ID</th><th>IP</th></tr></thead><tbody>{% for a in logs %}<tr><td>{{a.created_at|thai_datetime}}</td><td>{{a.display_name or '-'}}</td><td>{{a.action}}</td><td>{{a.entity_type}}</td><td>{{a.entity_id}}</td><td>{{a.ip_address or '-'}}</td></tr>{% endfor %}</tbody></table></div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}ประวัติการใช้งาน{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Audit Log</h1>
+    <p>กรองและส่งออกการดำเนินการสำคัญ — เลขรายการ Manual `MP-00000001` ตรงกับ Audit ID 1</p>
+  </div>
+</div>
+
+<div class="audit-toolbar">
+  <form method="get" action="{{url_for('admin.audit_logs')}}" class="audit-filter-form">
+    <label for="auditActionFilter">การกระทำ
+      <select id="auditActionFilter" name="action">
+        <option value="">ทั้งหมด</option>
+        {% for row in actions %}
+        <option value="{{row.action}}" {% if selected_action==row.action %}selected{% endif %}>{{row.action}}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="primary-button" type="submit">แสดงรายการ</button>
+  </form>
+  <a class="secondary-button" href="{{url_for('admin.audit_logs')}}">ล้างตัวกรอง</a>
+  <form method="post" action="{{url_for('admin.export_audit_logs')}}">
+    <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+    <input type="hidden" name="action" value="{{selected_action}}">
+    <button class="secondary-button" type="submit">Export CSV</button>
+  </form>
+</div>
+
+{% if selected_action %}
+<p class="audit-active-filter">กำลังแสดงเฉพาะ: {{selected_action}}</p>
+{% endif %}
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Audit ID</th>
+        <th>วันเวลา</th>
+        <th>พนักงาน</th>
+        <th>การกระทำ</th>
+        <th>ข้อมูล</th>
+        <th>Entity ID</th>
+        <th>รายละเอียด</th>
+        <th>IP</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in logs %}
+      <tr>
+        <td>{{a.id}}</td>
+        <td>{{a.created_at|thai_datetime}}</td>
+        <td>{{a.display_name or '-'}}</td>
+        <td>{{a.action}}</td>
+        <td>{{a.entity_type}}</td>
+        <td>{{a.entity_id or '-'}}</td>
+        <td class="audit-detail" title="{{a.new_value or a.old_value or ''}}">{{a.new_value or a.old_value or '-'}}</td>
+        <td>{{a.ip_address or '-'}}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="empty">ไม่พบ Audit Log ตามตัวกรองนี้</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
