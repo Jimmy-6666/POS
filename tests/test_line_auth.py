@@ -71,11 +71,23 @@ class LineAuthTests(unittest.TestCase):
         profile = {
             "csrf_token": login["csrfToken"], "phone": "0812345678", "delivery_location_id": "1", "room_reference": "A101",
         }
+        signup_page = self.client.get("/order/profile").get_data(as_text=True)
+        self.assertIn("ชื่อสำหรับติดต่อ (สามารถใช้ชื่อเล่นได้)", signup_page)
+        self.assertIn("สถานที่จัดส่ง (เปลี่ยนแปลงตอนสั่งซื้อได้)", signup_page)
+        self.assertIn('name="policy_accepted" type="checkbox" value="yes" required', signup_page)
+        self.assertIn('href="/order/policy"', signup_page)
+        self.assertIn('id="policyDialog"', signup_page)
+        self.assertIn('src="/order/policy?embedded=1"', signup_page)
+        rejected = self.client.post("/order/profile", data=profile)
+        self.assertEqual(rejected.status_code, 200)
+        self.assertIn("กรุณายอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว (PDPA)", rejected.get_data(as_text=True))
+        profile["policy_accepted"] = "yes"
         review = self.client.post("/order/profile", data=profile)
         self.assertEqual(review.status_code, 200)
         self.assertIn("กรุณาตรวจสอบเบอร์อีกครั้ง", review.get_data(as_text=True))
         self.assertIn("แก้ไข", review.get_data(as_text=True))
         self.assertIn("ยืนยัน", review.get_data(as_text=True))
+        self.assertIn("ยอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว (PDPA) แล้ว", review.get_data(as_text=True))
         with self.app.app_context():
             customer = get_db().execute("SELECT phone_normalized,profile_completed FROM customers").fetchone()
             self.assertTrue(customer["phone_normalized"].startswith("line:"))
@@ -84,6 +96,8 @@ class LineAuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         me = self.client.get("/api/auth/me").get_json()
         self.assertTrue(me["customer"]["profileComplete"])
+        edit_page = self.client.get("/order/profile").get_data(as_text=True)
+        self.assertNotIn('name="policy_accepted"', edit_page)
         self.assertEqual(self.client.post("/api/auth/logout", headers={"X-CSRF-Token": "wrong"}).status_code, 400)
         self.assertEqual(self.client.post("/api/auth/logout", headers={"X-CSRF-Token": login["csrfToken"]}).status_code, 200)
         self.assertFalse(self.client.get("/api/auth/me").get_json()["authenticated"])
@@ -100,7 +114,8 @@ class LineAuthTests(unittest.TestCase):
             )
             db.commit()
         profile = {
-            "csrf_token": login["csrfToken"], "phone": "0812345678", "delivery_location_id": "1", "room_reference": "A101",
+            "csrf_token": login["csrfToken"], "phone": "0812345678", "delivery_location_id": "1",
+            "room_reference": "A101", "policy_accepted": "yes",
         }
         self.assertEqual(self.client.post("/order/profile", data=profile).status_code, 200)
         response = self.client.post("/order/profile", data={**profile, "profile_action": "confirm"})

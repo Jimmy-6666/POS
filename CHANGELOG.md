@@ -1,3 +1,54 @@
+# Release 3.0.6 — 2026-07-30
+
+- Added Manager/Admin “แก้ไขสินค้าด่วน” under “สินค้าและคลัง” with exact
+  barcode scan, photo/file preview, whole-baht selling price, three-line Thai
+  name, category, unit, audited save, and automatic return to the next scan.
+- Remembered the last quick-edit price per signed-in staff account and
+  prefilled it for the next item, without showing or accepting satang.
+- Unknown barcodes and products that already have an image share the same
+  “ไม่พบสินค้า” confirmation. The server rechecks image absence inside the
+  write transaction to prevent direct or concurrent duplicate edits.
+- Changed the found-product mobile UI to a compact full-viewport dialog above
+  the app bars. Photo controls, preview, fields, close, and save fit without
+  scrolling at verified 393×873 and 360×640 viewports; very short
+  keyboard-constrained screens retain an internal-scroll fallback.
+- Made every sidebar heading collapsible with one `^` caret rotated 180
+  degrees for collapsed state. Online orders and POS sales start expanded;
+  all other sections start collapsed.
+- Allowed only `/order/policy?embedded=1` to be framed by the same customer
+  origin while retaining frame denial for standalone policy and other pages.
+- No database migration. Verification: 23 focused tests and 58 wider
+  release-critical regressions passed. Browser QA passed the scan, preview,
+  save, remembered-price, duplicate-rejection, sidebar, and responsive flows
+  without console warnings/errors. The full suite completed 166 tests
+  (165 passed, one existing filesystem-capability skip).
+- The mobile-dialog follow-up passed 10 focused/context tests and Browser QA
+  with no document/form overflow or console warnings/errors.
+- Restarted canonical Production port 8000 for the mobile-dialog follow-up;
+  health is `ok`, the CSS cache key is `v3`, and served CSS/JS hashes match
+  the verified source.
+- Restarted canonical Production port 8000 so the Python process loaded the
+  embedded-policy header fix. Live Cloudflare verification now returns
+  `SAMEORIGIN`/`frame-ancestors 'self'` for `?embedded=1`, while the standalone
+  policy remains `DENY`/`frame-ancestors 'none'`.
+
+# Release 3.0.5 — 2026-07-30
+
+- Replaced the customer-header policy button with a required acceptance
+  checkbox on first-time LINE profile completion.
+- The terms/PDPA text is a link that opens the public combined policy in a
+  responsive modal, with normal page navigation as a no-dialog fallback.
+- Enforced acceptance on the server during the profile review/confirmation
+  flow while leaving completed customer profile edits unchanged.
+- Changed the registration labels to “ชื่อสำหรับติดต่อ (สามารถใช้ชื่อเล่นได้)”
+  and “สถานที่จัดส่ง (เปลี่ยนแปลงตอนสั่งซื้อได้)”.
+- No stored consent record or database migration.
+- Verification: 33 focused LINE-auth/online/public-host/release-identity tests
+  passed. Browser verification passed at mobile, tablet, and desktop widths
+  with no horizontal overflow; popup use leaves the checkbox unchanged. The
+  full suite completed 158 tests (157 passed, one existing
+  filesystem-capability skip).
+
 # Release 3.0.4 — 2026-07-30
 
 - Added one touch-friendly “เงื่อนไขการใช้งานและ PDPA” button to the customer

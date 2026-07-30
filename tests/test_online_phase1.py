@@ -70,12 +70,12 @@ class OnlinePhase1Tests(unittest.TestCase):
         self.assertIn("ปรับปรุงล่าสุด: กรกฎาคม 2569", page)
         self.assertNotIn("online-line-auth.js", page)
 
-    def test_customer_header_has_one_combined_terms_and_pdpa_button(self):
+    def test_customer_header_does_not_show_policy_button(self):
         page = self.client.get("/order").get_data(as_text=True)
-        self.assertEqual(page.count('class="consent-policy-button"'), 1)
-        self.assertIn('href="/order/policy"', page)
-        self.assertIn("เงื่อนไขการใช้งานและ PDPA", page)
-        self.assertIn("online.css?v=5", page)
+        self.assertNotIn('class="consent-policy-button"', page)
+        self.assertNotIn('aria-label="อ่านเงื่อนไขการใช้งานและนโยบาย PDPA"', page)
+        self.assertIn("online.css?v=6", page)
+        self.assertIn("online-policy-dialog.js?v=1", page)
 
     def test_catalog_loads_line_auth_without_exposing_contact_configuration(self):
         with self.app.app_context():

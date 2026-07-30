@@ -105,6 +105,16 @@ table th{
     padding-top:24px;
     border-top:2px solid #e5ece8;
 }
+.embedded-policy{
+    background:#fff;
+}
+.embedded-policy .container{
+    max-width:none;
+    margin:0;
+    padding:24px;
+    border-radius:0;
+    box-shadow:none;
+}
 @media(max-width:600px){
     .container{margin:0;padding:24px 18px;border-radius:0}
     .terms-card{padding:18px}
@@ -113,11 +123,11 @@ table th{
 </style>
 
 </head>
-<body>
+<body{% if embedded %} class="embedded-policy"{% endif %}>
 
 <div class="container">
 
-<a class="back-link" href="{{url_for('online.catalog')}}">← กลับไปหน้าสั่งสินค้า</a>
+{% if not embedded %}<a class="back-link" href="{{url_for('online.catalog')}}">← กลับไปหน้าสั่งสินค้า</a>{% endif %}
 
 <h1>เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว (PDPA)</h1>
 

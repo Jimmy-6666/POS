@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}แก้ไขสินค้าด่วน{% endblock %}
+{% block content %}
+<section class="quick-product-page">
+  <div class="page-heading">
+    <div>
+      <h1>แก้ไขสินค้าด่วน</h1>
+      <p>สแกนบาร์โค้ดเพื่อเพิ่มรูปและแก้ข้อมูลสินค้าที่นำเข้าระบบแล้ว</p>
+    </div>
+  </div>
+
+  <section class="form-card quick-scan-card" aria-labelledby="quickScanHeading">
+    <h2 id="quickScanHeading">สแกนบาร์โค้ด</h2>
+    <form class="quick-scan-form" method="get" action="{{url_for('products.quick_edit')}}" data-quick-scan-form>
+      <label for="quickProductBarcode">บาร์โค้ดสินค้า</label>
+      <div>
+        <input id="quickProductBarcode" name="barcode" autocomplete="off" required autofocus>
+        <button class="primary-button" type="submit">ค้นหา</button>
+      </div>
+    </form>
+  </section>
+
+  {% if product %}
+  <dialog
+    id="quickProductEditorDialog"
+    class="quick-product-editor-dialog"
+    data-quick-product-dialog
+    aria-labelledby="quickProductEditorTitle"
+    open
+  >
+    <header class="quick-product-editor-header">
+      <div>
+        <h2 id="quickProductEditorTitle">แก้ไขสินค้า</h2>
+        <p>พบบาร์โค้ด {{product.barcode}}</p>
+      </div>
+      <a
+        class="quick-product-editor-close"
+        href="{{url_for('products.quick_edit')}}"
+        aria-label="ปิดและกลับไปสแกนสินค้าชิ้นอื่น"
+      >×</a>
+    </header>
+
+    <form method="post" enctype="multipart/form-data" class="form-card quick-product-editor" data-quick-product-form>
+      <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+      <input type="hidden" name="product_uuid" value="{{product.product_uuid}}">
+      <input type="hidden" name="barcode" value="{{product.barcode}}">
+
+      <section class="product-image-section" aria-label="รูปสินค้า">
+        <figure id="currentProductImage" class="product-current-image">
+          <img src="{{url_for('static',filename='img/noimage.png')}}" alt="สินค้านี้ยังไม่มีรูป">
+          <figcaption>สินค้านี้ยังไม่มีรูป</figcaption>
+        </figure>
+        <div class="product-image-actions">
+          <label class="secondary-button capture-button" for="productImageBrowse">เลือกรูปถ่าย<input id="productImageBrowse" name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></label>
+          <label class="secondary-button capture-button" for="productImageCamera">ถ่ายภาพ<input id="productImageCamera" name="camera_image" type="file" accept="image/jpeg,image/png,image/webp,image/gif" capture="environment" hidden></label>
+        </div>
+        <div id="productImagePreview" class="product-image-preview" hidden>
+          <img alt="ตัวอย่างรูปสินค้า">
+          <button class="secondary-button" type="button" id="removeProductImage">ลบรูปที่เลือก</button>
+        </div>
+      </section>
+
+      <div class="quick-product-fields">
+        <label class="quick-product-price">ราคาขาย (บาท)
+          <input name="price" type="number" inputmode="numeric" min="0" step="1" required value="{{form_values.get('price', remembered_price_baht if remembered_price_baht is not none else product.price_satang//100)}}">
+        </label>
+        <label class="quick-product-name">ชื่อสินค้า
+          <textarea name="name_th" rows="3" required>{{form_values.get('name_th', product.name_th)}}</textarea>
+        </label>
+        <label class="quick-product-category">หมวดสินค้า
+          <select name="category_id" required>
+            {% set selected_category=form_values.get('category_id',product.category_id|string) %}
+            {% for row in categories %}<option value="{{row.id}}" {% if selected_category==row.id|string %}selected{% endif %}>{{row.name_th}}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="quick-product-unit">หน่วย
+          <select name="unit_id" required>
+            {% set selected_unit=form_values.get('unit_id',product.unit_id|string) %}
+            {% for row in units %}<option value="{{row.id}}" {% if selected_unit==row.id|string %}selected{% endif %}>{{row.name_th}}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+      <button id="quickProductSave" class="primary-button quick-product-save" type="submit">บันทึก</button>
+    </form>
+  </dialog>
+  {% endif %}
+
+  {% if not_found %}
+  <dialog id="quickProductNotFound" class="quick-product-dialog" open aria-labelledby="quickProductNotFoundTitle">
+    <h2 id="quickProductNotFoundTitle">ไม่พบสินค้า</h2>
+    <p>กรุณากดยืนยันเพื่อกลับไปสแกนสินค้าชิ้นถัดไป</p>
+    <form method="get" action="{{url_for('products.quick_edit')}}">
+      <button class="primary-button" type="submit" autofocus>ยืนยัน</button>
+    </form>
+  </dialog>
+  {% endif %}
+</section>
+<script src="{{url_for('static',filename='js/product-form.js',v=3)}}"></script>
+<script src="{{url_for('static',filename='js/product-quick-edit.js',v=2)}}"></script>
+{% endblock %}
