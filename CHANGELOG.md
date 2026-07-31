@@ -7,6 +7,10 @@
 - Added a launcher button that opens the local log in Notepad for a `POS`
   account test without Codex access. The log excludes token/PIN/session data
   and cannot affect a completed transaction.
+- The attach-only `POS` launcher now self-heals its per-user default receipt
+  printer to `POSPrinter POS-80` before opening the kiosk print agent and
+  writes the Windows setup result to that same diagnostics log. UAT and the
+  Wilai profile are not changed.
 
 # Release 3.1.2 — released 2026-07-31
 

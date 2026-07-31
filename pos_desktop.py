@@ -43,6 +43,7 @@ PROFILE_ROOT = Path(os.environ.get("POS_DESKTOP_PROFILE_ROOT", RUNTIME)).expandu
 BROWSER_PROFILE = PROFILE_ROOT / "browser-profile"
 PRINT_BROWSER_PROFILE = PROFILE_ROOT / "print-browser-profile"
 PRINT_DIAGNOSTICS_LOG = PROFILE_ROOT / "print-diagnostics.log"
+RECEIPT_PRINTER_NAME = os.environ.get("POS_RECEIPT_PRINTER", "POSPrinter POS-80").strip()
 RUNTIME_CONFIG = load_runtime_config(ROOT, {**os.environ, "POS_RUNTIME_ROOT": str(RUNTIME)})
 STATE_FILE = Path(
     os.environ.get("POS_DISPLAY_STATE_FILE", RUNTIME_PATHS.display_state)
@@ -99,6 +100,67 @@ def print_browser_args(browser_exe, profile, token, desktop_user):
         "--disable-save-password-bubble", "--disable-background-mode", "--disable-sync",
         "--disable-signin-promo",
     ]
+
+
+def record_launcher_print_event(event, **details):
+    """Best-effort local diagnostics for per-user Windows printer setup."""
+    try:
+        safe_details = {
+            str(key): str(value).replace("\r", " ").replace("\n", " ").replace("|", "/")[:180]
+            for key, value in details.items()
+        }
+        parts = [
+            time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "source=desktop-launcher",
+            f"event={event}",
+        ]
+        parts.extend(f"{key}={value}" for key, value in safe_details.items())
+        PRINT_DIAGNOSTICS_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with PRINT_DIAGNOSTICS_LOG.open("a", encoding="utf-8") as stream:
+            stream.write(" | ".join(parts) + "\n")
+    except OSError:
+        # Printer setup must never prevent POS from opening or recording a sale.
+        pass
+
+
+def configure_attach_only_default_printer(desktop_user):
+    """Set the driver-backed receipt printer in the standard POS profile only."""
+    if not ATTACH_ONLY or not RECEIPT_PRINTER_NAME:
+        return
+    try:
+        legacy_mode = subprocess.run(
+            [
+                "reg.exe", "add", r"HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows",
+                "/v", "LegacyDefaultPrinterMode", "/t", "REG_DWORD", "/d", "1", "/f",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            creationflags=CREATE_NO_WINDOW,
+            check=False,
+        )
+        printer_mode = subprocess.run(
+            ["rundll32.exe", "printui.dll,PrintUIEntry", "/y", "/n", RECEIPT_PRINTER_NAME],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            creationflags=CREATE_NO_WINDOW,
+            check=False,
+        )
+        record_launcher_print_event(
+            "default_printer_configured",
+            desktop_user=desktop_user,
+            printer=RECEIPT_PRINTER_NAME,
+            registry_exit=legacy_mode.returncode,
+            printer_exit=printer_mode.returncode,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        record_launcher_print_event(
+            "default_printer_configuration_failed",
+            desktop_user=desktop_user,
+            printer=RECEIPT_PRINTER_NAME,
+            error=type(exc).__name__,
+        )
 
 
 class PosDesktop:
@@ -286,6 +348,7 @@ class PosDesktop:
             self.print_browser_process and self.print_browser_process.poll() is None
         ):
             return
+        configure_attach_only_default_printer(self.desktop_user)
         known_windows = set(self.chrome_windows())
         profile = PRINT_BROWSER_PROFILE
         self.configure_browser_profile(profile)

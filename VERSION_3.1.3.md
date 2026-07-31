@@ -56,3 +56,13 @@ product image is written to the log.
 - A verified local backup and full recovery bundle were created before update.
   Production port 8000 returned ready health as R3.1.3 afterward. UAT port
   8001 was restored and also returned ready health.
+
+## Printer-driver recovery hotfix
+
+- The attach-only launcher sets `POSPrinter POS-80` as the Windows default
+  printer only in the local `POS` user profile before it opens the hidden
+  kiosk print-agent. Windows' automatic default-printer selection is disabled
+  only for that profile, so it cannot redirect Wilai's or UAT's printer.
+- The same diagnostic log records the selected printer and the exit status of
+  the registry and Windows PrintUI calls. A setup failure remains diagnostic
+  only and never blocks the cashier, transaction, or launcher.
