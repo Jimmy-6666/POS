@@ -5,13 +5,23 @@
   const overlay = document.querySelector('#sidebarOverlay');
   const navSections = document.querySelectorAll('[data-nav-section]');
   const saved = localStorage.getItem('sidebar-collapsed-v2');
+  const resetAfterLogin = body.dataset.resetSidebar === '1';
   let savedSections = {};
   try {
     savedSections = JSON.parse(localStorage.getItem('sidebar-sections-v306') || '{}');
   } catch {
     savedSections = {};
   }
-  if (saved === '1' || (saved === null && body.dataset.endpoint === 'pos.index')) body.classList.add('sidebar-collapsed');
+  if (resetAfterLogin || saved === '1' || (saved === null && body.dataset.endpoint === 'pos.index')) {
+    body.classList.add('sidebar-collapsed');
+  }
+  if (resetAfterLogin) {
+    try {
+      localStorage.setItem('sidebar-collapsed-v2', '1');
+    } catch {
+      // The fresh-login collapse still applies when browser storage is unavailable.
+    }
+  }
   navSections.forEach((section) => {
     const name = section.dataset.navSection;
     const button = section.querySelector('.nav-group');

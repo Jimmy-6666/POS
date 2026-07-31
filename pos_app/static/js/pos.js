@@ -7,7 +7,9 @@
   const escapeHtml = (text) => { const node = document.createElement('div'); node.textContent = text || ''; return node.innerHTML; };
   const manualPriceDialog = $('#manualPriceDialog');
   const manualBarcode = 'MANUALPRICE';
-  let products = [], cart = [], total = 0, paymentMethod = 'cash', activeCategory = '', completing = false, manualPriceSaving = false, manualPriceContext = null, searchTimer, scannerTimer, scannerStream = [];
+  let products = [], buttonGroups = [], currentGroup = null, catalogMode = 'groups', catalogPage = 1;
+  let cart = [], total = 0, paymentMethod = 'cash', completing = false, manualPriceSaving = false, manualPriceContext = null, searchTimer, scannerTimer, scannerStream = [];
+  const catalogPageSize = 9;
 
   // Keyboard-wedge barcode readers emit physical keyboard codes.  Those codes
   // remain stable even when Windows/iOS has a Thai keyboard layout selected.
@@ -106,20 +108,96 @@
     audio.currentTime = 0;
     audio.play().catch(() => {});
   }
-  async function loadProducts() {
+  function positionedCatalogRows() {
+    const rows = catalogMode === 'groups' ? buttonGroups : products;
+    if (catalogMode !== 'search') return rows;
+    return rows.map((row, index) => ({ ...row, position: index + 1 }));
+  }
+  function catalogPageCount(rows = positionedCatalogRows()) {
+    const lastPosition = rows.reduce((highest, row) => Math.max(highest, Number(row.position) || 0), 0);
+    return Math.max(1, Math.ceil(lastPosition / catalogPageSize));
+  }
+  function renderCatalog() {
+    const rows = positionedCatalogRows();
+    const pageCount = catalogPageCount(rows);
+    catalogPage = Math.min(Math.max(1, catalogPage), pageCount);
+    const firstPosition = ((catalogPage - 1) * catalogPageSize) + 1;
+    const slots = Array.from({ length: catalogPageSize }, (_, index) => {
+      const position = firstPosition + index;
+      return rows.find((row) => Number(row.position) === position) || null;
+    });
+    const title = catalogMode === 'groups'
+      ? 'เลือกเมนูสินค้า'
+      : catalogMode === 'search'
+        ? 'ผลการค้นหาสินค้าทั้งหมด'
+        : currentGroup?.name_th || 'สินค้าในเมนู';
+    $('#catalogTitle').textContent = title;
+    $('#catalogBackButton').hidden = catalogMode === 'groups';
+    $('#resultCount').textContent = catalogMode === 'groups' ? `${rows.length} เมนู` : `${rows.length} สินค้า`;
+    $('#productGrid').innerHTML = slots.map((row, index) => {
+      const slot = firstPosition + index;
+      if (!row) return `<span class="pos-button-empty-slot" aria-hidden="true" data-slot="${slot}"></span>`;
+      if (catalogMode === 'groups') {
+        return `<button class="pos-menu-button" type="button" data-button-group="${row.id}" aria-label="เปิดเมนู ${escapeHtml(row.name_th)}">
+          <strong>${escapeHtml(row.name_th)}</strong>
+        </button>`;
+      }
+      return `<button class="pos-product-text-button" type="button" data-product-uuid="${row.product_uuid}" aria-label="เพิ่ม ${escapeHtml(row.name_th)} ราคา ${money(row.price_satang)}">
+        <strong><span>${escapeHtml(row.name_th)}</span></strong><b>${money(row.price_satang)}</b>
+      </button>`;
+    }).join('');
+    const pager = $('#catalogPager');
+    pager.hidden = pageCount <= 1;
+    $('#catalogPageLabel').textContent = `หน้า ${catalogPage.toLocaleString('th-TH')} / ${pageCount.toLocaleString('th-TH')}`;
+    $('#catalogPreviousButton').disabled = catalogPage <= 1;
+    $('#catalogNextButton').disabled = catalogPage >= pageCount;
+    if (!rows.length) {
+      const detail = catalogMode === 'groups'
+        ? 'ผู้จัดการสามารถเพิ่มเมนูได้ที่ ตั้งค่าปุ่มขาย'
+        : catalogMode === 'search'
+          ? 'ลองค้นหาด้วยชื่อ บาร์โค้ด หรือ SKU'
+          : 'เมนูนี้ยังไม่ได้ตั้งค่าสินค้า';
+      $('#productGrid').innerHTML = `<div class="empty-state"><span>▦</span><strong>ยังไม่มีรายการ</strong><p>${detail}</p></div>`;
+    }
+  }
+  async function loadButtonGroups() {
     try {
-      const query = encodeURIComponent($('#productLookup').value.trim());
-      products = await api(`/api/pos/products?q=${query}&category_id=${activeCategory}`);
-      renderProducts();
+      buttonGroups = await api('/api/pos/button-groups');
+      products = [];
+      currentGroup = null;
+      catalogMode = 'groups';
+      catalogPage = 1;
+      renderCatalog();
     } catch (error) { message(error.message, true); }
   }
-  function renderProducts() {
-    $('#resultCount').textContent = `${products.length} สินค้า`;
-    $('#productGrid').innerHTML = products.map((product) => `
-      <button class="product-card-v2" type="button" data-product-uuid="${product.product_uuid}" aria-label="เพิ่ม ${escapeHtml(product.name_th)} ราคา ${money(product.price_satang)}">
-        ${product.image_path ? `<img src="/uploads/products/${encodeURIComponent(product.image_path)}" alt="">` : '<img src="/static/img/noimage.png" alt="ไม่มีรูปสินค้า">'}
-        <span class="product-info-v2"><strong>${escapeHtml(product.name_th)}</strong><b>${money(product.price_satang)}</b></span>
-      </button>`).join('') || '<div class="empty-state"><span>⌕</span><strong>ไม่พบสินค้า</strong><p>ลองค้นหาด้วยชื่อ บาร์โค้ด หรือเลือกหมวดอื่น</p></div>';
+  async function loadButtonGroup(groupId) {
+    try {
+      const result = await api(`/api/pos/button-groups/${groupId}/products`);
+      currentGroup = result.group;
+      products = result.products;
+      catalogMode = 'group';
+      catalogPage = 1;
+      renderCatalog();
+    } catch (error) { message(error.message, true); }
+  }
+  async function loadSearchResults() {
+    const value = $('#productLookup').value.trim();
+    if (!value) {
+      await loadButtonGroups();
+      return;
+    }
+    try {
+      products = await api(`/api/pos/products?q=${encodeURIComponent(value)}`);
+      currentGroup = null;
+      catalogMode = 'search';
+      catalogPage = 1;
+      renderCatalog();
+    } catch (error) { message(error.message, true); }
+  }
+  async function refreshCatalog() {
+    if ($('#productLookup').value.trim()) await loadSearchResults();
+    else if (currentGroup && catalogMode === 'group') await loadButtonGroup(currentGroup.id);
+    else await loadButtonGroups();
   }
   function openManualPrice(product, barcode, reason) {
     if (manualPriceDialog.open || manualPriceSaving) return;
@@ -180,17 +258,20 @@
       if (exactRows.length) {
         addProduct(exactRows[0]);
         $('#productLookup').value = '';
-        if (!manualPriceDialog.open) await loadProducts();
+        if (!manualPriceDialog.open) await refreshCatalog();
         return;
       }
-      const matching = await api(`/api/pos/products?q=${encodeURIComponent(value)}&category_id=${activeCategory}`);
+      const matching = await api(`/api/pos/products?q=${encodeURIComponent(value)}`);
       if (matching.length === 1) {
         addProduct(matching[0]);
         $('#productLookup').value = '';
-        if (!manualPriceDialog.open) await loadProducts();
+        if (!manualPriceDialog.open) await refreshCatalog();
       } else {
         products = matching;
-        renderProducts();
+        currentGroup = null;
+        catalogMode = 'search';
+        catalogPage = 1;
+        renderCatalog();
         const looksLikeBarcode = /^[A-Za-z0-9][A-Za-z0-9._/-]{2,127}$/.test(value);
         if (!matching.length && (scanner || looksLikeBarcode)) {
           message('ไม่พบสินค้า กรุณาระบุราคา', true);
@@ -299,22 +380,37 @@
       renderCart();
       $('#paymentDialog').close();
       $('#saleSuccessDialog').showModal();
-      await loadProducts();
+      $('#productLookup').value = '';
+      await loadButtonGroups();
     } catch (error) { $('#paymentError').textContent = error.message; }
     finally { completing = false; button.textContent = original; updateCash(); }
   }
   function openMobileCart() { document.body.classList.add('mobile-cart-open'); $('#cartPanel').setAttribute('aria-hidden', 'false'); }
   function closeMobileCart() { document.body.classList.remove('mobile-cart-open'); }
 
-  $('#productGrid').addEventListener('click', (event) => { const button = event.target.closest('[data-product-uuid]'); if (button) addProduct(products.find((product) => product.product_uuid === button.dataset.productUuid)); });
-  $('#categoryBoxes').addEventListener('click', (event) => { const button = event.target.closest('[data-category]'); if (!button) return; activeCategory = button.dataset.category; document.querySelectorAll('.category-chip').forEach((chip) => chip.classList.toggle('active', chip === button)); loadProducts(); });
+  $('#productGrid').addEventListener('click', (event) => {
+    const groupButton = event.target.closest('[data-button-group]');
+    if (groupButton) {
+      loadButtonGroup(groupButton.dataset.buttonGroup);
+      return;
+    }
+    const productButton = event.target.closest('[data-product-uuid]');
+    if (productButton) addProduct(products.find((product) => product.product_uuid === productButton.dataset.productUuid));
+  });
+  $('#catalogBackButton').onclick = () => {
+    $('#productLookup').value = '';
+    loadButtonGroups();
+    $('#productLookup').focus();
+  };
+  $('#catalogPreviousButton').onclick = () => { catalogPage = Math.max(1, catalogPage - 1); renderCatalog(); };
+  $('#catalogNextButton').onclick = () => { catalogPage = Math.min(catalogPageCount(), catalogPage + 1); renderCatalog(); };
   $('#cartItems').addEventListener('change', (event) => { const index = Number(event.target.dataset.i); if (event.target.dataset.action === 'qty') cart[index].quantity = Math.max(Number(event.target.min), Number(event.target.value) || 1); renderCart(); });
   $('#cartItems').addEventListener('click', (event) => { const button = event.target.closest('[data-action]'); if (!button || button.tagName === 'INPUT') return; const index = Number(button.dataset.i); if (button.dataset.action === 'plus') cart[index].quantity += 1; if (button.dataset.action === 'minus') cart[index].quantity -= 1; if (button.dataset.action === 'remove' || cart[index]?.quantity <= 0) cart.splice(index, 1); renderCart(); });
   document.addEventListener('keydown', receiveScannerKey, true);
   $('#productLookup').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); clearTimeout(searchTimer); addFromLookup(); } });
-  $('#productLookup').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadProducts, 250); });
+  $('#productLookup').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadSearchResults, 250); });
   $('#addLookupButton').onclick = addFromLookup;
-  $('#clearLookup').onclick = () => { $('#productLookup').value = ''; loadProducts(); $('#productLookup').focus(); };
+  $('#clearLookup').onclick = () => { $('#productLookup').value = ''; loadButtonGroups(); $('#productLookup').focus(); };
   $('#payButton').onclick = openPayment;
   document.querySelectorAll('.payment-tabs button').forEach((button) => button.onclick = () => setMethod(button.dataset.method));
   document.querySelectorAll('[data-denom]').forEach((button) => button.onclick = () => { $('#receivedInput').value = (Number($('#receivedInput').value) || 0) + Number(button.dataset.denom); updateCash(); });
@@ -372,7 +468,7 @@
       manualPriceContext = null;
       addProduct(product, manualPrice);
       $('#productLookup').value = '';
-      await loadProducts();
+      await refreshCatalog();
       $('#productLookup').focus({ preventScroll: true });
       $('#productLookup').select();
     } catch (error) {
@@ -385,6 +481,6 @@
     }
   });
   window.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMobileCart(); });
-  loadProducts();
+  loadButtonGroups();
   renderCart();
 })();

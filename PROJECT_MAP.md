@@ -16,12 +16,12 @@ Release 2.2 server. Batch files select the port and runtime root.
 | Authentication, sessions, CSRF, permissions, public-host isolation | `pos_app/auth.py`, `pos_app/routes/auth.py`, `pos_app/public_host_access.py`, `pos_app/web_security.py` |
 | Database bootstrap/migrations | `pos_app/database.py`, `pos_app/schema.sql` |
 | Dashboard/health | `pos_app/routes/main.py`, `index.html` |
-| Product/catalog/price control | `pos_app/product_identity.py`, `pos_app/services/product_spreadsheet.py`, `pos_app/routes/products.py`, product/reference/price templates, `product-form.js` |
-| Register, held bills, sales, receipts, voids | `pos_app/routes/pos.py`, `pos_app/services/sales.py`, POS/sales/receipt templates, `pos.js` |
+| Product/catalog/price/POS-button control | `pos_app/product_identity.py`, `pos_app/services/product_spreadsheet.py`, `pos_app/routes/products.py`, product/reference/price templates, `pos_button_settings.html`, `product-form.js` |
+| Register, text-only button grid, held bills, sales, receipts, voids | `pos_app/routes/pos.py`, `pos_app/services/sales.py`, POS/sales/receipt templates, `pos.js`, `v310.css` |
 | Money conversion/change | `pos_app/services/money.py` |
 | Receiving, adjustments, ledger, suppliers | `pos_app/routes/inventory.py`, inventory templates |
 | Blind stock count | `pos_app/routes/stock_count.py`, stock-count templates, `stock-count.js`, local barcode vendors |
-| Closing, billing, reports | `pos_app/routes/reporting.py`, reconciliation/billing/report templates, `billing-report.js` |
+| Closing, touch Numpad, billing, reports | `pos_app/routes/reporting.py`, reconciliation/billing/report templates, `reconciliation-numpad.js`, `billing-report.js` |
 | Staff, settings, audit, backup | `pos_app/routes/admin.py`, admin templates |
 | Runtime maintenance, signed updates, support bundles | `pos_app/routes/maintenance.py`, `services/signed_updates.py`, `services/support_bundle.py`, `apply-signed-update.ps1` |
 | Customer ordering/auth/cart/history | `pos_app/routes/online.py`, `customer_auth.py`, `templates/online/`, online JS/CSS |
@@ -68,6 +68,14 @@ See `MODULE_DEPENDENCIES.md` for cross-module impact.
 
 Production lifecycle files are kept at the repository root for operator use.
 They use production-common.ps1 and never modify start-uat.bat.
+`configure-production-kiosk-user.ps1` creates the standard local `POS` account,
+registers separate background-server and attach-only desktop tasks, applies
+least-privilege launcher ACLs, copies a read-only standard-library Python
+runtime to `desktop-python/`, and creates the Public Desktop shortcut.
+`VERSION_3.0.9.md` is the accepted behavior and setup contract for this
+two-task, standard-user launcher model.
+`VERSION_3.1.0.md` is the source contract for the cashier-first text-only POS
+button grid and closing Numpad; Production was advanced to 3.1.0 on 2026-07-31.
 
 The sanitized, crash-resumable customer-machine workflow and reusable Codex
 prompt are in `docs/CUSTOMER_MACHINE_DEPLOYMENT_PLAYBOOK_3.0.md`.

@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Blueprint, current_app, g, jsonify, render_template, request, send_from_directory
+from flask import Blueprint, current_app, g, jsonify, make_response, render_template, request, send_from_directory
 
 from ..auth import login_required, permission_required, valid_csrf, verify_void_authorizer_pin
 from ..database import get_db
@@ -17,6 +17,7 @@ from ..services.sales import SaleError, calculate_cart, complete_sale, void_sale
 bp = Blueprint("pos", __name__)
 MANUAL_PRICE_BARCODE = "MANUALPRICE"
 MAX_MANUAL_PRICE_BAHT = 9_999_999
+POS_SIDEBAR_RESET_COOKIE = "pos_sidebar_reset"
 
 
 def _manual_price_baht(value):
@@ -51,9 +52,16 @@ def product_image(filename):
 @permission_required("pos.use")
 def index():
     db = get_db()
-    categories = db.execute("SELECT id, name_th FROM categories WHERE is_active=1 ORDER BY sort_order,name_th").fetchall()
     billing_customers = db.execute("SELECT id,name FROM billing_customers WHERE is_active=1 ORDER BY name").fetchall()
-    return render_template("pos.html", categories=categories, billing_customers=billing_customers)
+    reset_sidebar = request.cookies.get(POS_SIDEBAR_RESET_COOKIE) == "1"
+    response = make_response(render_template(
+        "pos.html",
+        billing_customers=billing_customers,
+        reset_sidebar=reset_sidebar,
+    ))
+    if reset_sidebar:
+        response.delete_cookie(POS_SIDEBAR_RESET_COOKIE, path="/")
+    return response
 
 
 @bp.get("/api/pos/products")
@@ -80,6 +88,42 @@ def products_api():
             WHERE {' AND '.join(where)} ORDER BY p.is_favorite DESC,p.name_th LIMIT 100""", params
     ).fetchall()
     return jsonify([dict(row) for row in rows])
+
+
+@bp.get("/api/pos/button-groups")
+@permission_required("pos.use")
+def button_groups_api():
+    rows = get_db().execute(
+        """SELECT id,name_th,position
+           FROM pos_button_groups
+           WHERE is_active=1
+           ORDER BY position,id"""
+    ).fetchall()
+    return jsonify([dict(row) for row in rows])
+
+
+@bp.get("/api/pos/button-groups/<int:group_id>/products")
+@permission_required("pos.use")
+def button_group_products_api(group_id):
+    db = get_db()
+    group = db.execute(
+        "SELECT id,name_th,position FROM pos_button_groups WHERE id=? AND is_active=1",
+        (group_id,),
+    ).fetchone()
+    if not group:
+        return jsonify(error="ไม่พบเมนูปุ่มขายนี้"), 404
+    rows = db.execute(
+        """SELECT p.product_uuid,p.barcode,p.name_th,p.price_satang,p.stock_quantity,
+                  p.allow_decimal_quantity,p.is_favorite,u.name_th AS unit_name,
+                  i.position
+           FROM pos_button_items i
+           JOIN products p ON p.id=i.product_id
+           JOIN units u ON u.id=p.unit_id
+           WHERE i.group_id=? AND p.is_active=1
+           ORDER BY i.position,i.id""",
+        (group_id,),
+    ).fetchall()
+    return jsonify(group=dict(group), products=[dict(row) for row in rows])
 
 
 @bp.post("/api/pos/manual-price")

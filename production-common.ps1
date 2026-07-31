@@ -38,24 +38,32 @@ function Get-ProductionContext {
         }
     }
     $resolvedRuntimeRoot = [IO.Path]::GetFullPath($RuntimeRoot)
+    $desktopPythonRoot = Join-Path $resolvedInstallRoot "desktop-python"
     [pscustomobject]@{
         InstallRoot = $resolvedInstallRoot
         RuntimeRoot = $resolvedRuntimeRoot
         Port = $Port
-        AppVersion = "3.0.8"
+        AppVersion = "3.1.0"
         ServerIp = "192.168.0.200"
         LanNetworks = "192.168.0.0/24"
         DefaultGateway = "192.168.0.1"
         DnsServers = @("8.8.8.8", "8.8.4.4")
         Python = Join-Path $resolvedInstallRoot ".venv\Scripts\python.exe"
+        Pythonw = Join-Path $resolvedInstallRoot ".venv\Scripts\pythonw.exe"
+        DesktopPythonRoot = $desktopPythonRoot
+        DesktopPython = Join-Path $desktopPythonRoot "python.exe"
+        DesktopPythonw = Join-Path $desktopPythonRoot "pythonw.exe"
         LockFile = Join-Path $resolvedInstallRoot "requirements.lock.txt"
         StartScript = Join-Path $resolvedInstallRoot "start-production.ps1"
         BackupScript = Join-Path $resolvedInstallRoot "backup-production.ps1"
         TaskName = "SaengngamPOS-Production"
+        DesktopTaskName = "SaengngamPOS-Desktop"
         BackupTaskName = "SaengngamPOS-Backup"
         BackupTime = if ($env:POS_BACKUP_TIME) { $env:POS_BACKUP_TIME } else { "02:00" }
         FirewallName = "Saengngam POS Production TCP $Port"
         ReportDirectory = Join-Path $resolvedRuntimeRoot "support"
+        PrintAgentTokenFile = Join-Path $resolvedRuntimeRoot "config\print-agent-token"
+        DisplayStateFile = Join-Path $resolvedRuntimeRoot "pos-desktop\display_state.json"
     }
 }
 
@@ -69,6 +77,13 @@ function Set-ProductionEnvironment {
     $env:POS_SERVER_IP = $Context.ServerIp
     $env:POS_LAN_ACCESS_ENABLED = "1"
     $env:POS_LAN_NETWORKS = $Context.LanNetworks
+    $env:POS_DISPLAY_STATE_FILE = $Context.DisplayStateFile
+    if (Test-Path -LiteralPath $Context.PrintAgentTokenFile) {
+        $token = (Get-Content -Raw -LiteralPath $Context.PrintAgentTokenFile).Trim()
+        if ($token) {
+            $env:POS_PRINT_AGENT_TOKEN = $token
+        }
+    }
     $trustedHosts = @(
         @($env:POS_TRUSTED_HOSTS -split ",") |
             ForEach-Object { $_.Trim() } |
@@ -157,24 +172,157 @@ function Ensure-VirtualEnvironment {
     Invoke-Checked $Context.Python @("-m", "pip", "check") "Installed dependency verification failed."
 }
 
+function Get-VirtualEnvironmentPythonHome {
+    param($Context)
+    $configuration = Join-Path $Context.InstallRoot ".venv\pyvenv.cfg"
+    if (-not (Test-Path -LiteralPath $configuration)) {
+        throw "Virtual environment configuration is missing: $configuration"
+    }
+    foreach ($line in Get-Content -LiteralPath $configuration) {
+        $match = [regex]::Match($line, "^\s*home\s*=\s*(.+?)\s*$")
+        if ($match.Success) {
+            $pythonHome = [IO.Path]::GetFullPath($match.Groups[1].Value.Trim())
+            if (-not (Test-Path -LiteralPath (Join-Path $pythonHome "pythonw.exe"))) {
+                throw "Virtual environment Python home is incomplete: $pythonHome"
+            }
+            return $pythonHome
+        }
+    }
+    throw "Virtual environment Python home was not found in $configuration."
+}
+
+function Test-ProductionDesktopPython {
+    param($Context)
+    if (-not (Test-Path -LiteralPath $Context.DesktopPython) -or -not (Test-Path -LiteralPath $Context.DesktopPythonw)) {
+        return $false
+    }
+
+    $previousSmokeRoot = $env:POS_DESKTOP_SMOKE_ROOT
+    $valid = $false
+    try {
+        $env:POS_DESKTOP_SMOKE_ROOT = $Context.InstallRoot
+        $smokeOutput = @(& $Context.DesktopPython -I -B -c "import os, sys; sys.path.insert(0, os.environ['POS_DESKTOP_SMOKE_ROOT']); import pos_desktop; print('desktop-python-ok')" 2>&1)
+        $valid = $LASTEXITCODE -eq 0 -and ($smokeOutput -join "`n") -match "desktop-python-ok"
+    } catch {
+        $valid = $false
+    } finally {
+        if ($null -eq $previousSmokeRoot) {
+            Remove-Item Env:POS_DESKTOP_SMOKE_ROOT -ErrorAction SilentlyContinue
+        } else {
+            $env:POS_DESKTOP_SMOKE_ROOT = $previousSmokeRoot
+        }
+    }
+    return $valid
+}
+
+function Ensure-ProductionDesktopPython {
+    param($Context)
+    if (Test-ProductionDesktopPython $Context) {
+        return
+    }
+
+    $sourceRoot = Get-VirtualEnvironmentPythonHome $Context
+    New-Item -ItemType Directory -Force -Path $Context.DesktopPythonRoot | Out-Null
+
+    foreach ($directoryName in @("DLLs", "Lib", "tcl")) {
+        $sourceDirectory = Join-Path $sourceRoot $directoryName
+        if (-not (Test-Path -LiteralPath $sourceDirectory)) {
+            throw "Desktop Python source directory is missing: $sourceDirectory"
+        }
+        $targetDirectory = Join-Path $Context.DesktopPythonRoot $directoryName
+        New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
+        & robocopy.exe $sourceDirectory $targetDirectory /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+        if ($LASTEXITCODE -ge 8) {
+            throw "Unable to copy the shared desktop Python directory: $directoryName"
+        }
+    }
+
+    $runtimeFiles = Get-ChildItem -LiteralPath $sourceRoot -File |
+        Where-Object {
+            $_.Name -match "^(python(?:w)?\.exe|python.*\.dll|vcruntime.*\.dll|LICENSE\.txt)$"
+        }
+    foreach ($runtimeFile in $runtimeFiles) {
+        Copy-Item -LiteralPath $runtimeFile.FullName -Destination $Context.DesktopPythonRoot -Force
+    }
+    if (-not (Test-ProductionDesktopPython $Context)) {
+        throw "Shared desktop Python validation failed after installation."
+    }
+}
+
 function Initialize-ProductionApplication {
     param($Context)
     Set-ProductionEnvironment $Context
-    Invoke-Checked $Context.Python @("-c", "from pos_app import create_app; create_app()") "Database initialization or startup validation failed."
+    Push-Location $Context.InstallRoot
+    try {
+        Invoke-Checked $Context.Python @("-c", "from pos_app import create_app; create_app()") "Database initialization or startup validation failed."
+    } finally {
+        Pop-Location
+    }
+}
+
+function Ensure-ProductionPrintAgentToken {
+    param($Context)
+    $parent = Split-Path -Parent $Context.PrintAgentTokenFile
+    New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    if (-not (Test-Path -LiteralPath $Context.PrintAgentTokenFile)) {
+        $bytes = New-Object byte[] 32
+        $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
+        try {
+            $generator.GetBytes($bytes)
+        } finally {
+            $generator.Dispose()
+        }
+        $token = [Convert]::ToBase64String($bytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
+        [IO.File]::WriteAllText($Context.PrintAgentTokenFile, $token, (New-Object Text.ASCIIEncoding))
+    }
+    $existing = (Get-Content -Raw -LiteralPath $Context.PrintAgentTokenFile).Trim()
+    if ($existing.Length -lt 32) {
+        throw "Production print-agent token is missing or too short."
+    }
+    return $existing
+}
+
+function Get-ProductionDesktopUser {
+    param([string]$DesktopUser)
+    if ($DesktopUser) {
+        return $DesktopUser
+    }
+    $consoleUser = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
+    if ($consoleUser) {
+        return $consoleUser
+    }
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    if ($currentUser -and $currentUser -notmatch "\\SYSTEM$") {
+        return $currentUser
+    }
+    throw "No interactive Windows user was found. Re-run with -DesktopUser DOMAIN\User while that user is signed in."
 }
 
 function Register-ProductionStartup {
     param($Context)
-    $argument = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -InstallRoot "{1}" -RuntimeRoot "{2}" -Port {3}' -f $Context.StartScript, $Context.InstallRoot, $Context.RuntimeRoot, $Context.Port
+    $argument = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -InstallRoot "{1}" -RuntimeRoot "{2}" -Port {3}' -f $Context.StartScript, $Context.InstallRoot, $Context.RuntimeRoot, $Context.Port
     $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument $argument -WorkingDirectory $Context.InstallRoot
     $trigger = New-ScheduledTaskTrigger -AtStartup
-    $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
+    $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
     Register-ScheduledTask -TaskName $Context.TaskName -Action $action -Trigger $trigger -Settings $settings -User "SYSTEM" -RunLevel Highest -Force | Out-Null
+}
+
+function Register-ProductionDesktopStartup {
+    param($Context, [string]$DesktopUser)
+    $resolvedDesktopUser = Get-ProductionDesktopUser $DesktopUser
+    $argument = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -InstallRoot "{1}" -RuntimeRoot "{2}" -Port {3} -Desktop -AttachOnly' -f $Context.StartScript, $Context.InstallRoot, $Context.RuntimeRoot, $Context.Port
+    $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument $argument -WorkingDirectory $Context.InstallRoot
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $resolvedDesktopUser
+    $principal = New-ScheduledTaskPrincipal -UserId $resolvedDesktopUser -LogonType Interactive -RunLevel Limited
+    $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+    $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings
+    Register-ScheduledTask -TaskName $Context.DesktopTaskName -InputObject $task -Force | Out-Null
 }
 
 function Remove-ProductionStartup {
     param($Context)
     Unregister-ScheduledTask -TaskName $Context.TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $Context.DesktopTaskName -Confirm:$false -ErrorAction SilentlyContinue
 }
 
 function Register-ProductionBackupTask {
@@ -390,6 +538,7 @@ function Write-InstallationReport {
         lan_networks = $Context.LanNetworks
         lan_url = "http://$($Context.ServerIp):$($Context.Port)"
         task_name = $Context.TaskName
+        desktop_task_name = $Context.DesktopTaskName
         firewall_rule = $Context.FirewallName
     }
     $file = Join-Path $Context.ReportDirectory ("installation-report-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".json")

@@ -31,6 +31,8 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0.6 quick product editor, collapsible sidebar, embedded-policy fix | Deployed 2026-07-30; 165 passed, 1 capability skip; no migration | `VERSION_3.0.6.md`, release 3.0.6, public-host tests |
 | Release 3.0.7 scan/create/preview and focus workflows | Deployed 2026-07-30; 172 passed, 1 capability skip; no migration | `VERSION_3.0.7.md`, release 3.0.7, price/stock-count tests |
 | Release 3.0.8 blocking POS manual price and audit export | Deployed 2026-07-30; 178 passed, 1 capability skip; additive migration 27 | `VERSION_3.0.8.md`, release 3.0.8, sales/runtime tests |
+| Release 3.0.9 isolated local POS user and reboot-safe launcher | Released 2026-07-31; no migration | `VERSION_3.0.9.md`, launcher/runtime tests |
+| Release 3.1.0 cashier-first text-only POS button grid | Deployed 2026-07-31; Migration 28; 185 passed, 1 capability skip | `VERSION_3.1.0.md`, `tests/test_release_3_1_0.py` |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -147,6 +149,18 @@ and detailed verification remain in their linked version documents and tests.
 
 ## Version 3.0.8 implementation baseline — 2026-07-30
 
+- The post-release Windows account split keeps the server under `SYSTEM` and
+  the attach-only launcher under the standard `POS` user. A launcher hotfix
+  copies a read-only standard-library Python runtime to `desktop-python/`, so
+  the passwordless POS account no longer needs access to the Admin user's
+  private Python installation. The launcher loads `runtime_paths.py` directly
+  without bootstrapping Flask, and hidden startup failures now create a POS-
+  writable diagnostic plus a visible error. Runtime/UI smoke validation and
+  11 focused regressions pass; no schema or business-data change. The
+  post-reboot display-state file now lives under the POS-writable
+  `runtime/pos-desktop/` parent so server recreation cannot inherit the
+  repository-root deny ACL. A live scheduled-task run as `POS` wrote this
+  state successfully and the print-agent authorization endpoint returned 200.
 - Zero-price, unknown-barcode, and `MANUALPRICE` POS lines require a blocking
   positive whole-baht Cashier price. Local Thai audio prompts, scan suspension,
   touch numpad, and search refocus support the next-item loop. The deployed
@@ -161,6 +175,61 @@ and detailed verification remain in their linked version documents and tests.
   and asset checks passed without confirming a price or creating a sale.
 - Production migration 27, localhost/LAN health, SQLite quick check, foreign
   keys, and data preservation passed: 668 products and 0 sales remain.
+- Post-release Windows startup separates the port-8000 server
+  (`SaengngamPOS-Production`, `SYSTEM`, boot) from the attach-only launcher
+  (`SaengngamPOS-Desktop`, standard local `POS`, logon). A local shared
+  print-agent token preserves kiosk printing without letting the launcher own
+  or stop the server. The account has a Public Desktop recovery shortcut.
+- Current localhost health and print-agent authorization pass. Canonical LAN
+  verification is pending because the observed adapter is `192.168.1.200/24`
+  Public while the accepted configuration remains `192.168.0.200/24` Private.
+
+## Version 3.0.9 release baseline — 2026-07-31
+
+- Formalizes the two-context Windows runtime: the Production server runs as
+  `SYSTEM` at boot, while an attach-only launcher runs for the passwordless
+  standard local `POS` user at interactive logon.
+- Elevated, repeatable setup enforces Users/non-Administrators membership,
+  least-privilege ACLs, a read-only shared Desktop Python runtime, a protected
+  local print-agent token, both Scheduled Tasks, and the Public Desktop
+  recovery shortcut.
+- Reboot-safe mutable state lives at
+  `runtime/pos-desktop/display_state.json`. Visible diagnostics and
+  POS-writable logs cover hidden launcher failures.
+- Live POS-context state writing and print-agent HTTP 200 passed; 11 focused
+  launcher/runtime regressions pass. Release-focused tests passed 13/13; the
+  full suite completed 180 tests with 179 passed and one existing capability
+  skip. No database or business-data change.
+- Local Production repair/restart now serves Version 3.0.9 with ready health,
+  print-agent HTTP 200, valid SQLite/foreign keys, and 669 products/0 sales.
+  Full verification stops only at the owner-managed static-network gate.
+- See `VERSION_3.0.9.md` for setup, repair, verification, and network gates.
+
+## Version 3.1.0 release baseline — 2026-07-31
+
+- All staff logins enter `/pos`; a fresh login collapses the sidebar and
+  `ขายหน้าร้าน` is the first sidebar section.
+- POS manual selection is a configurable text-only 3×3 menu/product grid.
+  There are no product-image requests in this grid. Continuous positions
+  paginate after every nine slots while search remains global.
+- Product buttons show no barcode, use up to two enlarged name lines, and use
+  approximately double-sized price text following 1366×768 UAT review.
+  One-line names are vertically centered in the two-line name area.
+- Menu buttons show only a larger centered two-line name; successful checkout
+  clears lookup state and returns the selector to the top-level menu.
+- Manager/Admin configuration is permission/CSRF protected and audited.
+  Migration 28 adds only the two mapping tables without seeding or rewriting
+  the migrated product catalog.
+- Closing money fields share a touch Numpad; no new closing PIN exists.
+- Final focused regression passed 20/20. The full suite completed 186 tests
+  with 185 passed and one existing capability skip. Headless Edge at 1920×1080 confirmed
+  3×3 menu/product pagination, viewport fit, no image requests, and Numpad
+  input/focus behavior.
+- Production port 8000 is Release 3.1.0. Migration 28 preserved 735 products,
+  0 sales, and 0 sale items; SQLite integrity and foreign keys passed.
+  Elevated verification passed runtime, protected startup/desktop tasks,
+  Private/LocalSubnet firewall, static LAN, health, manager login, direct POS
+  landing, collapsed sidebar, and Version 3.1.0 asset identity.
 
 ## Online ordering operating model
 

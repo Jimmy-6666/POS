@@ -11,6 +11,7 @@ try {
     $context = Get-ProductionContext $InstallRoot $RuntimeRoot $Port
     $systemPython = Get-SupportedPython
     Ensure-RuntimeDirectories $context
+    $null = Ensure-ProductionPrintAgentToken $context
     Write-ProductionRuntimeConfig $context
     Ensure-VirtualEnvironment $context $systemPython
     Initialize-ProductionApplication $context

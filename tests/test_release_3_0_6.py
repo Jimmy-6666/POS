@@ -343,7 +343,7 @@ class Release306Tests(unittest.TestCase):
         )
         self.assertNotIn('class="nav-group-arrow" aria-hidden="true">v</span>', html)
         self.assertIn("css/v306.css?v=3", html)
-        self.assertIn("js/sidebar.js?v=4", html)
+        self.assertIn("js/sidebar.js?v=5", html)
         sidebar_js = (Path(self.app.static_folder) / "js" / "sidebar.js").read_text(encoding="utf-8")
         self.assertIn("sidebar-sections-v306", sidebar_js)
         self.assertIn("arrow.textContent = '^'", sidebar_js)

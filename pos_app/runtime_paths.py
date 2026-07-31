@@ -17,7 +17,7 @@ from typing import Mapping
 
 
 DEFAULT_MIN_FREE_SPACE_MB = 512
-DEFAULT_APP_VERSION = "3.0.8"
+DEFAULT_APP_VERSION = "3.1.0"
 DEFAULT_SERVER_IP = "192.168.0.200"
 DEFAULT_LAN_NETWORKS = "192.168.0.0/24"
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -47,6 +47,7 @@ class RuntimePaths:
     browser_profile: Path
     print_browser_profile: Path
     configuration: Path
+    print_agent_token: Path
     display_state: Path
 
     @classmethod
@@ -72,6 +73,7 @@ class RuntimePaths:
             browser_profile=resolved_root / "browser-profile",
             print_browser_profile=resolved_root / "print-browser-profile",
             configuration=resolved_root / "config",
+            print_agent_token=resolved_root / "config" / "print-agent-token",
             display_state=resolved_root / "display_state.json",
         )
 
@@ -121,6 +123,7 @@ class RuntimePaths:
             self.browser_profile,
             self.print_browser_profile,
             self.configuration,
+            self.print_agent_token,
             self.display_state,
         )
 

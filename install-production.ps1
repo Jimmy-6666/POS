@@ -11,6 +11,7 @@ try {
     $context = Get-ProductionContext $InstallRoot $RuntimeRoot $Port
     $systemPython = Get-SupportedPython
     Ensure-RuntimeDirectories $context
+    $null = Ensure-ProductionPrintAgentToken $context
     Write-ProductionRuntimeConfig $context
     Ensure-VirtualEnvironment $context $systemPython
     Initialize-ProductionApplication $context
@@ -19,8 +20,7 @@ try {
     # Remove the legacy task so it cannot create a duplicate upload.
     Remove-ProductionBackupTask $context
     Set-ProductionFirewall $context
-    $startArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $context.StartScript, "-InstallRoot", $context.InstallRoot, "-RuntimeRoot", $context.RuntimeRoot, "-Port", $context.Port)
-    Start-Process -FilePath "PowerShell.exe" -ArgumentList $startArgs -WorkingDirectory $context.InstallRoot
+    Start-ScheduledTask -TaskName $context.TaskName
     if (-not (Test-ProductionHealth $context)) {
         throw "POS health check did not become ready."
     }

@@ -27,6 +27,18 @@ TWO_FACTOR_COOKIE_NAME = "pos_2fa_challenge"
 TWO_FACTOR_CHALLENGE_MINUTES = 5
 TWO_FACTOR_FAILURE_LIMIT = 5
 TWO_FACTOR_FAILURE_WINDOW_MINUTES = 5
+POS_SIDEBAR_RESET_COOKIE = "pos_sidebar_reset"
+
+
+def _mark_fresh_pos_login(response):
+    response.set_cookie(
+        POS_SIDEBAR_RESET_COOKIE,
+        "1",
+        max_age=120,
+        path="/",
+        **session_cookie_options(),
+    )
+    return response
 
 
 def safe_next_url(value):
@@ -184,8 +196,9 @@ def login():
             )
             db.commit()
             clear_login_csrf()
-            response = make_response(redirect(safe_next_url(request.form.get("next")) or url_for("pos.index")))
+            response = make_response(redirect(url_for("pos.index")))
             response.set_cookie(COOKIE_NAME, token, **session_cookie_options())
+            _mark_fresh_pos_login(response)
             signal_display("fullscreen")
             return response
     return render_template(
@@ -226,9 +239,10 @@ def verify_two_factor():
         )
         _audit_two_factor(db, challenge["staff_id"], "admin_login_success")
         db.commit()
-        response = make_response(redirect(challenge["next_url"] or url_for("pos.index")))
+        response = make_response(redirect(url_for("pos.index")))
         response.set_cookie(COOKIE_NAME, token, **session_cookie_options())
         response.delete_cookie(TWO_FACTOR_COOKIE_NAME, **session_cookie_options())
+        _mark_fresh_pos_login(response)
         signal_display("fullscreen")
         return response
     return render_template("two_factor_login.html", challenge=challenge)

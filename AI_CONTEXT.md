@@ -16,15 +16,26 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- The active Release 3.0.8 Production instance uses port `8000`, `runtime/`,
-  and is configured for fixed server address `192.168.0.200` on the trusted
-  `192.168.0.0/24` private LAN. Local and site-LAN health pass.
+- The active Release 3.1.0 Production instance uses port `8000` and `runtime/`.
+  `SaengngamPOS-Production` starts the server under `SYSTEM` at Windows startup;
+  `SaengngamPOS-Desktop` opens an attach-only launcher for the local standard
+  `POS` account at logon. The account has no password, cannot administer the
+  machine, and has a Public Desktop recovery shortcut. The launcher uses the
+  read-only shared standard-library runtime under `desktop-python/`; it does
+  not depend on or grant access to an Admin user's private Python installation.
+  Mutable launcher state is shared through
+  `runtime/pos-desktop/display_state.json`, whose parent ACL remains writable
+  when the server recreates the file after a reboot.
+- The accepted network contract remains fixed server address `192.168.0.200`
+  on trusted private LAN `192.168.0.0/24`. Release 3.1.0 elevated Production
+  verification passed the static network and Private/LocalSubnet firewall
+  checks.
 - UAT launcher uses port `8001` and `uat_runtime/`.
 - The port `8002` profile is not the canonical customer Production instance.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
   at `/online-orders`. Products default to online-enabled, except the current
-  Production catalog snapshot: 668 products are active, 56 have zero price,
-  652 have no image, all have zero stock, and 199 are online-enabled.
+  Production catalog snapshot: 735 products are active, 50 have zero price,
+  719 have no image, all have zero stock, and 199 are online-enabled.
 
 An auxiliary Makro catalog preparation pipeline lives in
 `work/makro-pos-import/`. It uses Node and Codex spreadsheet tooling only for
@@ -70,10 +81,19 @@ host isolation and 2FA, signed-update reauthentication, and structured support
 redaction. Release 3 recovery and runtime regressions cover the full
 database-and-product-image bundle and in-process schedule validation. Flask
 3.1.3 is installed and the dependency set passes `pip check`. Local Release
-3.0.8 localhost/LAN runtime, migration 27, integrity, and assets pass. The
-expected `SaengngamPOS-Production`
-startup task is currently absent and requires an Administrator PowerShell
-session to restore.
+3.1.0 localhost runtime, migration 28, integrity, and assets pass. The
+background server task, attach-only POS desktop task, shared local print-agent
+token, shared Desktop Python runtime, kiosk ACLs, and recovery shortcut are
+installed. The shared runtime passed `ctypes`/`tkinter`/`urllib` smoke
+validation, direct `pos_desktop` import without Flask, and full Tk launcher UI
+initialization. A live `SaengngamPOS-Desktop` run under the `POS` security
+context updated the shared display state after a server restart, and the
+token-protected print-agent returned HTTP 200. Eleven focused
+launcher/runtime regressions pass. Release 3.1.0 elevated verification
+confirmed the canonical `192.168.0.200/24` Private LAN and firewall contract.
+Release 3.0.9 verification on 2026-07-31 passed 13/13 focused tests and the
+full 180-test suite with 179 passed and one existing filesystem-capability
+skip.
 LINE LIFF verifies customer identity before the POS
 creates a customer session and delivery profile. Staff can add or reduce order items before picking;
 price/total changes retain the customer's confirmed price snapshot and show a
@@ -83,8 +103,8 @@ administration supports phone/name/public-ID search, admin-PIN-confirmed
 anonymizing deletion, and customer re-registration after deletion. Suspended
 LINE customers receive a stable blocked page instead of a LIFF login loop.
 
-The canonical Production database contains 668 active products. The read-only
-post-deploy snapshot is 56 zero-price, 652 no-image, all zero-stock, and 199
+The canonical Production database contains 735 active products. The read-only
+post-deploy snapshot is 50 zero-price, 719 no-image, all zero-stock, and 199
 online-enabled products; sales and sale items remain 0.
 SQLite quick check and foreign-key verification pass.
 
@@ -104,7 +124,26 @@ No new product scope should be invented. The next catalog task remains
 customer selling-price entry and photography, followed by an explicit decision
 to enable selected products online.
 
-Version 3.0.8 is the current source and Production baseline. POS zero-price,
+Version 3.1.0 is the current Production baseline. It makes
+POS cashier-first: every staff login enters `/pos`, fresh login collapses the
+sidebar, and `ขายหน้าร้าน` is first. Manual selection is an independently
+configured text-only 3×3 menu/product grid with nine-position pagination and
+global search; it does not load product images. Manager/Admin configuration is
+audited and Migration 28 adds only `pos_button_groups` and
+`pos_button_items`. Closing money fields share an on-screen Numpad and do not
+require a new PIN. Final focused regression passed 20/20; the full suite
+completed 186 tests with 185 passed and one existing capability skip. Headless
+1920×1080 verification confirmed 3×3 paging, no product-image requests,
+viewport fit, and Numpad focus behavior. Production Migration 28, data
+preservation, runtime health, protected tasks, firewall/static LAN, manager
+login, default POS landing, asset versions, and empty configured-menu state
+all passed. The accepted scope is documented in `VERSION_3.1.0.md`.
+
+Version 3.0.9 formalizes the
+separate `SYSTEM` server and standard local `POS` launcher setup, repair,
+least-privilege ACL, shared Desktop Python, reboot-safe display state, and
+Public Desktop recovery behavior documented in `VERSION_3.0.9.md`. It retains
+Version 3.0.8 POS zero-price,
 unknown-barcode, and reserved `MANUALPRICE` lines now require a blocking,
 positive whole-baht Cashier entry with keyboard or touch numpad. Approved
 Thai alerts use the selected voice at true 1.2× speed. Each confirmed line receives a one-use
@@ -123,7 +162,7 @@ lifecycle, uses Admin-CSP-compatible data URLs, and bounds the mobile grid;
 sidebar and embedded-policy behavior remain.
 Blind stock count keeps the barcode input active after an unknown
 scan and opens quantity input only after a successful lookup. Canonical
-port-8000 Production was restarted onto Release 3.0.8
+port-8000 Production was restarted onto Release 3.0.9
 with live asset, database-integrity, and catalog-preservation verification.
 It retains Version 3.0.5 first-time LINE profile consent, Version 3.0.4
 policy/disclaimer content, Version 3.0.3 default-image and net-best-seller
@@ -144,7 +183,8 @@ and Sprint 2 backup/recovery foundation are
 implemented: canonical runtime paths, startup validation, migration history,
 deterministic dependency locking, verified database-only SQLite online backups,
 incremental product-image sync with VPS archival before replace/delete, SFTP transport, recovery-drill
-scripts, and Windows lifecycle tasks. The production task uses Task Scheduler;
+scripts, and Windows lifecycle tasks. Task Scheduler separates the
+`SYSTEM` background server from the standard-user POS desktop launcher;
 the daily backup schedule runs inside the active POS process, and the firewall
 rule remains limited to Private/LocalSubnet. Signed
 Sprint 3 is implemented: an admin-only maintenance page reports runtime and

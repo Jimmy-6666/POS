@@ -1,3 +1,91 @@
+# Release 3.1.0 — 2026-07-31
+
+- Changed every successful staff login to enter the POS sale screen and added a
+  one-shot fresh-login sidebar collapse without changing later manual sidebar
+  control.
+- Moved the `ขายหน้าร้าน` sidebar section to the top.
+- Replaced the POS category rail and image cards with a configurable text-only
+  3×3 menu/product grid. Positions paginate in groups of nine, and global
+  search, exact barcode scanning, cart, manual pricing, and payment remain.
+- Tightened product-button typography after UAT review: barcode text is hidden,
+  names use up to two substantially larger lines, and selling-price type is
+  approximately doubled to fill the button without adding images.
+- Vertically centered one-line product names inside the reserved two-line name
+  area while retaining the two-line clamp and price separation.
+- Simplified menu buttons to a centered two-line name only, removed the menu
+  number/manual/helper labels, and aligned each open menu title with the Back
+  control.
+- Successful checkout now clears the lookup and returns the manual selector to
+  the top-level menu for the next sale.
+- Added Manager/Admin `ตั้งค่าปุ่มขาย` configuration with audited group/item
+  create, update, move, enable/disable, and remove operations.
+- Added additive Migration 28 for `pos_button_groups` and `pos_button_items`;
+  no product, category, sale, stock, or image row is rewritten.
+- Added a shared touch Numpad to the four close-round money inputs. No
+  close-round PIN requirement was added.
+- Added focused Release 3.1.0 coverage for migration integrity, permissions,
+  audit records, APIs, text-only rendering, login landing, pagination wiring,
+  and reconciliation Numpad behavior.
+- Final verification passed 20/20 focused tests and the full 186-test suite
+  (185 passed, one existing capability skip). A 1920×1080 headless check
+  confirmed 3×3 paging, no image requests, viewport fit, and Numpad focus.
+- Deployed canonical Production on port 8000 after creating a 3.0.9 source
+  rollback and verified full recovery bundle. Migration 28 preserved 735
+  products and 0 sales; integrity, foreign keys, protected server/desktop
+  tasks, backup schedule, static LAN, firewall, health, manager login, direct
+  POS landing, collapsed sidebar, and Version 3.1.0 assets all passed.
+
+# Release 3.0.9 — 2026-07-31
+
+- Advanced application, mobile badge, Production runtime, and Desktop
+  Launcher identity to Version 3.0.9.
+- Added `VERSION_3.0.9.md` as the accepted behavior, initial setup, repair,
+  verification, security-boundary, and reboot-recovery contract for the local
+  standard `POS` account.
+- Release-focused tests pass 13/13. The full suite completed 180 tests: 179
+  passed with one existing filesystem-capability skip.
+- Fixed elevated install/repair initialization to run from the explicit
+  installation root instead of inheriting `System32`, preventing a false
+  `ModuleNotFoundError: pos_app` during UAC repair.
+- Deployed local Production Version 3.0.9. Health/database readiness, SQLite,
+  foreign keys, print-agent authorization, POS ACLs, and 669-product/0-sale
+  preservation passed. Full verification stops only at the unchanged
+  `192.168.0.200/24` Private-network gate.
+
+- Fixed the POS-user `Python venv launcher ... Access is denied` startup error.
+  The attach-only launcher now uses a read-only shared standard-library Python
+  runtime at `C:\SanngamPOS\desktop-python` instead of resolving the `.venv`
+  base interpreter under the Admin user's private `AppData`.
+- Fixed the follow-up silent exit from that shared runtime: importing
+  `pos_app.runtime_paths` had executed `pos_app/__init__.py` and required Flask
+  before the launcher could write an error. The launcher now loads the
+  standalone helper directly, and the hidden PowerShell wrapper records
+  bootstrap output under `runtime\pos-desktop` plus shows a visible error.
+- Fixed the remaining reboot-only `display_state.json` permission failure.
+  Server and launcher now share `runtime\pos-desktop\display_state.json`, so a
+  replacement file inherits the POS-writable parent ACL instead of the
+  repository-root deny ACL. A live scheduled-task run as `POS` updated the
+  state after server restart, and the protected print-agent returned HTTP 200.
+- Elevated kiosk configuration builds and smoke-tests the shared runtime,
+  imports `pos_desktop` without Flask, initializes the Tk launcher UI, updates
+  the recovery shortcut, and leaves the `SYSTEM` server process and Production
+  database untouched. Focused launcher/runtime regressions pass 11/11.
+- Split Windows startup into `SaengngamPOS-Production` (`SYSTEM`, boot,
+  background server) and `SaengngamPOS-Desktop` (standard local `POS`, logon,
+  attach-only launcher). Closing or reopening the launcher no longer stops or
+  replaces the server.
+- Added a persistent local print-agent token, isolated POS Edge profiles,
+  disabled Edge sign-in/sync prompts, and retained token-protected kiosk
+  receipt printing.
+- Added `configure-production-kiosk-user.ps1` to create the passwordless
+  non-admin `POS` account, restrict source/runtime writes, register both tasks,
+  and create `C:\Users\Public\Desktop\Saengngam POS.lnk`.
+- Focused launcher/runtime tests pass 10/10. Production localhost health,
+  single-listener, and print-agent 200/404 authorization checks pass.
+- Full network verification stops at the accepted static-network gate: the
+  active adapter is currently `192.168.1.200/24` Public while the retained POS
+  contract is `192.168.0.200/24` Private. No network setting was changed.
+
 # Release 3.0.8 — 2026-07-30
 
 - Replaced both manual-price alerts with the owner-approved natural Thai
