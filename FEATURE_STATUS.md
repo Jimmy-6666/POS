@@ -33,6 +33,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0.8 blocking POS manual price and audit export | Deployed 2026-07-30; 178 passed, 1 capability skip; additive migration 27 | `VERSION_3.0.8.md`, release 3.0.8, sales/runtime tests |
 | Release 3.0.9 isolated local POS user and reboot-safe launcher | Released 2026-07-31; no migration | `VERSION_3.0.9.md`, launcher/runtime tests |
 | Release 3.1.0 cashier-first text-only POS button grid | Deployed 2026-07-31; Migration 28; 185 passed, 1 capability skip | `VERSION_3.1.0.md`, `tests/test_release_3_1_0.py` |
+| Release 3.1.1 cashier focus/manual-price refinement | UAT verified 2026-07-31; no migration; 187 passed, 1 capability skip | `VERSION_3.1.1.md`, `tests/test_release_3_1_1.py` |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -230,6 +231,22 @@ and detailed verification remain in their linked version documents and tests.
   Elevated verification passed runtime, protected startup/desktop tasks,
   Private/LocalSubnet firewall, static LAN, health, manager login, direct POS
   landing, collapsed sidebar, and Version 3.1.0 asset identity.
+
+## Version 3.1.1 UAT candidate — 2026-07-31
+
+- Cart quantity and remove actions return focus to the barcode/search field.
+- Manual-price prompts now have an explicit no-write cancel path while
+  retaining scanner blocking until confirm or cancel.
+- Top-level menu slot 9 is a fixed Manual Price action; server validation
+  reserves that group position while product slot 9 remains valid.
+- POS-button settings now visibly style the `นำออก` action.
+- No migration. Focused regression passed 24/24; the full suite completed 188
+  tests with 187 passed and one existing capability skip.
+- Headless Edge UAT passed R3.1.1/asset-v36 identity, slot-9 placement,
+  +/−/direct-quantity/remove focus recovery, unknown and fixed-Manual
+  no-write cancellation, computed destructive-button styling, and zero page
+  errors. The test barcode created no product or audit row. SQLite integrity
+  and foreign keys passed. Production remains healthy on Version 3.1.0.
 
 ## Online ordering operating model
 

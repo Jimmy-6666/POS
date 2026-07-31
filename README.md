@@ -3,7 +3,8 @@
 > เอกสารนี้เก็บคู่มือฐานของ Release 1.0 ไว้ตามข้อกำหนดเดิม ปัจจุบันโครงการมี
 > Production ปัจจุบันคือ Release 3.1.0
 > โปรดดู `VERSION_3.0.9.md` สำหรับ Launcher/การติดตั้ง และ `VERSION_3.1.0.md`
-> สำหรับ POS แบบปุ่ม Text-only รวมถึงดู `AI_CONTEXT.md` สำหรับสถานะล่าสุด
+> สำหรับ POS แบบปุ่ม Text-only; `VERSION_3.1.1.md` คือ UAT candidate ล่าสุด
+> รวมถึงดู `AI_CONTEXT.md` สำหรับสถานะล่าสุด
 > โดยข้อกำหนดเดิมใน `REQUIREMENTS_V1.0.md` ยังมีผลครบถ้วน
 
 Production Release 1.0 สำหรับ Windows/LAN: POS, สินค้าและราคา, สต็อก, blind stock count หลายคน, ใบนับ Code 128, ปิดยอดและตรวจรับ, Dashboard, รายงานรายวัน/รายเดือน, พนักงาน, Audit และ Backup

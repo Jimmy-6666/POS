@@ -3,9 +3,9 @@
 {% block content %}
 <div class="page-heading pos-button-settings-heading">
   <div>
-    <span class="eyebrow">Release 3.1.0</span>
+    <span class="eyebrow">Release 3.1.1</span>
     <h1>ตั้งค่าปุ่มขายสินค้า</h1>
-    <p>กำหนดเมนูและสินค้าที่ไม่มีบาร์โค้ดเป็นปุ่มข้อความขนาดใหญ่ ตำแหน่ง 1–9 คือหน้าแรก, 10–18 คือหน้าถัดไป</p>
+    <p>กำหนดเมนูและสินค้าที่ไม่มีบาร์โค้ดเป็นปุ่มข้อความขนาดใหญ่ ตำแหน่งเมนู 1–8 คือหน้าแรก, ตำแหน่ง 9 สงวนไว้สำหรับตั้งราคาขาย Manual และ 10–18 คือหน้าถัดไป</p>
   </div>
   <a class="primary-button pos-button-preview-link" href="{{url_for('pos.index')}}">เปิดหน้าขาย</a>
 </div>
@@ -19,6 +19,7 @@
         <input type="hidden" name="action" value="create_group">
         <label>ชื่อเมนู<input name="name_th" maxlength="80" placeholder="เช่น เครื่องดื่มไม่มีบาร์โค้ด" required></label>
         <label>ตำแหน่ง<input name="position" type="number" min="1" max="999" step="1" value="{{next_group_position}}" required></label>
+        <p class="field-help">ตำแหน่ง 9 เป็นปุ่ม Manual Price ถาวร</p>
         <button class="primary-button" type="submit">เพิ่มเมนู</button>
       </form>
     </section>

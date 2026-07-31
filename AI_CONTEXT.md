@@ -139,6 +139,18 @@ preservation, runtime health, protected tasks, firewall/static LAN, manager
 login, default POS landing, asset versions, and empty configured-menu state
 all passed. The accepted scope is documented in `VERSION_3.1.0.md`.
 
+Version 3.1.1 is the current source/UAT candidate. It returns scanner focus
+after POS cart quantity/removal actions, adds an explicit no-write cancel path
+to manual-price prompts, reserves top-level menu slot 9 for the same audited
+workflow as `MANUALPRICE`, and styles the settings removal action. Product
+slot 9 inside a menu remains usable. There is no migration. Focused regression
+passed 24/24; the full suite completed 188 tests with 187 passed and one
+existing capability skip. Headless Edge UAT passed R3.1.1/asset-v36 identity,
+all four cart-focus actions, both no-write cancel paths, slot 9, computed
+removal styling, and zero JavaScript errors. UAT integrity and foreign keys
+passed. Production remains healthy on Version 3.1.0 until explicit approval.
+See `VERSION_3.1.1.md`.
+
 Version 3.0.9 formalizes the
 separate `SYSTEM` server and standard local `POS` launcher setup, repair,
 least-privilege ACL, shared Desktop Python, reboot-safe display state, and

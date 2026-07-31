@@ -108,6 +108,13 @@
     audio.currentTime = 0;
     audio.play().catch(() => {});
   }
+  function focusProductLookup({ select = false } = {}) {
+    setTimeout(() => {
+      const lookup = $('#productLookup');
+      lookup.focus({ preventScroll: true });
+      if (select) lookup.select();
+    }, 0);
+  }
   function positionedCatalogRows() {
     const rows = catalogMode === 'groups' ? buttonGroups : products;
     if (catalogMode !== 'search') return rows;
@@ -136,6 +143,11 @@
     $('#resultCount').textContent = catalogMode === 'groups' ? `${rows.length} เมนู` : `${rows.length} สินค้า`;
     $('#productGrid').innerHTML = slots.map((row, index) => {
       const slot = firstPosition + index;
+      if (catalogMode === 'groups' && slot === 9) {
+        return `<button class="pos-manual-price-button" type="button" data-manual-price aria-label="ตั้งราคาขายแบบ Manual">
+          <strong>ตั้งราคาขาย Manual</strong>
+        </button>`;
+      }
       if (!row) return `<span class="pos-button-empty-slot" aria-hidden="true" data-slot="${slot}"></span>`;
       if (catalogMode === 'groups') {
         return `<button class="pos-menu-button" type="button" data-button-group="${row.id}" aria-label="เปิดเมนู ${escapeHtml(row.name_th)}">
@@ -151,7 +163,7 @@
     $('#catalogPageLabel').textContent = `หน้า ${catalogPage.toLocaleString('th-TH')} / ${pageCount.toLocaleString('th-TH')}`;
     $('#catalogPreviousButton').disabled = catalogPage <= 1;
     $('#catalogNextButton').disabled = catalogPage >= pageCount;
-    if (!rows.length) {
+    if (!rows.length && catalogMode !== 'groups') {
       const detail = catalogMode === 'groups'
         ? 'ผู้จัดการสามารถเพิ่มเมนูได้ที่ ตั้งค่าปุ่มขาย'
         : catalogMode === 'search'
@@ -210,9 +222,21 @@
     $('#manualPriceInput').value = '';
     $('#manualPriceError').textContent = '';
     $('#manualPriceSubmit').disabled = false;
+    $('#manualPriceCancel').disabled = false;
     manualPriceDialog.showModal();
     playManualPriceAlert(reason === 'manual_price_barcode');
     setTimeout(() => $('#manualPriceInput').focus({ preventScroll: true }), 40);
+  }
+  async function cancelManualPrice() {
+    if (manualPriceSaving || !manualPriceDialog.open) return;
+    manualPriceDialog.close();
+    manualPriceContext = null;
+    $('#manualPriceInput').value = '';
+    $('#manualPriceError').textContent = '';
+    $('#productLookup').value = '';
+    message('ยกเลิกรายการระบุราคาแล้ว');
+    await loadButtonGroups();
+    focusProductLookup();
   }
   function addProduct(product, manualPrice = null) {
     if (!product) return;
@@ -389,6 +413,11 @@
   function closeMobileCart() { document.body.classList.remove('mobile-cart-open'); }
 
   $('#productGrid').addEventListener('click', (event) => {
+    const manualPriceButton = event.target.closest('[data-manual-price]');
+    if (manualPriceButton) {
+      openManualPrice(null, manualBarcode, 'manual_price_barcode');
+      return;
+    }
     const groupButton = event.target.closest('[data-button-group]');
     if (groupButton) {
       loadButtonGroup(groupButton.dataset.buttonGroup);
@@ -404,8 +433,8 @@
   };
   $('#catalogPreviousButton').onclick = () => { catalogPage = Math.max(1, catalogPage - 1); renderCatalog(); };
   $('#catalogNextButton').onclick = () => { catalogPage = Math.min(catalogPageCount(), catalogPage + 1); renderCatalog(); };
-  $('#cartItems').addEventListener('change', (event) => { const index = Number(event.target.dataset.i); if (event.target.dataset.action === 'qty') cart[index].quantity = Math.max(Number(event.target.min), Number(event.target.value) || 1); renderCart(); });
-  $('#cartItems').addEventListener('click', (event) => { const button = event.target.closest('[data-action]'); if (!button || button.tagName === 'INPUT') return; const index = Number(button.dataset.i); if (button.dataset.action === 'plus') cart[index].quantity += 1; if (button.dataset.action === 'minus') cart[index].quantity -= 1; if (button.dataset.action === 'remove' || cart[index]?.quantity <= 0) cart.splice(index, 1); renderCart(); });
+  $('#cartItems').addEventListener('change', (event) => { const index = Number(event.target.dataset.i); if (event.target.dataset.action === 'qty') cart[index].quantity = Math.max(Number(event.target.min), Number(event.target.value) || 1); renderCart(); focusProductLookup(); });
+  $('#cartItems').addEventListener('click', (event) => { const button = event.target.closest('[data-action]'); if (!button || button.tagName === 'INPUT') return; const index = Number(button.dataset.i); if (button.dataset.action === 'plus') cart[index].quantity += 1; if (button.dataset.action === 'minus') cart[index].quantity -= 1; if (button.dataset.action === 'remove' || cart[index]?.quantity <= 0) cart.splice(index, 1); renderCart(); focusProductLookup(); });
   document.addEventListener('keydown', receiveScannerKey, true);
   $('#productLookup').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); clearTimeout(searchTimer); addFromLookup(); } });
   $('#productLookup').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadSearchResults, 250); });
@@ -426,7 +455,8 @@
   $('#mobileCartBar').onclick = openMobileCart;
   $('#closeMobileCart').onclick = closeMobileCart;
   $('#cartBackdrop').onclick = closeMobileCart;
-  manualPriceDialog.addEventListener('cancel', (event) => event.preventDefault());
+  manualPriceDialog.addEventListener('cancel', (event) => { event.preventDefault(); cancelManualPrice(); });
+  $('#manualPriceCancel').addEventListener('click', cancelManualPrice);
   $('#manualPriceNumpad').addEventListener('click', (event) => {
     const button = event.target.closest('button');
     if (!button || manualPriceSaving) return;
@@ -448,6 +478,7 @@
     if (!manualPriceContext || manualPriceSaving) return;
     manualPriceSaving = true;
     $('#manualPriceSubmit').disabled = true;
+    $('#manualPriceCancel').disabled = true;
     $('#manualPriceError').textContent = '';
     try {
       const result = await api('/api/pos/manual-price', {
@@ -478,6 +509,7 @@
     } finally {
       manualPriceSaving = false;
       $('#manualPriceSubmit').disabled = false;
+      $('#manualPriceCancel').disabled = false;
     }
   });
   window.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMobileCart(); });

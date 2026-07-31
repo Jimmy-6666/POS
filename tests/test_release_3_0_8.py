@@ -218,7 +218,7 @@ class Release308Tests(unittest.TestCase):
         self.assertIn("manual-price-required.wav", html)
         self.assertIn("missing-product-price-required.wav?v=2", html)
         self.assertIn("manual-price-required.wav?v=2", html)
-        self.assertIn("js/pos.js?v=35", html)
+        self.assertIn("js/pos.js?v=36", html)
         self.assertEqual(html.count("data-manual-price-key="), 10)
         self.assertIn('id="manualPriceNumpad"', html)
         self.assertIn('data-manual-price-action="clear"', html)

@@ -1,3 +1,22 @@
+# Release 3.1.1 — UAT candidate 2026-07-31
+
+- Returned focus to the POS barcode/search field after Cashier quantity
+  increase, decrease, direct quantity edit, and line removal.
+- Added explicit cancellation to the blocking manual-price dialog. Cancelling
+  discards the unresolved line, writes no placeholder/cart/audit record, and
+  returns to the main menu ready for the next scan.
+- Reserved top-level menu position 9 for a fixed Manual Price button that
+  reuses the audited `MANUALPRICE` workflow. Product slot 9 inside a menu
+  remains available.
+- Rejected Manager/Admin attempts to create or move a top-level menu into the
+  reserved position and updated configuration guidance.
+- Styled the `นำออก` control in POS-button settings as a destructive action.
+- Added focused Release 3.1.1 regression coverage; no schema migration.
+- Verification passed 24/24 focused tests and the full 188-test suite
+  (187 passed, one existing capability skip). Headless Edge UAT verified all
+  four cart-focus actions, slot 9, both no-write cancel paths, computed remove
+  styling, zero JavaScript errors, SQLite integrity, and foreign keys.
+
 # Release 3.1.0 — 2026-07-31
 
 - Changed every successful staff login to enter the POS sale screen and added a

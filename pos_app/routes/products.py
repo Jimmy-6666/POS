@@ -26,6 +26,7 @@ from ..services.product_spreadsheet import (
 
 bp = Blueprint("products", __name__, url_prefix="/products")
 ALLOWED_IMAGES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+RESERVED_POS_BUTTON_GROUP_POSITION = 9
 
 
 def reference_data(active_only=True):
@@ -44,6 +45,13 @@ def pos_button_position(value):
         raise ValueError("ตำแหน่งปุ่มต้องเป็นเลขจำนวนเต็ม")
     if position < 1 or position > 999:
         raise ValueError("ตำแหน่งปุ่มต้องอยู่ระหว่าง 1 ถึง 999")
+    return position
+
+
+def pos_button_group_position(value):
+    position = pos_button_position(value)
+    if position == RESERVED_POS_BUTTON_GROUP_POSITION:
+        raise ValueError("ตำแหน่งเมนู 9 สงวนไว้สำหรับปุ่มตั้งราคาขาย Manual")
     return position
 
 
@@ -146,7 +154,7 @@ def pos_buttons():
                 name = request.form.get("name_th", "").strip()
                 if not name or len(name) > 80:
                     raise ValueError("กรุณากรอกชื่อเมนูไม่เกิน 80 ตัวอักษร")
-                position = pos_button_position(request.form.get("position"))
+                position = pos_button_group_position(request.form.get("position"))
                 cursor = db.execute(
                     """INSERT INTO pos_button_groups
                        (name_th,position,is_active,created_by,updated_by)
@@ -170,7 +178,7 @@ def pos_buttons():
                 name = request.form.get("name_th", "").strip()
                 if not name or len(name) > 80:
                     raise ValueError("กรุณากรอกชื่อเมนูไม่เกิน 80 ตัวอักษร")
-                position = pos_button_position(request.form.get("position"))
+                position = pos_button_group_position(request.form.get("position"))
                 is_active = 1 if request.form.get("is_active") else 0
                 db.execute(
                     """UPDATE pos_button_groups
@@ -330,6 +338,9 @@ def pos_buttons():
                ORDER BY p.name_th,p.id LIMIT 30""",
             (selected_group["id"], term, term, term, term),
         ).fetchall()
+    next_group_position = max((row["position"] for row in groups), default=0) + 1
+    if next_group_position == RESERVED_POS_BUTTON_GROUP_POSITION:
+        next_group_position += 1
     return render_template(
         "pos_button_settings.html",
         groups=groups,
@@ -337,7 +348,7 @@ def pos_buttons():
         items=items,
         query=query,
         search_products=search_products,
-        next_group_position=max((row["position"] for row in groups), default=0) + 1,
+        next_group_position=next_group_position,
         next_item_position=max((row["position"] for row in items), default=0) + 1,
     )
 
