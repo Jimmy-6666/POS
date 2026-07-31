@@ -51,7 +51,13 @@ class OnlinePhase5Tests(unittest.TestCase):
         job = self.staff.get("/print-agent/next?token=test-print-token").get_json()["job"]
         self.assertEqual(job["document_type"], "checked_order")
         print_page = self.staff.get(f"{job['render_url']}?token=test-print-token").get_data(as_text=True)
-        self.assertIn("addEventListener('load',()=>window.print())", print_page)
+        self.assertIn('id="printDocument"', print_page)
+        self.assertIn("setTimeout(() => window.print(), 250)", print_page)
+        document_page = self.staff.get(
+            f"/print-agent/document/{job['id']}?token=test-print-token"
+        ).get_data(as_text=True)
+        self.assertNotIn("addEventListener('load',()=>window.print())", document_page)
+        self.assertIn("ใบสรุปออเดอร์", document_page)
 
     def test_manual_reconciliation_assignment_and_delivery_start(self):
         self.staff.post("/online-orders/1/reconcile/manual/1", data={"csrf_token": self.csrf})

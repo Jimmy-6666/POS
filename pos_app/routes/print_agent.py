@@ -1,6 +1,6 @@
 import hmac
 
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, current_app, jsonify, render_template, request, url_for
 
 from ..database import get_db
 from ..services.print_diagnostics import record_print_event
@@ -18,6 +18,43 @@ def authorized():
 
 def agent_user():
     return (request.args.get("desktop_user") or "unknown").strip()[:80]
+
+
+def document_context(job):
+    """Return the existing receipt template context without enabling its iframe print hook."""
+    db = get_db()
+    settings = dict(db.execute("SELECT key,value FROM settings").fetchall())
+    if job["document_type"] == "sale_receipt":
+        sale = db.execute(
+            "SELECT s.*,st.display_name FROM sales s JOIN staff st ON st.id=s.cashier_id WHERE s.id=?",
+            (job["entity_id"],),
+        ).fetchone()
+        if not sale:
+            return None
+        items = db.execute(
+            "SELECT *,quantity-voided_quantity AS remaining_quantity FROM sale_items WHERE sale_id=?",
+            (sale["id"],),
+        ).fetchall()
+        return "receipt.html", {"sale": sale, "items": items, "settings": settings, "autoprint": False}
+    if job["document_type"] == "checked_order":
+        order = db.execute(
+            """SELECT o.*,c.phone_normalized,c.display_name FROM online_orders o
+               JOIN customers c ON c.id=o.customer_id WHERE o.id=?""",
+            (job["entity_id"],),
+        ).fetchone()
+        if not order or not order["reconciliation_completed_at"]:
+            return None
+        items = db.execute(
+            "SELECT * FROM online_order_items WHERE order_id=? AND is_removed=0 ORDER BY id",
+            (order["id"],),
+        ).fetchall()
+        return "online/order_receipt.html", {
+            "order": order,
+            "items": items,
+            "settings": settings,
+            "autoprint": False,
+        }
+    return None
 
 
 @bp.get("")
@@ -59,45 +96,38 @@ def render_job(job_id):
     if not authorized():
         return ("ไม่พบเอกสาร", 404)
     job = get_print_job(job_id)
-    if not job:
+    if not job or not document_context(job):
         return ("ไม่พบเอกสาร", 404)
+    desktop_user = agent_user()
     record_print_event(
         "agent_render_opened",
         source="browser-agent",
         details={
-            "desktop_user": agent_user(), "job_id": job_id,
+            "desktop_user": desktop_user, "job_id": job_id,
             "document_type": job["document_type"], "entity_id": job["entity_id"],
         },
     )
-    db = get_db()
-    settings = dict(db.execute("SELECT key,value FROM settings").fetchall())
-    context = {"autoprint": True, "print_job_id": job_id}
-    if job["document_type"] == "sale_receipt":
-        sale = db.execute(
-            "SELECT s.*,st.display_name FROM sales s JOIN staff st ON st.id=s.cashier_id WHERE s.id=?",
-            (job["entity_id"],),
-        ).fetchone()
-        if not sale:
-            return ("ไม่พบใบเสร็จ", 404)
-        items = db.execute(
-            "SELECT *,quantity-voided_quantity AS remaining_quantity FROM sale_items WHERE sale_id=?",
-            (sale["id"],),
-        ).fetchall()
-        return render_template("receipt.html", sale=sale, items=items, settings=settings, **context)
-    if job["document_type"] == "checked_order":
-        order = db.execute(
-            """SELECT o.*,c.phone_normalized,c.display_name FROM online_orders o
-               JOIN customers c ON c.id=o.customer_id WHERE o.id=?""",
-            (job["entity_id"],),
-        ).fetchone()
-        if not order or not order["reconciliation_completed_at"]:
-            return ("ไม่พบใบสรุปออเดอร์", 404)
-        items = db.execute(
-            "SELECT * FROM online_order_items WHERE order_id=? AND is_removed=0 ORDER BY id",
-            (order["id"],),
-        ).fetchall()
-        return render_template("online/order_receipt.html", order=order, items=items, settings=settings, **context)
-    return ("ไม่รองรับเอกสารนี้", 400)
+    return render_template(
+        "print_job_wrapper.html",
+        token=current_app.config["PRINT_AGENT_TOKEN"],
+        desktop_user=desktop_user,
+        job_id=job_id,
+        document_url=url_for("print_agent.print_document", job_id=job_id),
+        ack_url=url_for("print_agent.acknowledge_job", job_id=job_id),
+        agent_url=url_for("print_agent.index"),
+    )
+
+
+@bp.get("/document/<job_id>")
+def print_document(job_id):
+    if not authorized():
+        return ("ไม่พบเอกสาร", 404)
+    job = get_print_job(job_id)
+    context = document_context(job) if job else None
+    if not context:
+        return ("ไม่พบเอกสาร", 404)
+    template_name, values = context
+    return render_template(template_name, **values)
 
 
 @bp.post("/ack/<job_id>")

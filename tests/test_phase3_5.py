@@ -128,7 +128,15 @@ class Phase3To5Tests(unittest.TestCase):
         job = self.client.get("/print-agent/next?token=test-print-token&desktop_user=POS").get_json()["job"]
         self.assertEqual(job["document_type"], "sale_receipt")
         print_page = self.client.get(f"{job['render_url']}?token=test-print-token&desktop_user=POS").get_data(as_text=True)
-        self.assertIn("addEventListener('load',()=>window.print())", print_page)
+        self.assertIn('id="printDocument"', print_page)
+        self.assertIn("setTimeout(() => window.print(), 250)", print_page)
+        self.assertIn("/print-agent/document/", print_page)
+        self.assertNotIn("parent.postMessage", print_page)
+        document_page = self.client.get(
+            f"/print-agent/document/{job['id']}?token=test-print-token&desktop_user=POS"
+        ).get_data(as_text=True)
+        self.assertNotIn("addEventListener('load',()=>window.print())", document_page)
+        self.assertIn(result["receipt_number"], document_page)
         self.assertTrue(
             self.client.post(
                 "/print-agent/event?token=test-print-token&desktop_user=POS",

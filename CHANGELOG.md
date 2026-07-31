@@ -11,6 +11,10 @@
   printer to `POSPrinter POS-80` before opening the kiosk print agent and
   writes the Windows setup result to that same diagnostics log. UAT and the
   Wilai profile are not changed.
+- Changed automatic receipts from an iframe `window.print()` call to a
+  top-level print wrapper. The wrapper logs the loaded document, prints using
+  the same Edge/Windows driver route, acknowledges the job after printing,
+  and then resumes polling the queue.
 
 # Release 3.1.2 — released 2026-07-31
 

@@ -66,3 +66,8 @@ product image is written to the log.
 - The same diagnostic log records the selected printer and the exit status of
   the registry and Windows PrintUI calls. A setup failure remains diagnostic
   only and never blocks the cashier, transaction, or launcher.
+- The browser agent now navigates a claimed receipt to a top-level print
+  wrapper. The wrapper calls `window.print()` itself, then acknowledges the
+  job and returns to the queue; the receipt is no longer asked to print from
+  an iframe. This preserves the existing Edge/Windows driver path while
+  avoiding the observed iframe print freeze.
