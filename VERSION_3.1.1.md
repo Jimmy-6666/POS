@@ -1,10 +1,11 @@
 # Saengngam Minimart POS — Version 3.1.1
 
-Status: UAT candidate
+Status: released 2026-07-31
 
 Migration: none
 
-Production baseline remains Version 3.1.0 until explicit release approval.
+Production includes Version 3.1.1 through the cumulative Version 3.1.2
+deployment approved on 2026-07-31.
 
 ## Scope
 
@@ -64,5 +65,8 @@ Before release:
   rows.
 - The settings `นำออก` control computed to a red background, white text,
   10px radius, and 42px minimum height. No page JavaScript errors occurred.
-- UAT health/database, SQLite integrity, and foreign keys passed. Production
-  health remains ready and its runtime configuration remains Version 3.1.0.
+- UAT health/database, SQLite integrity, and foreign keys passed.
+- The approved cumulative Version 3.1.2 Production deployment includes all
+  Version 3.1.1 behavior. Production health, migrations, protected tasks,
+  private-LAN configuration, firewall, database integrity, and data
+  preservation passed after deployment.

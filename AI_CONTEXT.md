@@ -16,7 +16,7 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- The active Release 3.1.0 Production instance uses port `8000` and `runtime/`.
+- The active Release 3.1.2 Production instance uses port `8000` and `runtime/`.
   `SaengngamPOS-Production` starts the server under `SYSTEM` at Windows startup;
   `SaengngamPOS-Desktop` opens an attach-only launcher for the local standard
   `POS` account at logon. The account has no password, cannot administer the
@@ -34,8 +34,8 @@ and prints 80 mm receipts through the browser.
 - The port `8002` profile is not the canonical customer Production instance.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
   at `/online-orders`. Products default to online-enabled, except the current
-  Production catalog snapshot: 735 products are active, 50 have zero price,
-  719 have no image, all have zero stock, and 199 are online-enabled.
+  Production catalog snapshot: 742 products are active, 51 have zero price,
+  726 have no image, all 742 have zero stock, and 199 are online-enabled.
 
 An auxiliary Makro catalog preparation pipeline lives in
 `work/makro-pos-import/`. It uses Node and Codex spreadsheet tooling only for
@@ -103,8 +103,8 @@ administration supports phone/name/public-ID search, admin-PIN-confirmed
 anonymizing deletion, and customer re-registration after deletion. Suspended
 LINE customers receive a stable blocked page instead of a LIFF login loop.
 
-The canonical Production database contains 735 active products. The read-only
-post-deploy snapshot is 50 zero-price, 719 no-image, all zero-stock, and 199
+The canonical Production database contains 742 active products. The read-only
+post-deploy snapshot is 51 zero-price, 726 no-image, all zero-stock, and 199
 online-enabled products; sales and sale items remain 0.
 SQLite quick check and foreign-key verification pass.
 
@@ -124,7 +124,7 @@ No new product scope should be invented. The next catalog task remains
 customer selling-price entry and photography, followed by an explicit decision
 to enable selected products online.
 
-Version 3.1.0 is the current Production baseline. It makes
+Version 3.1.0 introduced
 POS cashier-first: every staff login enters `/pos`, fresh login collapses the
 sidebar, and `ขายหน้าร้าน` is first. Manual selection is an independently
 configured text-only 3×3 menu/product grid with nine-position pagination and
@@ -139,7 +139,7 @@ preservation, runtime health, protected tasks, firewall/static LAN, manager
 login, default POS landing, asset versions, and empty configured-menu state
 all passed. The accepted scope is documented in `VERSION_3.1.0.md`.
 
-Version 3.1.1 is the current source/UAT candidate. It returns scanner focus
+Version 3.1.1 is released. It returns scanner focus
 after POS cart quantity/removal actions, adds an explicit no-write cancel path
 to manual-price prompts, reserves top-level menu slot 9 for the same audited
 workflow as `MANUALPRICE`, and styles the settings removal action. Product
@@ -148,10 +148,10 @@ passed 24/24; the full suite completed 188 tests with 187 passed and one
 existing capability skip. Headless Edge UAT passed R3.1.1/asset-v36 identity,
 all four cart-focus actions, both no-write cancel paths, slot 9, computed
 removal styling, and zero JavaScript errors. UAT integrity and foreign keys
-passed. Production remains healthy on Version 3.1.0 until explicit approval.
+passed. It is deployed cumulatively through Version 3.1.2.
 See `VERSION_3.1.1.md`.
 
-Version 3.1.2 is the current source candidate and includes 3.1.1. A product
+Version 3.1.2 is the current Production release and includes 3.1.1. A product
 may require a fresh audit-backed whole-baht price for every POS line while
 retaining its real UUID/name and unchanged master price. New products now
 start active but offline; explicit online enablement remains on Edit and
@@ -162,7 +162,10 @@ default-false product flag and Migration 30 grants the existing Settings
 permission to Manager without rewriting business rows. Focused regression
 passed 33/33; the full suite passed 194 tests with one capability skip.
 Headless Edge UAT, asset-v37, SQLite integrity, and foreign keys passed.
-Production remains Version 3.1.0. See `VERSION_3.1.2.md`.
+Production Migrations 29–30 preserved 742 active products and zero sale
+history. Protected SYSTEM/POS startup tasks, static LAN, firewall, runtime,
+health, database integrity, and the Public Desktop recovery shortcut passed
+after deployment. See `VERSION_3.1.2.md`.
 
 Version 3.0.9 formalizes the
 separate `SYSTEM` server and standard local `POS` launcher setup, repair,

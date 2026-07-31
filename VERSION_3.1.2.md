@@ -1,10 +1,10 @@
 # Saengngam Minimart POS — Version 3.1.2
 
-Status: source candidate; UAT verified 2026-07-31
+Status: released and deployed 2026-07-31
 
 Migrations: additive Migrations 29–30
 
-Production baseline remains Version 3.1.0 until explicit release approval.
+Production baseline is Version 3.1.2.
 
 ## Per-product daily manual price
 
@@ -78,5 +78,21 @@ Production baseline remains Version 3.1.0 until explicit release approval.
   was created. The only browser resource warning was the pre-existing missing
   `/favicon.ico`.
 - UAT SQLite integrity passed with zero foreign-key violations; Migrations 29
-  and 30 are recorded as successful under 3.1.2. Production remains healthy
-  on Version 3.1.0 until explicit release approval.
+  and 30 are recorded as successful under 3.1.2.
+
+## Production deployment — 2026-07-31
+
+- The canonical port-8000 Production instance now runs Version 3.1.2 and
+  returns ready health. Port-8001 UAT remained ready throughout deployment.
+- Migrations 29 and 30 applied successfully. SQLite integrity is `ok`, foreign
+  key violations are zero, and the manual-price product column is present.
+- The 742-product catalog was preserved with all 742 products active. Sales,
+  sale items, and billed sales remain zero, matching the pre-deploy snapshot.
+- The missing Windows startup tasks were repaired to the accepted Version
+  3.0.9 security model: `SaengngamPOS-Production` runs under `SYSTEM` at boot
+  and `SaengngamPOS-Desktop` launches for the passwordless standard `POS` user
+  at logon with `-Desktop -AttachOnly`. The Public Desktop recovery shortcut,
+  static `192.168.0.200/24` LAN configuration, Private/LocalSubnet firewall,
+  shared desktop Python, and full Production verification all passed.
+- A verified database/image backup, full recovery bundle, and Version 3.1.0
+  source rollback were created before the deployment.

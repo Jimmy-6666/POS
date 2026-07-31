@@ -1,4 +1,4 @@
-# Release 3.1.2 — UAT-verified source candidate 2026-07-31
+# Release 3.1.2 — released 2026-07-31
 
 - Added an additive per-product daily manual-price flag (Migration 29).
 - Reused the blocking Cashier price Numpad for flagged positive-price
@@ -18,9 +18,18 @@
 - Verified 33 focused tests and the 194-test full suite with one existing
   filesystem-capability skip. Headless Edge UAT passed asset-v37, create/edit,
   flagged-product price prompt, real-name cart/reference, and focus recovery;
-  SQLite integrity and foreign keys passed. Production remains 3.1.0.
+  SQLite integrity and foreign keys passed.
+- Deployed the canonical port-8000 Production instance after verified local
+  backup, full recovery bundle, and Version 3.1.0 source rollback. Migrations
+  29–30 preserved 742 active products and the zero-sale history; integrity,
+  foreign keys, runtime, static LAN, firewall, health, and version checks
+  passed.
+- Repaired the missing startup tasks during deployment. The server again runs
+  as `SYSTEM` at boot and the attach-only launcher runs for the passwordless
+  standard `POS` user at logon; the Public Desktop shortcut was preserved.
+  Port-8001 UAT remained healthy.
 
-# Release 3.1.1 — UAT candidate 2026-07-31
+# Release 3.1.1 — released 2026-07-31
 
 - Returned focus to the POS barcode/search field after Cashier quantity
   increase, decrease, direct quantity edit, and line removal.
@@ -38,6 +47,8 @@
   (187 passed, one existing capability skip). Headless Edge UAT verified all
   four cart-focus actions, slot 9, both no-write cancel paths, computed remove
   styling, zero JavaScript errors, SQLite integrity, and foreign keys.
+- Released as the first of the two approved versions and deployed cumulatively
+  through Version 3.1.2.
 
 # Release 3.1.0 — 2026-07-31
 

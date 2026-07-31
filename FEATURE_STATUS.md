@@ -33,8 +33,8 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0.8 blocking POS manual price and audit export | Deployed 2026-07-30; 178 passed, 1 capability skip; additive migration 27 | `VERSION_3.0.8.md`, release 3.0.8, sales/runtime tests |
 | Release 3.0.9 isolated local POS user and reboot-safe launcher | Released 2026-07-31; no migration | `VERSION_3.0.9.md`, launcher/runtime tests |
 | Release 3.1.0 cashier-first text-only POS button grid | Deployed 2026-07-31; Migration 28; 185 passed, 1 capability skip | `VERSION_3.1.0.md`, `tests/test_release_3_1_0.py` |
-| Release 3.1.1 cashier focus/manual-price refinement | UAT verified 2026-07-31; no migration; 187 passed, 1 capability skip | `VERSION_3.1.1.md`, `tests/test_release_3_1_1.py` |
-| Release 3.1.2 daily price, offline create, Manager Settings/billing | UAT verified 2026-07-31; additive Migrations 29–30; 194 passed, 1 capability skip | `VERSION_3.1.2.md`, `tests/test_release_3_1_2.py` |
+| Release 3.1.1 cashier focus/manual-price refinement | Released 2026-07-31; no migration; 187 passed, 1 capability skip | `VERSION_3.1.1.md`, `tests/test_release_3_1_1.py` |
+| Release 3.1.2 daily price, offline create, Manager Settings/billing | Deployed 2026-07-31; additive Migrations 29–30; 194 passed, 1 capability skip | `VERSION_3.1.2.md`, `tests/test_release_3_1_2.py` |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -233,7 +233,7 @@ and detailed verification remain in their linked version documents and tests.
   Private/LocalSubnet firewall, static LAN, health, manager login, direct POS
   landing, collapsed sidebar, and Version 3.1.0 asset identity.
 
-## Version 3.1.1 UAT candidate — 2026-07-31
+## Version 3.1.1 released — 2026-07-31
 
 - Cart quantity and remove actions return focus to the barcode/search field.
 - Manual-price prompts now have an explicit no-write cancel path while
@@ -247,9 +247,10 @@ and detailed verification remain in their linked version documents and tests.
   +/−/direct-quantity/remove focus recovery, unknown and fixed-Manual
   no-write cancellation, computed destructive-button styling, and zero page
   errors. The test barcode created no product or audit row. SQLite integrity
-  and foreign keys passed. Production remains healthy on Version 3.1.0.
+  and foreign keys passed. The approved cumulative Version 3.1.2 Production
+  deployment includes this release.
 
-## Version 3.1.2 source candidate — 2026-07-31
+## Version 3.1.2 deployed — 2026-07-31
 
 - A checked product flag forces the existing audit-backed whole-baht manual
   price workflow on every POS sale while preserving the real product name,
@@ -264,8 +265,12 @@ and detailed verification remain in their linked version documents and tests.
   30 grants the Manager permission without rewriting business rows.
 - Focused regression passed 33/33. The full suite passed 194 tests with one
   existing capability skip. Headless UAT, SQLite integrity, foreign keys, and
-  asset-v37 passed; the temporary product flag was restored and Production
-  remains healthy on Version 3.1.0.
+  asset-v37 passed and the temporary product flag was restored.
+- Production port 8000 is Version 3.1.2. Migrations 29–30 preserved 742 active
+  products and the zero-sale history; integrity and foreign keys passed.
+  Elevated verification passed runtime, backup schedule, protected SYSTEM
+  server/POS launcher tasks, static LAN, Private/LocalSubnet firewall, and
+  health. Port-8001 UAT remained ready.
 
 ## Online ordering operating model
 
