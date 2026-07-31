@@ -218,7 +218,7 @@ class Release308Tests(unittest.TestCase):
         self.assertIn("manual-price-required.wav", html)
         self.assertIn("missing-product-price-required.wav?v=2", html)
         self.assertIn("manual-price-required.wav?v=2", html)
-        self.assertIn("js/pos.js?v=35", html)
+        self.assertIn("js/pos.js?v=37", html)
         self.assertEqual(html.count("data-manual-price-key="), 10)
         self.assertIn('id="manualPriceNumpad"', html)
         self.assertIn('data-manual-price-action="clear"', html)
@@ -237,7 +237,10 @@ class Release308Tests(unittest.TestCase):
         self.assertIn(".slice(0, 7)", js)
         self.assertIn("กรุณาระบุราคาให้เสร็จก่อนสแกนสินค้าชิ้นถัดไป", js)
         self.assertIn("$('#productLookup').focus({ preventScroll: true })", js)
-        self.assertIn("playManualPriceAlert(reason === 'manual_price_barcode')", js)
+        self.assertIn(
+            "playManualPriceAlert(['manual_price_barcode', 'product_manual_price'].includes(reason))",
+            js,
+        )
 
         approved_audio = {
             "missing-product-price-required.wav": (

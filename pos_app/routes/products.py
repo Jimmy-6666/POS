@@ -26,6 +26,7 @@ from ..services.product_spreadsheet import (
 
 bp = Blueprint("products", __name__, url_prefix="/products")
 ALLOWED_IMAGES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+RESERVED_POS_BUTTON_GROUP_POSITION = 9
 
 
 def reference_data(active_only=True):
@@ -44,6 +45,13 @@ def pos_button_position(value):
         raise ValueError("ตำแหน่งปุ่มต้องเป็นเลขจำนวนเต็ม")
     if position < 1 or position > 999:
         raise ValueError("ตำแหน่งปุ่มต้องอยู่ระหว่าง 1 ถึง 999")
+    return position
+
+
+def pos_button_group_position(value):
+    position = pos_button_position(value)
+    if position == RESERVED_POS_BUTTON_GROUP_POSITION:
+        raise ValueError("ตำแหน่งเมนู 9 สงวนไว้สำหรับปุ่มตั้งราคาขาย Manual")
     return position
 
 
@@ -84,7 +92,7 @@ def submitted_product_image():
     return camera_image if camera_image and camera_image.filename else request.files.get("image")
 
 
-def parse_product_form():
+def parse_product_form(*, allow_online=False):
     name_th = request.form.get("name_th", "").strip()
     barcode = request.form.get("barcode", "").strip()
     if not name_th or not barcode:
@@ -102,9 +110,14 @@ def parse_product_form():
         "is_active": 1 if request.form.get("is_active") else 0,
         "is_favorite": 1 if request.form.get("is_favorite") else 0,
         "allow_decimal_quantity": 1 if request.form.get("allow_decimal_quantity") else 0,
-        "is_online_available": 1 if request.form.get("is_online_available") else 0,
-        "online_sort_order": int(request.form.get("online_sort_order") or 0),
-        "online_max_quantity": float(request.form.get("online_max_quantity")) if request.form.get("online_max_quantity") else None,
+        "requires_manual_price": 1 if request.form.get("requires_manual_price") else 0,
+        "is_online_available": 1 if allow_online and request.form.get("is_online_available") else 0,
+        "online_sort_order": int(request.form.get("online_sort_order") or 0) if allow_online else 0,
+        "online_max_quantity": (
+            float(request.form.get("online_max_quantity"))
+            if allow_online and request.form.get("online_max_quantity")
+            else None
+        ),
     }
 
 
@@ -146,7 +159,7 @@ def pos_buttons():
                 name = request.form.get("name_th", "").strip()
                 if not name or len(name) > 80:
                     raise ValueError("กรุณากรอกชื่อเมนูไม่เกิน 80 ตัวอักษร")
-                position = pos_button_position(request.form.get("position"))
+                position = pos_button_group_position(request.form.get("position"))
                 cursor = db.execute(
                     """INSERT INTO pos_button_groups
                        (name_th,position,is_active,created_by,updated_by)
@@ -170,7 +183,7 @@ def pos_buttons():
                 name = request.form.get("name_th", "").strip()
                 if not name or len(name) > 80:
                     raise ValueError("กรุณากรอกชื่อเมนูไม่เกิน 80 ตัวอักษร")
-                position = pos_button_position(request.form.get("position"))
+                position = pos_button_group_position(request.form.get("position"))
                 is_active = 1 if request.form.get("is_active") else 0
                 db.execute(
                     """UPDATE pos_button_groups
@@ -330,6 +343,9 @@ def pos_buttons():
                ORDER BY p.name_th,p.id LIMIT 30""",
             (selected_group["id"], term, term, term, term),
         ).fetchall()
+    next_group_position = max((row["position"] for row in groups), default=0) + 1
+    if next_group_position == RESERVED_POS_BUTTON_GROUP_POSITION:
+        next_group_position += 1
     return render_template(
         "pos_button_settings.html",
         groups=groups,
@@ -337,7 +353,7 @@ def pos_buttons():
         items=items,
         query=query,
         search_products=search_products,
-        next_group_position=max((row["position"] for row in groups), default=0) + 1,
+        next_group_position=next_group_position,
         next_item_position=max((row["position"] for row in items), default=0) + 1,
     )
 
@@ -426,10 +442,10 @@ def create():
                 """INSERT INTO products
                    (product_uuid, barcode, sku, name_th, name_en, category_id, unit_id, cost_satang, price_satang,
                     stock_quantity, minimum_stock, image_path, is_active, is_favorite, allow_decimal_quantity,
-                    is_online_available,online_sort_order,online_max_quantity)
+                    requires_manual_price,is_online_available,online_sort_order,online_max_quantity)
                    VALUES (:product_uuid,:barcode,:sku,:name_th,:name_en,:category_id,:unit_id,:cost_satang,:price_satang,
                            :stock_quantity,:minimum_stock,:image_path,:is_active,:is_favorite,:allow_decimal_quantity,
-                           :is_online_available,:online_sort_order,:online_max_quantity)""",
+                           :requires_manual_price,:is_online_available,:online_sort_order,:online_max_quantity)""",
                 {**data, "stock_quantity": opening_stock},
             )
             product_id = cursor.lastrowid
@@ -472,14 +488,15 @@ def edit(product_uuid):
         if not valid_csrf(request.form.get("csrf_token")):
             return ("คำขอไม่ถูกต้อง", 400)
         try:
-            data = parse_product_form()
+            data = parse_product_form(allow_online=True)
             data["image_path"] = save_image(submitted_product_image()) or product["image_path"]
             data["id"] = product["id"]
             db.execute(
                 """UPDATE products SET barcode=:barcode,sku=:sku,name_th=:name_th,name_en=:name_en,
                    category_id=:category_id,unit_id=:unit_id,cost_satang=:cost_satang,price_satang=:price_satang,
                    minimum_stock=:minimum_stock,image_path=:image_path,is_active=:is_active,is_favorite=:is_favorite,
-                   allow_decimal_quantity=:allow_decimal_quantity,is_online_available=:is_online_available,
+                   allow_decimal_quantity=:allow_decimal_quantity,requires_manual_price=:requires_manual_price,
+                   is_online_available=:is_online_available,
                    online_sort_order=:online_sort_order,online_max_quantity=:online_max_quantity,
                    updated_at=CURRENT_TIMESTAMP WHERE id=:id""", data,
             )
@@ -636,8 +653,8 @@ def quick_edit():
                 db.execute(
                     """INSERT INTO products
                        (product_uuid,barcode,name_th,category_id,unit_id,cost_satang,
-                        price_satang,stock_quantity,minimum_stock,image_path,is_active)
-                       VALUES (?,?,?,?,?,0,?,0,0,?,1)""",
+                        price_satang,stock_quantity,minimum_stock,image_path,is_active,is_online_available)
+                       VALUES (?,?,?,?,?,0,?,0,0,?,1,0)""",
                     (
                         created_uuid,
                         barcode,
@@ -657,6 +674,7 @@ def quick_edit():
                     "price_satang": price_satang,
                     "image_path": new_image_path,
                     "is_active": 1,
+                    "is_online_available": 0,
                     "source": "quick_edit",
                 }
                 db.execute(
@@ -936,8 +954,8 @@ def create_missing_price_product(db):
         db.execute(
             """INSERT INTO products
                (product_uuid,barcode,name_th,category_id,unit_id,cost_satang,
-                price_satang,stock_quantity,minimum_stock,image_path,is_active)
-               VALUES (?,?,?,?,?,0,?,0,0,NULL,1)""",
+                 price_satang,stock_quantity,minimum_stock,image_path,is_active,is_online_available)
+                VALUES (?,?,?,?,?,0,?,0,0,NULL,1,0)""",
             (
                 created_uuid,
                 barcode,
@@ -956,6 +974,7 @@ def create_missing_price_product(db):
             "price_satang": price_satang,
             "image_path": None,
             "is_active": 1,
+            "is_online_available": 0,
             "source": "price_control",
         }
         db.execute(

@@ -128,7 +128,11 @@ def calculate_cart(
         manual_price = None
         if unit_price_overrides is not None and product["product_uuid"] in unit_price_overrides:
             unit_price = int(unit_price_overrides[product["product_uuid"]])
-        elif product["price_satang"] <= 0 or product["barcode"] == MANUAL_PRICE_BARCODE:
+        elif (
+            product["price_satang"] <= 0
+            or product["barcode"] == MANUAL_PRICE_BARCODE
+            or product["requires_manual_price"]
+        ):
             manual_price = _validated_manual_price(
                 db, raw, product, manual_price_staff_id, seen_manual_references
             )
@@ -244,11 +248,12 @@ def complete_sale(
             manual_reference = (
                 item["manual_price"]["reference"] if item["manual_price"] else None
             )
-            sale_item_name = (
-                f"รายการระบุราคา {manual_reference}"
-                if manual_reference
-                else product["name_th"]
-            )
+            sale_item_name = product["name_th"]
+            if (
+                manual_reference
+                and item["manual_price"]["reason"] != "product_manual_price"
+            ):
+                sale_item_name = f"รายการระบุราคา {manual_reference}"
             sale_item = db.execute(
                 """INSERT INTO sale_items
                    (sale_id, product_id, product_name, quantity, unit_price_satang, discount_satang,

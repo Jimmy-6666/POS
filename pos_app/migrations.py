@@ -242,6 +242,32 @@ def _add_pos_button_layout(db: sqlite3.Connection) -> None:
     )
 
 
+def _add_product_manual_price_flag(db: sqlite3.Connection) -> None:
+    """Mark products whose selling price must be entered for every POS line."""
+
+    columns = {row[1] for row in db.execute("PRAGMA table_info(products)")}
+    if "requires_manual_price" not in columns:
+        db.execute(
+            """ALTER TABLE products
+               ADD COLUMN requires_manual_price INTEGER NOT NULL DEFAULT 0
+               CHECK(requires_manual_price IN (0,1))"""
+        )
+
+
+def _grant_manager_settings_permission(db: sqlite3.Connection) -> None:
+    """Allow managers to maintain store settings and settle billed balances."""
+
+    db.execute(
+        """INSERT OR IGNORE INTO permissions(code,name_th)
+           VALUES('settings.manage','ตั้งค่าระบบ')"""
+    )
+    db.execute(
+        """INSERT OR IGNORE INTO role_permissions(role_id,permission_id)
+           SELECT r.id,p.id FROM roles r CROSS JOIN permissions p
+           WHERE r.code='manager' AND p.code='settings.manage'"""
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(20, "enable configured negative stock", _enable_configured_negative_stock),
     Migration(21, "add LINE customer identity", _add_line_customer_identity),
@@ -252,6 +278,8 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(26, "record second-factor verified staff sessions", _add_staff_session_two_factor_assurance),
     Migration(27, "add sale-item manual-price references", _add_sale_item_manual_price_reference),
     Migration(28, "add configurable POS button layout", _add_pos_button_layout),
+    Migration(29, "add per-product manual-price flag", _add_product_manual_price_flag),
+    Migration(30, "grant manager settings and billing access", _grant_manager_settings_permission),
 )
 
 

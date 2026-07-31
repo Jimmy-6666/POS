@@ -35,7 +35,7 @@ def _manual_price_baht(value):
 def _pos_product_row(db, product_id):
     return db.execute(
         """SELECT p.product_uuid,p.barcode,p.name_th,p.price_satang,p.stock_quantity,p.image_path,
-                  p.allow_decimal_quantity,p.is_favorite,u.name_th AS unit_name
+                  p.allow_decimal_quantity,p.is_favorite,p.requires_manual_price,u.name_th AS unit_name
            FROM products p JOIN units u ON u.id=p.unit_id
            WHERE p.id=?""",
         (product_id,),
@@ -83,7 +83,7 @@ def products_api():
         params.append(category_id)
     rows = get_db().execute(
         f"""SELECT p.product_uuid,p.barcode,p.name_th,p.price_satang,p.stock_quantity,p.image_path,
-                   p.allow_decimal_quantity,p.is_favorite,u.name_th AS unit_name
+                   p.allow_decimal_quantity,p.is_favorite,p.requires_manual_price,u.name_th AS unit_name
             FROM products p JOIN units u ON u.id=p.unit_id
             WHERE {' AND '.join(where)} ORDER BY p.is_favorite DESC,p.name_th LIMIT 100""", params
     ).fetchall()
@@ -114,7 +114,7 @@ def button_group_products_api(group_id):
         return jsonify(error="ไม่พบเมนูปุ่มขายนี้"), 404
     rows = db.execute(
         """SELECT p.product_uuid,p.barcode,p.name_th,p.price_satang,p.stock_quantity,
-                  p.allow_decimal_quantity,p.is_favorite,u.name_th AS unit_name,
+                   p.allow_decimal_quantity,p.is_favorite,p.requires_manual_price,u.name_th AS unit_name,
                   i.position
            FROM pos_button_items i
            JOIN products p ON p.id=i.product_id
@@ -150,7 +150,12 @@ def manual_price_api():
         if product and not product["is_active"]:
             raise SaleError("สินค้านี้ถูกปิดใช้งาน กรุณาแจ้งผู้จัดการ")
         is_manual_barcode = barcode == MANUAL_PRICE_BARCODE
-        if product and product["price_satang"] > 0 and not is_manual_barcode:
+        if (
+            product
+            and product["price_satang"] > 0
+            and not product["requires_manual_price"]
+            and not is_manual_barcode
+        ):
             row = _pos_product_row(db, product["id"])
             db.commit()
             return jsonify(product=dict(row), uses_catalog_price=True)
@@ -208,6 +213,8 @@ def manual_price_api():
             if is_manual_barcode
             else "missing_product"
             if created_placeholder
+            else "product_manual_price"
+            if product["requires_manual_price"]
             else "zero_catalog_price"
         )
         manual_price_satang = price_baht * 100
@@ -221,6 +228,7 @@ def manual_price_api():
                 json.dumps(
                     {
                         "barcode": barcode,
+                        "product_name": product["name_th"],
                         "manual_price_satang": manual_price_satang,
                         "reason": reason,
                         "placeholder_created": created_placeholder,
@@ -234,6 +242,7 @@ def manual_price_api():
         manual_price_reference = f"MP-{manual_audit.lastrowid:08d}"
         audit_payload = {
             "barcode": barcode,
+            "product_name": product["name_th"],
             "manual_price_satang": manual_price_satang,
             "reason": reason,
             "placeholder_created": created_placeholder,

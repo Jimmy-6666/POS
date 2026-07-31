@@ -10,12 +10,12 @@ and detailed verification remain in their linked version documents and tests.
 | Staff auth | Pre-login CSRF; staff allowed on configured private LAN only; remote Admin host requires Admin role plus TOTP/recovery code | phase 2, 2FA, public host |
 | Product/catalog/images/pricing | Implemented; immutable UUID/XLSX flow, camera/file preview, approved no-image default, shared menu actions, current/last receiving cost | product, XLSX, V2.4, V3.0.2, V3.0.3 |
 | POS, sales, receipts, void/refund | Implemented; cashier initiation requires active Manager/Admin server PIN authorization with touch Void controls | phase 3–5, V2.4 |
-| Billing customers and payment | Implemented | billing |
+| Billing customers and payment | Implemented; Admin/Manager may configure and settle, Cashier denied | billing, V3.1.2 |
 | Receiving, weighted-average cost, adjustment, ledger, suppliers | Implemented | inventory |
 | Blind stock count | Implemented | phase 6–10 |
 | Closing/reconciliation | Implemented; closing snapshots valid item-void totals | phase 6–10, V2.4 |
 | Dashboard, daily/monthly reports, CSV | Implemented | phase 6–10 |
-| Staff/settings/audit/backup/maintenance | Implemented | phase 2, maintenance |
+| Staff/settings/audit/backup/maintenance | Implemented; Manager may use Settings while staff/Audit/backup/maintenance remain Admin-only | phase 2, maintenance, V3.1.2 |
 | Release 2 responsive visual refresh and desktop launcher | Implemented | version 2.1 |
 | Release 2.2 customer lifecycle, compact checkout, maintenance, backup | Released 2026-07-28 | version 2.2 |
 | Release 2.3 product UUID, admin TOTP, admin XLSX | Released 2026-07-28 | 103-test baseline |
@@ -33,6 +33,8 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0.8 blocking POS manual price and audit export | Deployed 2026-07-30; 178 passed, 1 capability skip; additive migration 27 | `VERSION_3.0.8.md`, release 3.0.8, sales/runtime tests |
 | Release 3.0.9 isolated local POS user and reboot-safe launcher | Released 2026-07-31; no migration | `VERSION_3.0.9.md`, launcher/runtime tests |
 | Release 3.1.0 cashier-first text-only POS button grid | Deployed 2026-07-31; Migration 28; 185 passed, 1 capability skip | `VERSION_3.1.0.md`, `tests/test_release_3_1_0.py` |
+| Release 3.1.1 cashier focus/manual-price refinement | Released 2026-07-31; no migration; 187 passed, 1 capability skip | `VERSION_3.1.1.md`, `tests/test_release_3_1_1.py` |
+| Release 3.1.2 daily price, offline create, Manager Settings/billing | Deployed 2026-07-31; additive Migrations 29–30; 194 passed, 1 capability skip | `VERSION_3.1.2.md`, `tests/test_release_3_1_2.py` |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -230,6 +232,45 @@ and detailed verification remain in their linked version documents and tests.
   Elevated verification passed runtime, protected startup/desktop tasks,
   Private/LocalSubnet firewall, static LAN, health, manager login, direct POS
   landing, collapsed sidebar, and Version 3.1.0 asset identity.
+
+## Version 3.1.1 released — 2026-07-31
+
+- Cart quantity and remove actions return focus to the barcode/search field.
+- Manual-price prompts now have an explicit no-write cancel path while
+  retaining scanner blocking until confirm or cancel.
+- Top-level menu slot 9 is a fixed Manual Price action; server validation
+  reserves that group position while product slot 9 remains valid.
+- POS-button settings now visibly style the `นำออก` action.
+- No migration. Focused regression passed 24/24; the full suite completed 188
+  tests with 187 passed and one existing capability skip.
+- Headless Edge UAT passed R3.1.1/asset-v36 identity, slot-9 placement,
+  +/−/direct-quantity/remove focus recovery, unknown and fixed-Manual
+  no-write cancellation, computed destructive-button styling, and zero page
+  errors. The test barcode created no product or audit row. SQLite integrity
+  and foreign keys passed. The approved cumulative Version 3.1.2 Production
+  deployment includes this release.
+
+## Version 3.1.2 deployed — 2026-07-31
+
+- A checked product flag forces the existing audit-backed whole-baht manual
+  price workflow on every POS sale while preserving the real product name,
+  UUID, receipt identity, and unchanged master price.
+- Checkout revalidates the flag and manual reference server-side.
+- New-product UI omits online controls and server-side creation defaults
+  offline; existing products and online flags are preserved.
+- Manager now has the existing Settings permission, can use `/settings`, and
+  can receive partial or bulk billed payments. Cashier remains denied and the
+  other Admin-only surfaces remain protected.
+- Additive Migration 29 adds one checked boolean defaulting false; Migration
+  30 grants the Manager permission without rewriting business rows.
+- Focused regression passed 33/33. The full suite passed 194 tests with one
+  existing capability skip. Headless UAT, SQLite integrity, foreign keys, and
+  asset-v37 passed and the temporary product flag was restored.
+- Production port 8000 is Version 3.1.2. Migrations 29–30 preserved 742 active
+  products and the zero-sale history; integrity and foreign keys passed.
+  Elevated verification passed runtime, backup schedule, protected SYSTEM
+  server/POS launcher tasks, static LAN, Private/LocalSubnet firewall, and
+  health. Port-8001 UAT remained ready.
 
 ## Online ordering operating model
 

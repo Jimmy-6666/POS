@@ -150,7 +150,7 @@ class Release310Tests(unittest.TestCase):
         ).get_data(as_text=True)
         self.assertIn("ตั้งค่าปุ่มขายสินค้า", page)
         self.assertIn("น้ำแข็งถุง", page)
-        self.assertIn("ตำแหน่ง 1–9 คือหน้าแรก", page)
+        self.assertIn("ตำแหน่ง 9 สงวนไว้สำหรับตั้งราคาขาย Manual", page)
         self.assertEqual(self.cashier.get("/products/pos-buttons").status_code, 403)
         with self.app.app_context():
             actions = {
@@ -220,12 +220,12 @@ class Release310Tests(unittest.TestCase):
         finally:
             db.close()
 
-    def test_release_builder_targets_version_3_1_0(self):
+    def test_release_builder_targets_current_version(self):
         script = (Path(self.app.root_path).parent / "build-release.ps1").read_text(
             encoding="utf-8"
         )
-        self.assertIn('[string]$Version = "3.1.0"', script)
-        self.assertIn('"VERSION_3.1.0.md"', script)
+        self.assertIn('[string]$Version = "3.1.2"', script)
+        self.assertIn('"VERSION_3.1.2.md"', script)
         self.assertNotIn('"VERSION_3.0.8.md"', script)
 
 

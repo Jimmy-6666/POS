@@ -90,9 +90,12 @@ databases.
 - Sessions are stored server-side; only token hashes are persisted. A public
   Admin session must also carry the server-side second-factor verification
   marker and belong to an Admin account with two-factor authentication enabled.
-- Schema version 17 enables `is_online_available` for all existing products
-  once and defaults new products to online. The customer catalogue still
-  excludes inactive products and products with a zero selling price.
+- Schema version 17 enabled `is_online_available` for existing products.
+  Release 3.1.2 supersedes only the new-product default: application create
+  paths and fresh databases now start new products offline until a
+  Manager/Admin explicitly enables them. Existing online flags are preserved.
+  The customer catalogue still excludes inactive products and products with a
+  zero selling price.
 - Historic `online_bank_accounts` records are retained for data preservation,
   but no new customer-facing transfer destination is configured or displayed.
 - `customers.line_user_id` is unique and comes only from successful LINE ID
@@ -131,6 +134,15 @@ databases.
 - Schema Migration 28 adds only the configurable POS menu and item mappings.
   It does not seed or rewrite products, so the Manager/Admin explicitly chooses
   the small manual-sale set.
+- Schema Migration 29 adds `products.requires_manual_price` as a checked
+  boolean defaulting false. Existing products are preserved. A flagged product
+  requires an audit-backed per-line price at POS checkout while retaining its
+  real product identity and master price.
+- Schema Migration 30 idempotently maps the existing `settings.manage`
+  permission to the Manager role. This authorizes `/settings`, reference-list
+  maintenance, billing-customer maintenance, and billed-balance settlement;
+  it does not modify any business or audit row. Cashier receives no new
+  permission.
 
 ## Migration rule
 

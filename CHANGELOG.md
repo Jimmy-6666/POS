@@ -1,3 +1,55 @@
+# Release 3.1.2 — released 2026-07-31
+
+- Added an additive per-product daily manual-price flag (Migration 29).
+- Reused the blocking Cashier price Numpad for flagged positive-price
+  products and retained their real product identity in Audit, sale items, and
+  receipts.
+- Added server-side quote/checkout enforcement so catalog price cannot bypass
+  a flagged product's required manual price.
+- Removed online controls from new-product UI and made every standard
+  application create path offline by default without changing existing
+  products.
+- Added focused Release 3.1.2 migration, create-form, forged-request,
+  POS API, manual-price, checkout, Audit, and receipt regression coverage.
+- Granted Managers the existing Settings permission through additive
+  Migration 30. Managers can use `/settings` and settle billed balances
+  individually or in bulk; Cashiers remain denied and Admin-only staff,
+  Audit, backup, maintenance, security, and XLSX functions remain protected.
+- Verified 33 focused tests and the 194-test full suite with one existing
+  filesystem-capability skip. Headless Edge UAT passed asset-v37, create/edit,
+  flagged-product price prompt, real-name cart/reference, and focus recovery;
+  SQLite integrity and foreign keys passed.
+- Deployed the canonical port-8000 Production instance after verified local
+  backup, full recovery bundle, and Version 3.1.0 source rollback. Migrations
+  29–30 preserved 742 active products and the zero-sale history; integrity,
+  foreign keys, runtime, static LAN, firewall, health, and version checks
+  passed.
+- Repaired the missing startup tasks during deployment. The server again runs
+  as `SYSTEM` at boot and the attach-only launcher runs for the passwordless
+  standard `POS` user at logon; the Public Desktop shortcut was preserved.
+  Port-8001 UAT remained healthy.
+
+# Release 3.1.1 — released 2026-07-31
+
+- Returned focus to the POS barcode/search field after Cashier quantity
+  increase, decrease, direct quantity edit, and line removal.
+- Added explicit cancellation to the blocking manual-price dialog. Cancelling
+  discards the unresolved line, writes no placeholder/cart/audit record, and
+  returns to the main menu ready for the next scan.
+- Reserved top-level menu position 9 for a fixed Manual Price button that
+  reuses the audited `MANUALPRICE` workflow. Product slot 9 inside a menu
+  remains available.
+- Rejected Manager/Admin attempts to create or move a top-level menu into the
+  reserved position and updated configuration guidance.
+- Styled the `นำออก` control in POS-button settings as a destructive action.
+- Added focused Release 3.1.1 regression coverage; no schema migration.
+- Verification passed 24/24 focused tests and the full 188-test suite
+  (187 passed, one existing capability skip). Headless Edge UAT verified all
+  four cart-focus actions, slot 9, both no-write cancel paths, computed remove
+  styling, zero JavaScript errors, SQLite integrity, and foreign keys.
+- Released as the first of the two approved versions and deployed cumulatively
+  through Version 3.1.2.
+
 # Release 3.1.0 — 2026-07-31
 
 - Changed every successful staff login to enter the POS sale screen and added a
