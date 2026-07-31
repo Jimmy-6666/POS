@@ -1,6 +1,6 @@
 # Saengngam Minimart POS — Version 3.1.3
 
-Status: Production print-driver diagnostics update
+Status: deployed to Production 2026-07-31
 
 Migration: none
 
@@ -47,3 +47,12 @@ product image is written to the log.
   user boundary remain unchanged.
 - The raw-driver experiment is not enabled by this release; this diagnostic
   build intentionally observes the established Windows driver path first.
+
+## Deployment verification
+
+- The full suite completed 194 tests with one existing filesystem-capability
+  skip. Focused receipt/online/launcher diagnostics tests passed before
+  deployment.
+- A verified local backup and full recovery bundle were created before update.
+  Production port 8000 returned ready health as R3.1.3 afterward. UAT port
+  8001 was restored and also returned ready health.

@@ -16,7 +16,7 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- The active Release 3.1.2 Production instance uses port `8000` and `runtime/`.
+- The active Release 3.1.3 Production instance uses port `8000` and `runtime/`.
   `SaengngamPOS-Production` starts the server under `SYSTEM` at Windows startup;
   `SaengngamPOS-Desktop` opens an attach-only launcher for the local standard
   `POS` account at logon. The account has no password, cannot administer the
@@ -26,6 +26,12 @@ and prints 80 mm receipts through the browser.
   Mutable launcher state is shared through
   `runtime/pos-desktop/display_state.json`, whose parent ACL remains writable
   when the server recreates the file after a reboot.
+- Release 3.1.3 retains the browser print-agent and installed Windows printer
+  driver while making it observable from the standard `POS` account. Its
+  bounded `runtime/pos-desktop/print-diagnostics.log` correlates completed
+  transactions, queue/agent/render/browser acknowledgement stages by opaque
+  job ID and is opened through a Launcher button. It never records a token,
+  PIN, session, or payment evidence, and logging cannot affect a sale.
 - The accepted network contract remains fixed server address `192.168.0.200`
   on trusted private LAN `192.168.0.0/24`. Release 3.1.0 elevated Production
   verification passed the static network and Private/LocalSubnet firewall
@@ -166,6 +172,15 @@ Production Migrations 29–30 preserved 742 active products and zero sale
 history. Protected SYSTEM/POS startup tasks, static LAN, firewall, runtime,
 health, database integrity, and the Public Desktop recovery shortcut passed
 after deployment. See `VERSION_3.1.2.md`.
+
+Version 3.1.3 is the current Production diagnostic build. It intentionally
+keeps the established browser/driver receipt method while the `POS` user tests
+the actual driver. The server records transaction/queue events and the hidden
+agent records its launch, claim, print request, afterprint/timeout, and ack in
+the readable local diagnostic log. No migration or business-data rewrite was
+made. Full regression passed 194 tests with one existing capability skip;
+Production 8000 and UAT 8001 health were ready after deployment. See
+`VERSION_3.1.3.md`.
 
 Version 3.0.9 formalizes the
 separate `SYSTEM` server and standard local `POS` launcher setup, repair,

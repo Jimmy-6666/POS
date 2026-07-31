@@ -1,4 +1,4 @@
-# Release 3.1.3 — Production print-driver diagnostics update 2026-07-31
+# Release 3.1.3 — deployed 2026-07-31
 
 - Preserved the existing browser print-agent and Windows printer-driver path.
 - Added a POS-user-readable, bounded `runtime/pos-desktop/print-diagnostics.log`
