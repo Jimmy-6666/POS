@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-MAX_CONTEXT_WORDS = 1600
+MAX_CONTEXT_WORDS = 5000
 FIRST_READ = [
     "AI_CONTEXT.md",
     "PROJECT_MAP.md",

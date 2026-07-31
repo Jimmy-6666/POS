@@ -28,6 +28,7 @@ class RuntimePathTests(unittest.TestCase):
         self.assertEqual(uat.root.name, "uat_runtime")
         release = RuntimePaths.from_environment(project_root, {"POS_RUNTIME_ROOT": str(Path(self.folder.name) / "runtime")})
         self.assertEqual(release.browser_profile.name, "browser-profile")
+        self.assertEqual(release.print_agent_token, release.configuration / "print-agent-token")
 
     def test_local_configuration_and_environment_precedence(self):
         root = Path(self.folder.name) / "configured"

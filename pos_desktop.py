@@ -1,5 +1,6 @@
-"""Friendly Windows launcher for Saengngam Minimart POS 3.0.8."""
+"""Friendly Windows launcher for Saengngam Minimart POS 3.0.9."""
 import ctypes
+import importlib.util
 import json
 import os
 import secrets
@@ -13,21 +14,45 @@ from pathlib import Path
 from ctypes import wintypes
 from tkinter import messagebox
 
-from pos_app.runtime_paths import DEFAULT_LAN_NETWORKS, DEFAULT_SERVER_IP, RuntimePaths, load_runtime_config
-
-
 ROOT = Path(__file__).resolve().parent
+
+
+def _load_runtime_paths():
+    """Load the standalone runtime helper without bootstrapping Flask."""
+    module_name = "_saengngam_runtime_paths"
+    module_path = ROOT / "pos_app" / "runtime_paths.py"
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load runtime helper: {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_runtime_paths = _load_runtime_paths()
+DEFAULT_LAN_NETWORKS = _runtime_paths.DEFAULT_LAN_NETWORKS
+DEFAULT_SERVER_IP = _runtime_paths.DEFAULT_SERVER_IP
+RuntimePaths = _runtime_paths.RuntimePaths
+load_runtime_config = _runtime_paths.load_runtime_config
+
 RUNTIME_PATHS = RuntimePaths.from_root(os.environ.get("POS_RUNTIME_ROOT", ROOT / "runtime"))
 RUNTIME = RUNTIME_PATHS.root
+PROFILE_ROOT = Path(os.environ.get("POS_DESKTOP_PROFILE_ROOT", RUNTIME)).expanduser().resolve()
+BROWSER_PROFILE = PROFILE_ROOT / "browser-profile"
+PRINT_BROWSER_PROFILE = PROFILE_ROOT / "print-browser-profile"
 RUNTIME_CONFIG = load_runtime_config(ROOT, {**os.environ, "POS_RUNTIME_ROOT": str(RUNTIME)})
-STATE_FILE = RUNTIME_PATHS.display_state
+STATE_FILE = Path(
+    os.environ.get("POS_DISPLAY_STATE_FILE", RUNTIME_PATHS.display_state)
+).expanduser().resolve()
 LOG_FILE = RUNTIME_PATHS.launcher_log
 PORT = int(os.environ.get("POS_PORT", "8002"))
+ATTACH_ONLY = str(os.environ.get("POS_DESKTOP_ATTACH_ONLY", "")).lower() in {"1", "true", "yes"}
 URL = f"http://127.0.0.1:{PORT}"
 SERVER_IP = os.environ.get("POS_SERVER_IP", RUNTIME_CONFIG.server_ip or DEFAULT_SERVER_IP)
 LAN_NETWORKS = os.environ.get("POS_LAN_NETWORKS", RUNTIME_CONFIG.lan_networks or DEFAULT_LAN_NETWORKS)
 LAN_URL = f"http://{SERVER_IP}:{PORT}"
-LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 3.0.8")
+LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 3.0.9")
 MUTEX_NAME = os.environ.get("POS_LAUNCHER_MUTEX", "SaengngamPOS306DesktopLauncher")
 CREATE_NO_WINDOW = 0x08000000
 ERROR_ALREADY_EXISTS = 183
@@ -39,12 +64,26 @@ GWL_STYLE = -16
 WS_CAPTION = 0x00C00000
 
 
+def load_print_agent_token():
+    configured = os.environ.get("POS_PRINT_AGENT_TOKEN", "").strip()
+    if configured:
+        return configured
+    try:
+        saved = RUNTIME_PATHS.print_agent_token.read_text(encoding="ascii").strip()
+    except OSError:
+        saved = ""
+    if saved:
+        return saved
+    return "" if ATTACH_ONLY else secrets.token_urlsafe(32)
+
+
 def main_browser_args(browser_exe, profile):
     return [
         str(browser_exe), f"--app={URL}", "--new-window", "--window-size=1100,760",
         "--window-position=80,60", f"--user-data-dir={profile}", "--no-first-run",
         "--no-default-browser-check", "--disable-session-crashed-bubble",
-        "--disable-save-password-bubble", "--disable-background-mode",
+        "--disable-save-password-bubble", "--disable-background-mode", "--disable-sync",
+        "--disable-signin-promo",
         "--disable-features=PasswordManagerOnboarding,PasswordLeakDetection,AutofillEnableAccountWalletStorage",
     ]
 
@@ -55,7 +94,8 @@ def print_browser_args(browser_exe, profile, token):
         "--window-size=320,240", "--window-position=-32000,-32000",
         f"--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check",
         "--disable-session-crashed-bubble", "--kiosk-printing",
-        "--disable-save-password-bubble", "--disable-background-mode",
+        "--disable-save-password-bubble", "--disable-background-mode", "--disable-sync",
+        "--disable-signin-promo",
     ]
 
 
@@ -72,7 +112,8 @@ class PosDesktop:
         self.browser_hwnd = None
         self.print_browser_hwnd = None
         self.browser_exe = self.find_browser()
-        self.print_agent_token = secrets.token_urlsafe(32) if self.browser_exe else ""
+        self.attach_only = ATTACH_ONLY
+        self.print_agent_token = load_print_agent_token() if self.browser_exe else ""
         self.known_chrome_windows = set(self.chrome_windows())
         self.fullscreen = False
         self.last_state_stamp = None
@@ -89,7 +130,7 @@ class PosDesktop:
         header.pack(fill="x")
         header.pack_propagate(False)
         tk.Label(header, text="แสนงาม มินิมาร์ท", fg="white", bg="#0b3d2a", font=("Tahoma", 20, "bold")).pack(anchor="w", padx=24, pady=(15, 0))
-        tk.Label(header, text="POS Desktop Launcher · Version 3.0.8", fg="#cce6d5", bg="#0b3d2a", font=("Tahoma", 9)).pack(anchor="w", padx=25)
+        tk.Label(header, text="POS Desktop Launcher · Version 3.0.9", fg="#cce6d5", bg="#0b3d2a", font=("Tahoma", 9)).pack(anchor="w", padx=25)
 
         content = tk.Frame(self.root, bg="#eef4ef")
         content.pack(fill="both", expand=True, padx=24, pady=20)
@@ -105,7 +146,8 @@ class PosDesktop:
         self.normal_button.grid(row=3, column=0, sticky="ew", pady=(10, 0), padx=(0, 5))
         self.full_button = tk.Button(content, text="เต็มหน้าจอ", command=lambda: self.apply_display("fullscreen"), bg="white", fg="#164a35", relief="solid", bd=1, font=("Tahoma", 10, "bold"), pady=9, cursor="hand2")
         self.full_button.grid(row=3, column=1, sticky="ew", pady=(10, 0), padx=5)
-        self.stop_button = tk.Button(content, text="ปิดระบบ", command=self.close, bg="#f9e7e7", fg="#8b2020", relief="solid", bd=1, font=("Tahoma", 10, "bold"), pady=9, cursor="hand2")
+        stop_label = "ปิด Launcher" if self.attach_only else "ปิดระบบ"
+        self.stop_button = tk.Button(content, text=stop_label, command=self.close, bg="#f9e7e7", fg="#8b2020", relief="solid", bd=1, font=("Tahoma", 10, "bold"), pady=9, cursor="hand2")
         self.stop_button.grid(row=3, column=2, sticky="ew", pady=(10, 0), padx=(5, 0))
         for column in range(3):
             content.grid_columnconfigure(column, weight=1)
@@ -122,13 +164,29 @@ class PosDesktop:
         return next((path for path in candidates if path.is_file()), None)
 
     def start_server(self):
+        if self.attach_only:
+            try:
+                if not self.print_agent_token:
+                    raise RuntimeError("print-agent token is unavailable")
+                for _ in range(40):
+                    try:
+                        with urllib.request.urlopen(f"{URL}/health", timeout=1) as response:
+                            if response.status == 200:
+                                self.root.after(0, self.server_ready)
+                                return
+                    except Exception:
+                        time.sleep(0.3)
+                raise RuntimeError("Production server is not ready")
+            except Exception as exc:
+                self.root.after(0, lambda: self.server_failed(str(exc)))
+            return
         env = os.environ.copy()
         env.update(
             POS_PORT=str(PORT), POS_RUNTIME_ROOT=str(RUNTIME),
             POS_DISPLAY_STATE_FILE=str(STATE_FILE), POS_PRINT_AGENT_TOKEN=self.print_agent_token,
             POS_BIND_HOST="0.0.0.0", POS_SERVER_IP=SERVER_IP,
             POS_LAN_ACCESS_ENABLED="1", POS_LAN_NETWORKS=LAN_NETWORKS,
-            POS_APP_VERSION="3.0.8",
+            POS_APP_VERSION="3.0.9",
         )
         try:
             LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -160,7 +218,7 @@ class PosDesktop:
     def server_failed(self, detail):
         self.status.config(text="ไม่สามารถเริ่มระบบได้")
         self.status_dot.config(fg="#ad2929")
-        messagebox.showerror("POS 3.0.8", f"เริ่มเซิร์ฟเวอร์ไม่สำเร็จ\n\n{detail}\n\nดูรายละเอียดที่ runtime\\launcher.log")
+        messagebox.showerror("POS 3.0.9", f"เริ่มเซิร์ฟเวอร์ไม่สำเร็จ\n\n{detail}\n\nดูรายละเอียดที่ runtime\\launcher.log")
 
     def open_browser(self):
         if not self.browser_exe:
@@ -172,7 +230,7 @@ class PosDesktop:
             ctypes.windll.user32.SetForegroundWindow(self.browser_hwnd)
             return
         self.known_chrome_windows = set(self.chrome_windows())
-        profile = RUNTIME_PATHS.browser_profile
+        profile = BROWSER_PROFILE
         self.configure_browser_profile(profile)
         self.browser_process = subprocess.Popen(main_browser_args(self.browser_exe, profile), creationflags=CREATE_NO_WINDOW)
         self.status.config(text="เปิดหน้าร้านแล้ว — กรุณา Login")
@@ -188,6 +246,8 @@ class PosDesktop:
             data["credentials_enable_service"] = False
             data.setdefault("profile", {})["password_manager_enabled"] = False
             data.setdefault("autofill", {})["profile_enabled"] = False
+            data.setdefault("signin", {})["allowed"] = False
+            data["signin"]["allowed_on_next_startup"] = False
             preferences.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         except (OSError, json.JSONDecodeError, TypeError):
             pass
@@ -222,7 +282,7 @@ class PosDesktop:
         ):
             return
         known_windows = set(self.chrome_windows())
-        profile = RUNTIME_PATHS.print_browser_profile
+        profile = PRINT_BROWSER_PROFILE
         self.configure_browser_profile(profile)
         self.print_browser_process = subprocess.Popen(
             print_browser_args(self.browser_exe, profile, self.print_agent_token),
@@ -298,7 +358,13 @@ class PosDesktop:
         self.root.after(500, self.poll_display_state)
 
     def close(self):
-        if not messagebox.askyesno("ปิดระบบ", "ต้องการปิด POS Server ใช่หรือไม่?"):
+        title = "ปิด Launcher" if self.attach_only else "ปิดระบบ"
+        question = (
+            "ต้องการปิดหน้าต่าง POS ใช่หรือไม่?\n\nเซิร์ฟเวอร์จะยังทำงานต่อ"
+            if self.attach_only
+            else "ต้องการปิด POS Server ใช่หรือไม่?"
+        )
+        if not messagebox.askyesno(title, question):
             return
         self.closing = True
         if self.fullscreen:
@@ -311,6 +377,8 @@ class PosDesktop:
                 self.server.kill()
         if self.print_browser_process and self.print_browser_process.poll() is None:
             self.print_browser_process.terminate()
+        if self.browser_process and self.browser_process.poll() is None:
+            self.browser_process.terminate()
         self.root.destroy()
 
     def run(self):
@@ -326,7 +394,7 @@ if __name__ == "__main__":
         PosDesktop().run()
     except Exception:
         import traceback
-        error_log = RUNTIME / "desktop-error.log"
+        error_log = PROFILE_ROOT / "desktop-error.log"
         error_log.parent.mkdir(parents=True, exist_ok=True)
         error_log.write_text(traceback.format_exc(), encoding="utf-8")
         ctypes.windll.user32.MessageBoxW(0, f"POS Desktop Launcher encountered an error.\n\nSee: {error_log}", LAUNCHER_TITLE, 0x10)

@@ -1,7 +1,7 @@
 # แสนงาม มินิมาร์ท POS 1.0
 
 > เอกสารนี้เก็บคู่มือฐานของ Release 1.0 ไว้ตามข้อกำหนดเดิม ปัจจุบันโครงการมี
-> Release 3.0.8 และ Desktop Launcher/LINE/Backup ล่าสุด โปรดดู `VERSION_3.0.8.md`
+> Release 3.0.9 และ Desktop Launcher/LINE/Backup ล่าสุด โปรดดู `VERSION_3.0.9.md`
 > สำหรับการเปิดรุ่นปัจจุบัน และดู `AI_CONTEXT.md` สำหรับสถานะการพัฒนาล่าสุด
 > โดยข้อกำหนดเดิมใน `REQUIREMENTS_V1.0.md` ยังมีผลครบถ้วน
 
@@ -49,8 +49,9 @@ Release 3.0.1 กำหนดเครื่อง Server เป็น `192.168.
 
 ## 6. เปิดจากมือถือใน Wi‑Fi เดียวกัน
 
-Desktop Launcher ใช้ `http://192.168.0.200:8002`; scheduled Production service
-ค่าเริ่มต้นใช้ `http://192.168.0.200:8000` เครื่องหลักต้องเปิดโปรแกรมอยู่ และ
+Production server ใช้ `http://192.168.0.200:8000` และรัน background ใต้
+`SYSTEM`; Desktop Launcher ของ Local user `POS` จะเชื่อมต่อ server เดิมโดยไม่
+สร้าง server ซ้ำ เครื่องหลักต้องเปิดอยู่ และ
 อุปกรณ์ต้องอยู่ใน `192.168.0.0/24` ห้าม forward พอร์ตนี้ออกอินเทอร์เน็ต
 
 ## 7. สำรองและคืนฐานข้อมูล

@@ -68,6 +68,12 @@ See `MODULE_DEPENDENCIES.md` for cross-module impact.
 
 Production lifecycle files are kept at the repository root for operator use.
 They use production-common.ps1 and never modify start-uat.bat.
+`configure-production-kiosk-user.ps1` creates the standard local `POS` account,
+registers separate background-server and attach-only desktop tasks, applies
+least-privilege launcher ACLs, copies a read-only standard-library Python
+runtime to `desktop-python/`, and creates the Public Desktop shortcut.
+`VERSION_3.0.9.md` is the accepted behavior and setup contract for this
+two-task, standard-user launcher model.
 
 The sanitized, crash-resumable customer-machine workflow and reusable Codex
 prompt are in `docs/CUSTOMER_MACHINE_DEPLOYMENT_PLAYBOOK_3.0.md`.

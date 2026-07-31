@@ -1,5 +1,10 @@
 # Production Installation
 
+Release 3.0.9 formalizes the isolated standard local `POS` account and the
+separate `SYSTEM` server/interactive launcher lifecycle. See
+`VERSION_3.0.9.md` for its accepted behavior, recovery contract, and
+verification evidence.
+
 The Windows production lifecycle now includes the Sprint 2 backup runner. It
 keeps the existing Flask, Waitress, and SQLite application offline-first while
 adding verified local snapshots and optional outbound SFTP database/image sync.
@@ -40,7 +45,28 @@ installer uses the existing installation root and does not relocate it.
     .\stop-production.ps1
     .\restart-production.ps1
 
-The automatic startup task is SaengngamPOS-Production. The Backup page defaults
+The automatic server task is `SaengngamPOS-Production`; it runs as `SYSTEM` at
+Windows startup without opening a desktop window. Configure the cashier
+desktop separately from an elevated PowerShell window:
+
+    .\configure-production-kiosk-user.ps1 -AccountName POS
+
+This creates a passwordless standard local `POS` account,
+`SaengngamPOS-Desktop` (attach-only launcher at that user's logon), a local
+print-agent token, restricted launcher ACLs, a read-only standard-library
+Python runtime at `desktop-python\`, and
+`C:\Users\Public\Desktop\Saengngam POS.lnk`. Sign in to Windows as `POS` to
+start the launcher; closing it does not stop the background server, and the
+shortcut opens it again. The shared runtime prevents the launcher from
+depending on the Admin user's private `AppData` Python installation; the
+launcher loads its standalone path helper without starting Flask, while the
+server continues to use the locked `.venv`. A desktop bootstrap failure is
+shown visibly and written under `runtime\pos-desktop`. The shared mutable
+display state is also stored at
+`runtime\pos-desktop\display_state.json`; keeping it under this writable
+parent preserves POS access when the server recreates the file after reboot.
+
+The Backup page defaults
 to a daily 02:00 Asia/Bangkok send time and may be changed by a user with
 `backup.manage`; the POS process starts it while running during that minute. The send does not
 stop the POS and sales continue if a VPS is offline.
