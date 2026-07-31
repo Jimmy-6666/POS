@@ -9,6 +9,7 @@ from ..services.online_orders import (
     OnlineOrderError, audit_order, complete_online_order_sale, expire_pending_orders,
     record_history, release_reservations,
 )
+from ..services.print_diagnostics import record_print_event
 from ..services.print_jobs import enqueue_print
 from ..services.sales import SaleError, negative_stock_allowed
 
@@ -519,7 +520,16 @@ def complete_reconciliation(order_id):
         db.execute("UPDATE online_orders SET reconciled_by=?,reconciliation_completed_at=? WHERE id=?", (g.staff["id"], now(), order_id))
         audit_order("online_reconciliation_completed", order_id, staff_id=g.staff["id"], detail={"same_as_preparer": order["prepared_by"] == g.staff["id"]})
         db.commit()
-        print_status = "queued" if enqueue_print("checked_order", order_id) else "manual"
+        print_job_id = enqueue_print("checked_order", order_id)
+        print_status = "queued" if print_job_id else "manual"
+        record_print_event(
+            "online_reconciliation_completed",
+            source="server",
+            details={
+                "staff_id": g.staff["id"], "order_id": order_id,
+                "print_job_id": print_job_id, "print_status": print_status,
+            },
+        )
     except ValueError as exc:
         db.rollback(); flash(str(exc), "error")
         print_status = None

@@ -11,13 +11,13 @@ ROOT = Path(__file__).resolve().parent.parent
 
 class Version310ReleaseTests(unittest.TestCase):
     def test_release_identity_is_consistent(self):
-        self.assertEqual(DEFAULT_APP_VERSION, "3.1.2")
-        self.assertIn("R3.1.2", (ROOT / "pos_app" / "templates" / "base.html").read_text(encoding="utf-8"))
+        self.assertEqual(DEFAULT_APP_VERSION, "3.1.3")
+        self.assertIn("R3.1.3", (ROOT / "pos_app" / "templates" / "base.html").read_text(encoding="utf-8"))
         launcher = (ROOT / "pos_desktop.py").read_text(encoding="utf-8")
-        self.assertIn("Saengngam POS 3.1.2", launcher)
+        self.assertIn("Saengngam POS 3.1.3", launcher)
         ast.parse(launcher)
         production = (ROOT / "production-common.ps1").read_text(encoding="utf-8")
-        self.assertIn('AppVersion = "3.1.2"', production)
+        self.assertIn('AppVersion = "3.1.3"', production)
         self.assertIn("$env:POS_APP_VERSION = $Context.AppVersion", production)
         self.assertIn('ServerIp = "192.168.0.200"', production)
         self.assertIn("Push-Location $Context.InstallRoot", production)

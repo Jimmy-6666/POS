@@ -7,17 +7,31 @@
 <script>
 (() => {
   const token = {{token|tojson}};
+  const desktopUser = {{desktop_user|tojson}};
   const frame = document.querySelector('#printFrame');
   const status = document.querySelector('#status');
   let activeJob = null;
   let fallbackTimer = null;
+
+  function logEvent(event, details = {}) {
+    return fetch(`/print-agent/event?token=${encodeURIComponent(token)}&desktop_user=${encodeURIComponent(desktopUser)}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({event, ...details}),
+    }).catch(() => undefined);
+  }
+
+  frame.addEventListener('load', () => {
+    if (activeJob) logEvent('browser_job_loaded', {job_id: activeJob});
+  });
 
   async function acknowledge() {
     if (!activeJob) return;
     const jobId = activeJob;
     activeJob = null;
     clearTimeout(fallbackTimer);
-    await fetch(`/print-agent/ack/${encodeURIComponent(jobId)}?token=${encodeURIComponent(token)}`, {method: 'POST'});
+    const response = await fetch(`/print-agent/ack/${encodeURIComponent(jobId)}?token=${encodeURIComponent(token)}&desktop_user=${encodeURIComponent(desktopUser)}`, {method: 'POST'}).catch(() => null);
+    if (!response?.ok) await logEvent('browser_ack_failed', {job_id: jobId});
     frame.removeAttribute('src');
     status.textContent = 'พร้อมพิมพ์ใบเสร็จ';
     setTimeout(poll, 350);
@@ -26,13 +40,17 @@
   async function poll() {
     if (activeJob) return;
     try {
-      const response = await fetch(`/print-agent/next?token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+      const response = await fetch(`/print-agent/next?token=${encodeURIComponent(token)}&desktop_user=${encodeURIComponent(desktopUser)}`, {cache: 'no-store'});
       const data = await response.json();
       if (!data.job) return setTimeout(poll, 800);
       activeJob = data.job.id;
       status.textContent = 'กำลังพิมพ์เอกสาร';
-      frame.src = `${data.job.render_url}?token=${encodeURIComponent(token)}`;
-      fallbackTimer = setTimeout(acknowledge, 15000);
+      await logEvent('browser_print_requested', {job_id: activeJob, document_type: data.job.document_type});
+      frame.src = `${data.job.render_url}?token=${encodeURIComponent(token)}&desktop_user=${encodeURIComponent(desktopUser)}`;
+      fallbackTimer = setTimeout(() => {
+        logEvent('browser_ack_timeout', {job_id: activeJob});
+        acknowledge();
+      }, 15000);
     } catch (_) {
       setTimeout(poll, 1500);
     }
@@ -40,6 +58,7 @@
 
   addEventListener('message', (event) => {
     if (event.origin === location.origin && event.data?.type === 'print-complete' && event.data.jobId === activeJob) {
+      logEvent('browser_afterprint', {job_id: activeJob});
       acknowledge();
     }
   });

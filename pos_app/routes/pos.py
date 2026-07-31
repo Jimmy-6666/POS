@@ -10,6 +10,7 @@ from ..auth import login_required, permission_required, valid_csrf, verify_void_
 from ..database import get_db
 from ..product_identity import ProductIdentityError, canonical_product_uuid, new_product_uuid
 from ..services.money import change_breakdown
+from ..services.print_diagnostics import record_print_event
 from ..services.print_jobs import enqueue_print
 from ..services.sales import SaleError, calculate_cart, complete_sale, void_sale
 
@@ -319,7 +320,19 @@ def complete_api():
         sale_id, receipt, cart, change = complete_sale(
             data, g.staff["id"], audit_ip=request.remote_addr
         )
-        print_queued = bool(enqueue_print("sale_receipt", sale_id))
+        print_job_id = enqueue_print("sale_receipt", sale_id)
+        print_queued = bool(print_job_id)
+        record_print_event(
+            "transaction_completed",
+            source="server",
+            details={
+                "staff_id": g.staff["id"],
+                "sale_id": sale_id,
+                "receipt_number": receipt,
+                "print_job_id": print_job_id,
+                "print_queued": print_queued,
+            },
+        )
         return jsonify(
             sale_id=sale_id, receipt_number=receipt, total_satang=cart["total_satang"],
             change_satang=change, breakdown=change_breakdown(change), receipt_url=f"/sales/{sale_id}/receipt",
