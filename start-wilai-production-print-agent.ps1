@@ -22,8 +22,13 @@ if (-not (Test-Path -LiteralPath $tokenPath)) { exit 0 }
 $token = (Get-Content -Raw -LiteralPath $tokenPath).Trim()
 if (-not $token) { exit 0 }
 
+# Allow the production desktop launcher a short startup window.  If it owns an
+# agent in this session, leave it as the single worker.  Otherwise this script
+# remains the Wilai-only fallback worker.
+Start-Sleep -Seconds 12
+$printAgentMarker = "--app=http://127.0.0.1:$Port/print-agent"
 $existing = Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -match [regex]::Escape($profile) }
+    Where-Object { $_.CommandLine -match [regex]::Escape($printAgentMarker) }
 if ($existing) { exit 0 }
 
 $edge = @(

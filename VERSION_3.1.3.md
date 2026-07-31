@@ -66,12 +66,14 @@ product image is written to the log.
 - The same diagnostic log records the selected printer and the exit status of
   the registry and Windows PrintUI calls. A setup failure remains diagnostic
   only and never blocks the cashier, transaction, or launcher.
-- The browser agent now navigates a claimed receipt to a top-level print
-  wrapper. The wrapper calls `window.print()` itself, then acknowledges the
-  job and returns to the queue; the receipt is no longer asked to print from
-  an iframe. This preserves the existing Edge/Windows driver path while
-  avoiding the observed iframe print freeze.
+- The browser agent now opens the existing receipt HTML as its top-level
+  document. It invokes the receipt's normal `window.print()` hook there,
+  records `afterprint`, acknowledges the job, and returns to the queue. No
+  printable iframe is used, avoiding the Windows-driver freeze observed with
+  nested browser documents.
 - For the current Wilai fallback setup, a user Startup shortcut runs the
-  print-agent launcher after logon. It waits for production health, reads the
-  protected token locally, and starts one hidden Edge agent; it does not start
-  the POS server or alter the `POS` user boundary.
+  print-agent launcher after logon. It waits for production health and lets an
+  already-started production launcher own the single agent; otherwise it starts
+  one hidden Edge agent. The production launcher similarly defers to that
+  Wilai-only fallback, preventing duplicate agents while retaining the normal
+  `POS` user boundary.

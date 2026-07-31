@@ -11,13 +11,13 @@
   printer to `POSPrinter POS-80` before opening the kiosk print agent and
   writes the Windows setup result to that same diagnostics log. UAT and the
   Wilai profile are not changed.
-- Changed automatic receipts from an iframe `window.print()` call to a
-  top-level print wrapper. The wrapper logs the loaded document, prints using
-  the same Edge/Windows driver route, acknowledges the job after printing,
-  and then resumes polling the queue.
+- Changed automatic receipts to open the real receipt document at the top
+  level before calling `window.print()`. This removes the remaining printable
+  iframe, then logs, acknowledges, and resumes the queue after `afterprint`.
 - Added a Wilai-user startup launcher for the verified browser print agent.
-  It is a printer-only fallback and waits for the existing production server;
-  it does not start a server or replace the standard `POS` account setup.
+  It is a printer-only fallback and coordinates with the production desktop
+  launcher so Wilai has exactly one worker after restart; it does not start a
+  server or replace the standard `POS` account setup.
 
 # Release 3.1.2 — released 2026-07-31
 

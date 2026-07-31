@@ -34,6 +34,12 @@ try {
         if ($AttachOnly) {
             $env:PYTHONDONTWRITEBYTECODE = "1"
             $env:POS_DESKTOP_PROFILE_ROOT = Join-Path $context.RuntimeRoot "pos-desktop"
+            # Wilai has a dedicated Startup print agent. Keep the normal POS
+            # account on the launcher-managed agent, but never open two agents
+            # in Wilai's session after a Windows restart.
+            if ($env:USERNAME -eq "Wilai") {
+                $env:POS_EXTERNAL_PRINT_AGENT = "1"
+            }
         }
         $env:POS_LAUNCHER_TITLE = "Saengngam POS $($context.AppVersion) Production"
         $env:POS_LAUNCHER_MUTEX = "SaengngamPOSProductionDesktopLauncher"

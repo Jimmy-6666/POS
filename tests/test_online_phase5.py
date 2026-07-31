@@ -51,8 +51,9 @@ class OnlinePhase5Tests(unittest.TestCase):
         job = self.staff.get("/print-agent/next?token=test-print-token").get_json()["job"]
         self.assertEqual(job["document_type"], "checked_order")
         print_page = self.staff.get(f"{job['render_url']}?token=test-print-token").get_data(as_text=True)
-        self.assertIn('id="printDocument"', print_page)
-        self.assertIn("setTimeout(() => window.print(), 250)", print_page)
+        self.assertIn("addEventListener('load',()=>window.print())", print_page)
+        self.assertIn("browser_afterprint", print_page)
+        self.assertNotIn('id="printDocument"', print_page)
         document_page = self.staff.get(
             f"/print-agent/document/{job['id']}?token=test-print-token"
         ).get_data(as_text=True)

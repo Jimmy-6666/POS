@@ -51,6 +51,7 @@ STATE_FILE = Path(
 LOG_FILE = RUNTIME_PATHS.launcher_log
 PORT = int(os.environ.get("POS_PORT", "8002"))
 ATTACH_ONLY = str(os.environ.get("POS_DESKTOP_ATTACH_ONLY", "")).lower() in {"1", "true", "yes"}
+EXTERNAL_PRINT_AGENT = str(os.environ.get("POS_EXTERNAL_PRINT_AGENT", "")).lower() in {"1", "true", "yes"}
 URL = f"http://127.0.0.1:{PORT}"
 SERVER_IP = os.environ.get("POS_SERVER_IP", RUNTIME_CONFIG.server_ip or DEFAULT_SERVER_IP)
 LAN_NETWORKS = os.environ.get("POS_LAN_NETWORKS", RUNTIME_CONFIG.lan_networks or DEFAULT_LAN_NETWORKS)
@@ -349,6 +350,13 @@ class PosDesktop:
         ):
             return
         configure_attach_only_default_printer(self.desktop_user)
+        if EXTERNAL_PRINT_AGENT:
+            record_launcher_print_event(
+                "external_print_agent_in_use",
+                desktop_user=self.desktop_user,
+                printer=RECEIPT_PRINTER_NAME,
+            )
+            return
         known_windows = set(self.chrome_windows())
         profile = PRINT_BROWSER_PROFILE
         self.configure_browser_profile(profile)
