@@ -1,7 +1,7 @@
 # แสนงาม มินิมาร์ท POS 1.0
 
 > เอกสารนี้เก็บคู่มือฐานของ Release 1.0 ไว้ตามข้อกำหนดเดิม ปัจจุบันโครงการมี
-> Production ยังเป็น Release 3.0.9 ส่วน source candidate ปัจจุบันคือ 3.1.0
+> Production ปัจจุบันคือ Release 3.1.0
 > โปรดดู `VERSION_3.0.9.md` สำหรับ Launcher/การติดตั้ง และ `VERSION_3.1.0.md`
 > สำหรับ POS แบบปุ่ม Text-only รวมถึงดู `AI_CONTEXT.md` สำหรับสถานะล่าสุด
 > โดยข้อกำหนดเดิมใน `REQUIREMENTS_V1.0.md` ยังมีผลครบถ้วน

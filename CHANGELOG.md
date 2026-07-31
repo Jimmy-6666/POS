@@ -26,9 +26,14 @@
 - Added focused Release 3.1.0 coverage for migration integrity, permissions,
   audit records, APIs, text-only rendering, login landing, pagination wiring,
   and reconciliation Numpad behavior.
-- Verification passed 57/57 affected tests and the full 185-test suite
-  (184 passed, one existing capability skip). A 1920×1080 headless check
+- Final verification passed 20/20 focused tests and the full 186-test suite
+  (185 passed, one existing capability skip). A 1920×1080 headless check
   confirmed 3×3 paging, no image requests, viewport fit, and Numpad focus.
+- Deployed canonical Production on port 8000 after creating a 3.0.9 source
+  rollback and verified full recovery bundle. Migration 28 preserved 735
+  products and 0 sales; integrity, foreign keys, protected server/desktop
+  tasks, backup schedule, static LAN, firewall, health, manager login, direct
+  POS landing, collapsed sidebar, and Version 3.1.0 assets all passed.
 
 # Release 3.0.9 — 2026-07-31
 

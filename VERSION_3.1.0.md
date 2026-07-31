@@ -66,14 +66,14 @@ and configuration rows are not rewritten.
 - Existing Release 3.0.9 Windows account isolation, launcher, print-agent,
   startup tasks, network policy, and runtime paths remain the deployment
   baseline.
-- This document records the Version 3.1.0 source contract. Production must not
-  be advanced until focused, full-suite, and UAT visual/interaction checks pass
-  and the owner explicitly authorizes release.
+- Production was advanced to Version 3.1.0 on 2026-07-31 after focused,
+  full-suite, UAT visual/interaction, recovery, migration, and owner-approval
+  gates passed.
 
 ## Verification
 
-- Release/affected regression set: 57/57 passed.
-- Full suite: 185 completed, 184 passed, and one existing capability skip.
+- Final focused regression set: 20/20 passed.
+- Full suite: 186 completed, 185 passed, and one existing capability skip.
 - Headless Microsoft Edge at 1920×1080 rendered exactly nine 3×3 text buttons
   on page 1 at both menu and product levels, exposed item 10 on page 2, made no
   product-image/default-image request, and kept the POS controls within the
@@ -86,3 +86,11 @@ and configuration rows are not rewritten.
 - The final 1366×768 UAT check confirmed two-line menu and product names,
   vertically aligned menu navigation, no helper labels, and automatic
   top-level-menu reset after a successful sale.
+- Before deployment, the 3.0.9 source rollback and a verified full recovery
+  bundle were created. Production Migration 28 preserved 735 products, 0
+  sales, and 0 sale items; SQLite integrity and foreign keys passed.
+- Elevated `verify-production.ps1` passed the SYSTEM server task, interactive
+  POS desktop task, backup schedule, static `192.168.0.200/24` network,
+  Private/LocalSubnet firewall, runtime, and health checks. A manager login
+  confirmed direct `/pos` landing, collapsed sidebar, `R3.1.0`, and the
+  Version 3.1.0 JavaScript/CSS assets.

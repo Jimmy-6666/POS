@@ -32,7 +32,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.0.7 scan/create/preview and focus workflows | Deployed 2026-07-30; 172 passed, 1 capability skip; no migration | `VERSION_3.0.7.md`, release 3.0.7, price/stock-count tests |
 | Release 3.0.8 blocking POS manual price and audit export | Deployed 2026-07-30; 178 passed, 1 capability skip; additive migration 27 | `VERSION_3.0.8.md`, release 3.0.8, sales/runtime tests |
 | Release 3.0.9 isolated local POS user and reboot-safe launcher | Released 2026-07-31; no migration | `VERSION_3.0.9.md`, launcher/runtime tests |
-| Release 3.1.0 cashier-first text-only POS button grid | Source candidate; Migration 28; Production remains 3.0.9 pending UAT/release approval | `VERSION_3.1.0.md`, `tests/test_release_3_1_0.py` |
+| Release 3.1.0 cashier-first text-only POS button grid | Deployed 2026-07-31; Migration 28; 185 passed, 1 capability skip | `VERSION_3.1.0.md`, `tests/test_release_3_1_0.py` |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -205,7 +205,7 @@ and detailed verification remain in their linked version documents and tests.
   Full verification stops only at the owner-managed static-network gate.
 - See `VERSION_3.0.9.md` for setup, repair, verification, and network gates.
 
-## Version 3.1.0 source candidate — 2026-07-31
+## Version 3.1.0 release baseline — 2026-07-31
 
 - All staff logins enter `/pos`; a fresh login collapses the sidebar and
   `ขายหน้าร้าน` is the first sidebar section.
@@ -221,11 +221,15 @@ and detailed verification remain in their linked version documents and tests.
   Migration 28 adds only the two mapping tables without seeding or rewriting
   the migrated product catalog.
 - Closing money fields share a touch Numpad; no new closing PIN exists.
-- Focused regression passed 57/57. The full suite completed 185 tests with 184
-  passed and one existing capability skip. Headless Edge at 1920×1080 confirmed
+- Final focused regression passed 20/20. The full suite completed 186 tests
+  with 185 passed and one existing capability skip. Headless Edge at 1920×1080 confirmed
   3×3 menu/product pagination, viewport fit, no image requests, and Numpad
   input/focus behavior.
-- Production remains Release 3.0.9 until explicit release authorization.
+- Production port 8000 is Release 3.1.0. Migration 28 preserved 735 products,
+  0 sales, and 0 sale items; SQLite integrity and foreign keys passed.
+  Elevated verification passed runtime, protected startup/desktop tasks,
+  Private/LocalSubnet firewall, static LAN, health, manager login, direct POS
+  landing, collapsed sidebar, and Version 3.1.0 asset identity.
 
 ## Online ordering operating model
 

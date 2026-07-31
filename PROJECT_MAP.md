@@ -75,7 +75,7 @@ runtime to `desktop-python/`, and creates the Public Desktop shortcut.
 `VERSION_3.0.9.md` is the accepted behavior and setup contract for this
 two-task, standard-user launcher model.
 `VERSION_3.1.0.md` is the source contract for the cashier-first text-only POS
-button grid and closing Numpad; Production remains 3.0.9 until release approval.
+button grid and closing Numpad; Production was advanced to 3.1.0 on 2026-07-31.
 
 The sanitized, crash-resumable customer-machine workflow and reusable Codex
 prompt are in `docs/CUSTOMER_MACHINE_DEPLOYMENT_PLAYBOOK_3.0.md`.

@@ -16,7 +16,7 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- The active Release 3.0.9 Production instance uses port `8000` and `runtime/`.
+- The active Release 3.1.0 Production instance uses port `8000` and `runtime/`.
   `SaengngamPOS-Production` starts the server under `SYSTEM` at Windows startup;
   `SaengngamPOS-Desktop` opens an attach-only launcher for the local standard
   `POS` account at logon. The account has no password, cannot administer the
@@ -27,16 +27,15 @@ and prints 80 mm receipts through the browser.
   `runtime/pos-desktop/display_state.json`, whose parent ACL remains writable
   when the server recreates the file after a reboot.
 - The accepted network contract remains fixed server address `192.168.0.200`
-  on trusted private LAN `192.168.0.0/24`. The machine was observed at
-  `192.168.1.200/24` with a Public Windows network profile after the launcher
-  split, so localhost health passes but the canonical network verification is
-  intentionally not claimed until the owner reconciles the LAN configuration.
+  on trusted private LAN `192.168.0.0/24`. Release 3.1.0 elevated Production
+  verification passed the static network and Private/LocalSubnet firewall
+  checks.
 - UAT launcher uses port `8001` and `uat_runtime/`.
 - The port `8002` profile is not the canonical customer Production instance.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
   at `/online-orders`. Products default to online-enabled, except the current
-  Production catalog snapshot: 669 products are active, 57 have zero price,
-  653 have no image, all have zero stock, and 199 are online-enabled.
+  Production catalog snapshot: 735 products are active, 50 have zero price,
+  719 have no image, all have zero stock, and 199 are online-enabled.
 
 An auxiliary Makro catalog preparation pipeline lives in
 `work/makro-pos-import/`. It uses Node and Codex spreadsheet tooling only for
@@ -82,7 +81,7 @@ host isolation and 2FA, signed-update reauthentication, and structured support
 redaction. Release 3 recovery and runtime regressions cover the full
 database-and-product-image bundle and in-process schedule validation. Flask
 3.1.3 is installed and the dependency set passes `pip check`. Local Release
-3.0.9 localhost runtime, migration 27, integrity, and assets pass. The
+3.1.0 localhost runtime, migration 28, integrity, and assets pass. The
 background server task, attach-only POS desktop task, shared local print-agent
 token, shared Desktop Python runtime, kiosk ACLs, and recovery shortcut are
 installed. The shared runtime passed `ctypes`/`tkinter`/`urllib` smoke
@@ -90,10 +89,8 @@ validation, direct `pos_desktop` import without Flask, and full Tk launcher UI
 initialization. A live `SaengngamPOS-Desktop` run under the `POS` security
 context updated the shared display state after a server restart, and the
 token-protected print-agent returned HTTP 200. Eleven focused
-launcher/runtime regressions pass. Canonical LAN
-verification remains pending because the active adapter is on
-`192.168.1.200/24` with a Public profile instead of the accepted
-`192.168.0.200/24` Private configuration.
+launcher/runtime regressions pass. Release 3.1.0 elevated verification
+confirmed the canonical `192.168.0.200/24` Private LAN and firewall contract.
 Release 3.0.9 verification on 2026-07-31 passed 13/13 focused tests and the
 full 180-test suite with 179 passed and one existing filesystem-capability
 skip.
@@ -106,8 +103,8 @@ administration supports phone/name/public-ID search, admin-PIN-confirmed
 anonymizing deletion, and customer re-registration after deletion. Suspended
 LINE customers receive a stable blocked page instead of a LIFF login loop.
 
-The canonical Production database contains 669 active products. The read-only
-post-deploy snapshot is 57 zero-price, 653 no-image, all zero-stock, and 199
+The canonical Production database contains 735 active products. The read-only
+post-deploy snapshot is 50 zero-price, 719 no-image, all zero-stock, and 199
 online-enabled products; sales and sale items remain 0.
 SQLite quick check and foreign-key verification pass.
 
@@ -127,19 +124,20 @@ No new product scope should be invented. The next catalog task remains
 customer selling-price entry and photography, followed by an explicit decision
 to enable selected products online.
 
-Version 3.1.0 is the current source candidate; Version 3.0.9 remains the
-Production baseline until explicit release authorization. Version 3.1.0 makes
+Version 3.1.0 is the current Production baseline. It makes
 POS cashier-first: every staff login enters `/pos`, fresh login collapses the
 sidebar, and `ขายหน้าร้าน` is first. Manual selection is an independently
 configured text-only 3×3 menu/product grid with nine-position pagination and
 global search; it does not load product images. Manager/Admin configuration is
 audited and Migration 28 adds only `pos_button_groups` and
 `pos_button_items`. Closing money fields share an on-screen Numpad and do not
-require a new PIN. Focused regression passed 57/57; the full suite completed
-185 tests with 184 passed and one existing capability skip. Headless
+require a new PIN. Final focused regression passed 20/20; the full suite
+completed 186 tests with 185 passed and one existing capability skip. Headless
 1920×1080 verification confirmed 3×3 paging, no product-image requests,
-viewport fit, and Numpad focus behavior. The accepted scope is documented in
-`VERSION_3.1.0.md`.
+viewport fit, and Numpad focus behavior. Production Migration 28, data
+preservation, runtime health, protected tasks, firewall/static LAN, manager
+login, default POS landing, asset versions, and empty configured-menu state
+all passed. The accepted scope is documented in `VERSION_3.1.0.md`.
 
 Version 3.0.9 formalizes the
 separate `SYSTEM` server and standard local `POS` launcher setup, repair,
