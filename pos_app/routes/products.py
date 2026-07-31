@@ -37,6 +37,34 @@ def reference_data(active_only=True):
     )
 
 
+def pos_button_position(value):
+    try:
+        position = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("ตำแหน่งปุ่มต้องเป็นเลขจำนวนเต็ม")
+    if position < 1 or position > 999:
+        raise ValueError("ตำแหน่งปุ่มต้องอยู่ระหว่าง 1 ถึง 999")
+    return position
+
+
+def audit_pos_button_change(db, action, entity_type, entity_id, old_value=None, new_value=None):
+    db.execute(
+        """INSERT INTO audit_logs
+           (staff_id,action,entity_type,entity_id,old_value,new_value,ip_address,created_at)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (
+            g.staff["id"],
+            action,
+            entity_type,
+            str(entity_id),
+            json.dumps(old_value, ensure_ascii=False) if old_value is not None else None,
+            json.dumps(new_value, ensure_ascii=False) if new_value is not None else None,
+            request.remote_addr,
+            datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        ),
+    )
+
+
 def save_image(file):
     if not file or not file.filename:
         return None
@@ -101,6 +129,217 @@ def index():
             {where} ORDER BY {order}""", params
     ).fetchall()
     return render_template("products.html", products=products, query=query, low_only=low_only)
+
+
+@bp.route("/pos-buttons", methods=("GET", "POST"))
+@permission_required("products.manage")
+def pos_buttons():
+    db = get_db()
+    selected_group_id = request.values.get("group_id", type=int)
+    if request.method == "POST":
+        if not valid_csrf(request.form.get("csrf_token")):
+            return ("คำขอไม่ถูกต้อง", 400)
+        action = request.form.get("action", "")
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            if action == "create_group":
+                name = request.form.get("name_th", "").strip()
+                if not name or len(name) > 80:
+                    raise ValueError("กรุณากรอกชื่อเมนูไม่เกิน 80 ตัวอักษร")
+                position = pos_button_position(request.form.get("position"))
+                cursor = db.execute(
+                    """INSERT INTO pos_button_groups
+                       (name_th,position,is_active,created_by,updated_by)
+                       VALUES (?,?,1,?,?)""",
+                    (name, position, g.staff["id"], g.staff["id"]),
+                )
+                selected_group_id = cursor.lastrowid
+                audit_pos_button_change(
+                    db,
+                    "create_pos_button_group",
+                    "pos_button_group",
+                    selected_group_id,
+                    new_value={"name_th": name, "position": position, "is_active": 1},
+                )
+                flash("เพิ่มเมนูปุ่มขายแล้ว", "success")
+            elif action == "update_group":
+                group_id = request.form.get("group_id", type=int)
+                old = db.execute("SELECT * FROM pos_button_groups WHERE id=?", (group_id,)).fetchone()
+                if not old:
+                    raise ValueError("ไม่พบเมนูปุ่มขาย")
+                name = request.form.get("name_th", "").strip()
+                if not name or len(name) > 80:
+                    raise ValueError("กรุณากรอกชื่อเมนูไม่เกิน 80 ตัวอักษร")
+                position = pos_button_position(request.form.get("position"))
+                is_active = 1 if request.form.get("is_active") else 0
+                db.execute(
+                    """UPDATE pos_button_groups
+                       SET name_th=?,position=?,is_active=?,updated_by=?,updated_at=CURRENT_TIMESTAMP
+                       WHERE id=?""",
+                    (name, position, is_active, g.staff["id"], group_id),
+                )
+                selected_group_id = group_id
+                audit_pos_button_change(
+                    db,
+                    "update_pos_button_group",
+                    "pos_button_group",
+                    group_id,
+                    old_value={
+                        "name_th": old["name_th"],
+                        "position": old["position"],
+                        "is_active": old["is_active"],
+                    },
+                    new_value={"name_th": name, "position": position, "is_active": is_active},
+                )
+                flash("บันทึกเมนูปุ่มขายแล้ว", "success")
+            elif action == "add_item":
+                group_id = request.form.get("group_id", type=int)
+                product_uuid = request.form.get("product_uuid", "").strip()
+                position = pos_button_position(request.form.get("position"))
+                group = db.execute("SELECT id FROM pos_button_groups WHERE id=?", (group_id,)).fetchone()
+                product = db.execute(
+                    "SELECT id,product_uuid,name_th FROM products WHERE product_uuid=? AND is_active=1",
+                    (product_uuid,),
+                ).fetchone()
+                if not group:
+                    raise ValueError("ไม่พบเมนูปุ่มขาย")
+                if not product:
+                    raise ValueError("ไม่พบสินค้าที่เปิดใช้งาน")
+                cursor = db.execute(
+                    """INSERT INTO pos_button_items
+                       (group_id,product_id,position,created_by,updated_by)
+                       VALUES (?,?,?,?,?)""",
+                    (group_id, product["id"], position, g.staff["id"], g.staff["id"]),
+                )
+                selected_group_id = group_id
+                audit_pos_button_change(
+                    db,
+                    "add_pos_button_item",
+                    "pos_button_item",
+                    cursor.lastrowid,
+                    new_value={
+                        "group_id": group_id,
+                        "product_uuid": product["product_uuid"],
+                        "product_name": product["name_th"],
+                        "position": position,
+                    },
+                )
+                flash("เพิ่มสินค้าลงเมนูแล้ว", "success")
+            elif action == "update_item":
+                item_id = request.form.get("item_id", type=int)
+                position = pos_button_position(request.form.get("position"))
+                old = db.execute(
+                    """SELECT i.*,p.product_uuid,p.name_th
+                       FROM pos_button_items i JOIN products p ON p.id=i.product_id
+                       WHERE i.id=?""",
+                    (item_id,),
+                ).fetchone()
+                if not old:
+                    raise ValueError("ไม่พบปุ่มสินค้านี้")
+                db.execute(
+                    """UPDATE pos_button_items
+                       SET position=?,updated_by=?,updated_at=CURRENT_TIMESTAMP
+                       WHERE id=?""",
+                    (position, g.staff["id"], item_id),
+                )
+                selected_group_id = old["group_id"]
+                audit_pos_button_change(
+                    db,
+                    "update_pos_button_item",
+                    "pos_button_item",
+                    item_id,
+                    old_value={"position": old["position"]},
+                    new_value={
+                        "position": position,
+                        "product_uuid": old["product_uuid"],
+                        "product_name": old["name_th"],
+                    },
+                )
+                flash("ย้ายตำแหน่งปุ่มสินค้าแล้ว", "success")
+            elif action == "remove_item":
+                item_id = request.form.get("item_id", type=int)
+                old = db.execute(
+                    """SELECT i.*,p.product_uuid,p.name_th
+                       FROM pos_button_items i JOIN products p ON p.id=i.product_id
+                       WHERE i.id=?""",
+                    (item_id,),
+                ).fetchone()
+                if not old:
+                    raise ValueError("ไม่พบปุ่มสินค้านี้")
+                selected_group_id = old["group_id"]
+                db.execute("DELETE FROM pos_button_items WHERE id=?", (item_id,))
+                audit_pos_button_change(
+                    db,
+                    "remove_pos_button_item",
+                    "pos_button_item",
+                    item_id,
+                    old_value={
+                        "group_id": old["group_id"],
+                        "product_uuid": old["product_uuid"],
+                        "product_name": old["name_th"],
+                        "position": old["position"],
+                    },
+                )
+                flash("นำสินค้าออกจากเมนูแล้ว", "success")
+            else:
+                db.rollback()
+                return ("คำสั่งไม่ถูกต้อง", 400)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            text = str(exc)
+            if "UNIQUE constraint failed: pos_button_groups.position" in text:
+                text = "ตำแหน่งเมนูนี้ถูกใช้งานแล้ว"
+            elif "UNIQUE constraint failed: pos_button_items.group_id, pos_button_items.position" in text:
+                text = "ตำแหน่งสินค้านี้ถูกใช้งานแล้วในเมนู"
+            elif "UNIQUE constraint failed: pos_button_items.group_id, pos_button_items.product_id" in text:
+                text = "สินค้านี้อยู่ในเมนูดังกล่าวแล้ว"
+            flash(text or "บันทึกการตั้งค่าปุ่มขายไม่สำเร็จ", "error")
+        return redirect(url_for("products.pos_buttons", group_id=selected_group_id or None))
+
+    groups = db.execute(
+        """SELECT g.*,COUNT(i.id) AS item_count
+           FROM pos_button_groups g
+           LEFT JOIN pos_button_items i ON i.group_id=g.id
+           GROUP BY g.id
+           ORDER BY g.position,g.id"""
+    ).fetchall()
+    if selected_group_id is None and groups:
+        selected_group_id = groups[0]["id"]
+    selected_group = next((row for row in groups if row["id"] == selected_group_id), None)
+    items = []
+    if selected_group:
+        items = db.execute(
+            """SELECT i.id,i.position,p.product_uuid,p.barcode,p.name_th,p.price_satang
+               FROM pos_button_items i JOIN products p ON p.id=i.product_id
+               WHERE i.group_id=? ORDER BY i.position,i.id""",
+            (selected_group["id"],),
+        ).fetchall()
+    query = request.args.get("q", "").strip()
+    search_products = []
+    if selected_group and query:
+        term = f"%{query}%"
+        search_products = db.execute(
+            """SELECT p.product_uuid,p.barcode,p.sku,p.name_th,p.price_satang,
+                      existing.position AS existing_position
+               FROM products p
+               LEFT JOIN pos_button_items existing
+                 ON existing.product_id=p.id AND existing.group_id=?
+               WHERE p.is_active=1
+                 AND (p.barcode LIKE ? OR p.sku LIKE ? OR p.name_th LIKE ? OR p.name_en LIKE ?)
+               ORDER BY p.name_th,p.id LIMIT 30""",
+            (selected_group["id"], term, term, term, term),
+        ).fetchall()
+    return render_template(
+        "pos_button_settings.html",
+        groups=groups,
+        selected_group=selected_group,
+        items=items,
+        query=query,
+        search_products=search_products,
+        next_group_position=max((row["position"] for row in groups), default=0) + 1,
+        next_item_position=max((row["position"] for row in items), default=0) + 1,
+    )
 
 
 @bp.get("/xlsx/export")

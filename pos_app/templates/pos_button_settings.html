@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}ตั้งค่าปุ่มขาย{% endblock %}
+{% block content %}
+<div class="page-heading pos-button-settings-heading">
+  <div>
+    <span class="eyebrow">Release 3.1.0</span>
+    <h1>ตั้งค่าปุ่มขายสินค้า</h1>
+    <p>กำหนดเมนูและสินค้าที่ไม่มีบาร์โค้ดเป็นปุ่มข้อความขนาดใหญ่ ตำแหน่ง 1–9 คือหน้าแรก, 10–18 คือหน้าถัดไป</p>
+  </div>
+  <a class="primary-button pos-button-preview-link" href="{{url_for('pos.index')}}">เปิดหน้าขาย</a>
+</div>
+
+<div class="pos-button-settings-layout">
+  <aside class="pos-button-group-panel">
+    <section class="form-card">
+      <h2>เพิ่มเมนูปุ่มขาย</h2>
+      <form method="post" class="pos-button-create-form">
+        <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+        <input type="hidden" name="action" value="create_group">
+        <label>ชื่อเมนู<input name="name_th" maxlength="80" placeholder="เช่น เครื่องดื่มไม่มีบาร์โค้ด" required></label>
+        <label>ตำแหน่ง<input name="position" type="number" min="1" max="999" step="1" value="{{next_group_position}}" required></label>
+        <button class="primary-button" type="submit">เพิ่มเมนู</button>
+      </form>
+    </section>
+
+    <section class="form-card">
+      <div class="pos-button-section-title">
+        <h2>เมนูทั้งหมด</h2><span>{{groups|length}} เมนู</span>
+      </div>
+      <div class="pos-button-group-list">
+        {% for group in groups %}
+        <a href="{{url_for('products.pos_buttons',group_id=group.id)}}" class="{% if selected_group and selected_group.id==group.id %}active{% endif %}">
+          <b>{{group.position}}</b>
+          <span><strong>{{group.name_th}}</strong><small>{{group.item_count}} สินค้า · {{'เปิดใช้งาน' if group.is_active else 'ปิดใช้งาน'}}</small></span>
+        </a>
+        {% else %}
+        <p class="empty">ยังไม่มีเมนู กรอกชื่อและตำแหน่งด้านบนเพื่อเริ่มตั้งค่า</p>
+        {% endfor %}
+      </div>
+    </section>
+  </aside>
+
+  <div class="pos-button-item-panel">
+    {% if selected_group %}
+    <section class="form-card">
+      <div class="pos-button-section-title">
+        <div><span class="eyebrow">แก้ไขเมนู</span><h2>{{selected_group.name_th}}</h2></div>
+        <span>ตำแหน่ง {{selected_group.position}}</span>
+      </div>
+      <form method="post" class="pos-button-edit-group-form">
+        <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+        <input type="hidden" name="action" value="update_group">
+        <input type="hidden" name="group_id" value="{{selected_group.id}}">
+        <label>ชื่อเมนู<input name="name_th" maxlength="80" value="{{selected_group.name_th}}" required></label>
+        <label>ตำแหน่ง<input name="position" type="number" min="1" max="999" step="1" value="{{selected_group.position}}" required></label>
+        <label class="checkbox-row"><input name="is_active" type="checkbox" value="1" {% if selected_group.is_active %}checked{% endif %}> เปิดให้แสดงในหน้าขาย</label>
+        <button class="primary-button" type="submit">บันทึกเมนู</button>
+      </form>
+    </section>
+
+    <section class="form-card">
+      <div class="pos-button-section-title">
+        <div><span class="eyebrow">สินค้าในเมนู</span><h2>จัดตำแหน่งปุ่มสินค้า</h2></div>
+        <span>{{items|length}} สินค้า</span>
+      </div>
+      <div class="pos-button-config-grid" aria-label="ตัวอย่างตำแหน่งปุ่มสินค้า">
+        {% for slot in range(1,10) %}
+          {% set placed = items|selectattr('position','equalto',slot)|first %}
+          {% if placed %}
+          <div class="configured"><b>{{slot}}</b><strong>{{placed.name_th}}</strong><span>{{'{:,.0f}'.format(placed.price_satang/100)}} บาท</span></div>
+          {% else %}
+          <div><b>{{slot}}</b><span>ว่าง</span></div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      <p class="field-help">ตัวอย่างด้านบนแสดงหน้าแรก ตำแหน่งที่มากกว่า 9 จะอยู่หน้าถัดไปตามลำดับ</p>
+      <div class="pos-button-item-list">
+        {% for item in items %}
+        <article>
+          <div><strong>{{item.name_th}}</strong><span>{{item.barcode}} · {{'{:,.0f}'.format(item.price_satang/100)}} บาท</span></div>
+          <form method="post">
+            <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+            <input type="hidden" name="action" value="update_item">
+            <input type="hidden" name="item_id" value="{{item.id}}">
+            <label>ตำแหน่ง<input name="position" type="number" min="1" max="999" step="1" value="{{item.position}}" required></label>
+            <button class="small-button" type="submit">ย้าย</button>
+          </form>
+          <form method="post" onsubmit="return confirm('นำสินค้านี้ออกจากเมนูปุ่มขาย?')">
+            <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+            <input type="hidden" name="action" value="remove_item">
+            <input type="hidden" name="item_id" value="{{item.id}}">
+            <button class="danger-button" type="submit">นำออก</button>
+          </form>
+        </article>
+        {% else %}
+        <p class="empty">ยังไม่มีสินค้าในเมนูนี้ ค้นหาและเพิ่มจากส่วนด้านล่าง</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="form-card">
+      <div class="pos-button-section-title">
+        <div><span class="eyebrow">เพิ่มปุ่มสินค้า</span><h2>ค้นหาสินค้า</h2></div>
+      </div>
+      <form method="get" class="pos-button-product-search">
+        <input type="hidden" name="group_id" value="{{selected_group.id}}">
+        <label>ชื่อสินค้า / บาร์โค้ด / SKU<input name="q" value="{{query}}" autocomplete="off" placeholder="พิมพ์คำค้นหา" required></label>
+        <button class="primary-button" type="submit">ค้นหา</button>
+      </form>
+      {% if query %}
+      <div class="pos-button-search-results">
+        {% for product in search_products %}
+        <article>
+          <div><strong>{{product.name_th}}</strong><span>{{product.barcode}}{% if product.sku %} · {{product.sku}}{% endif %} · {{'{:,.0f}'.format(product.price_satang/100)}} บาท</span></div>
+          {% if product.existing_position %}
+          <span class="status-pill">อยู่ตำแหน่ง {{product.existing_position}} แล้ว</span>
+          {% else %}
+          <form method="post">
+            <input type="hidden" name="csrf_token" value="{{csrf_token}}">
+            <input type="hidden" name="action" value="add_item">
+            <input type="hidden" name="group_id" value="{{selected_group.id}}">
+            <input type="hidden" name="product_uuid" value="{{product.product_uuid}}">
+            <label>ตำแหน่ง<input name="position" type="number" min="1" max="999" step="1" value="{{next_item_position}}" required></label>
+            <button class="primary-button" type="submit">เพิ่มปุ่ม</button>
+          </form>
+          {% endif %}
+        </article>
+        {% else %}
+        <p class="empty">ไม่พบสินค้าตามคำค้นหา</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+    {% else %}
+    <section class="form-card pos-button-empty-settings">
+      <strong>เริ่มจากสร้างเมนูปุ่มขาย</strong>
+      <p>จากนั้นจึงเลือกสินค้าและกำหนดตำแหน่งภายในเมนู</p>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

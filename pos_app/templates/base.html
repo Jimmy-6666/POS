@@ -9,10 +9,11 @@
   <link rel="stylesheet" href="{{url_for('static',filename='css/v2.css',v=13)}}">
   <link rel="stylesheet" href="{{url_for('static',filename='css/v306.css',v=3)}}">
   <link rel="stylesheet" href="{{url_for('static',filename='css/v307.css',v=4)}}">
-<link rel="stylesheet" href="{{url_for('static',filename='css/v308.css',v=2)}}">
+  <link rel="stylesheet" href="{{url_for('static',filename='css/v308.css',v=2)}}">
+  <link rel="stylesheet" href="{{url_for('static',filename='css/v310.css',v=4)}}">
   {% block extra_head %}{% endblock %}
 </head>
-<body class="{% if current_staff %}has-sidebar{% endif %}" data-endpoint="{{request.endpoint or ''}}">
+<body class="{% if current_staff %}has-sidebar{% endif %}" data-endpoint="{{request.endpoint or ''}}" data-reset-sidebar="{{'1' if reset_sidebar|default(false) else '0'}}">
 <a class="skip-link" href="#mainContent">ข้ามไปยังเนื้อหา</a>
 {% if current_staff %}
 <aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
@@ -21,19 +22,19 @@
     <button id="sidebarToggle" type="button" aria-label="ย่อหรือขยายเมนู" aria-expanded="true">☰</button>
   </div>
   <nav class="sidebar-nav">
-    <section class="nav-section" data-nav-section="online-orders" data-default-expanded="true">
-      <button class="nav-group" type="button" aria-expanded="true" aria-controls="navOnlineOrders"><span>ออเดอร์ออนไลน์</span><span class="nav-group-arrow" aria-hidden="true">^</span></button>
-      <div id="navOnlineOrders" class="nav-group-items">
-        <a href="{{url_for('online_staff.index')}}" {% if request.blueprint=='online_staff' %}class="active" aria-current="page"{% endif %}><i>◉</i><span class="nav-label">จัดการออเดอร์</span></a>
-        {% if current_staff.role_code in ('admin','manager') %}<a href="{{url_for('online_admin.settings')}}" {% if request.endpoint=='online_admin.settings' %}class="active"{% endif %}><i>⚙</i><span>ตั้งค่าออนไลน์</span></a><a href="{{url_for('online_admin.customers')}}" {% if request.endpoint=='online_admin.customers' %}class="active"{% endif %}><i>◌</i><span>ลูกค้าออนไลน์</span></a>{% endif %}
-      </div>
-    </section>
     <section class="nav-section" data-nav-section="pos-sales" data-default-expanded="true">
       <button class="nav-group" type="button" aria-expanded="true" aria-controls="navPosSales"><span>ขายหน้าร้าน</span><span class="nav-group-arrow" aria-hidden="true">^</span></button>
       <div id="navPosSales" class="nav-group-items">
         <a href="{{url_for('pos.index')}}" {% if request.endpoint=='pos.index' %}class="active" aria-current="page"{% endif %}><i>▣</i><span>ขายสินค้า</span></a>
         <a href="{{url_for('pos.sales_history')}}" {% if request.endpoint in ('pos.sales_history','pos.void_sale') %}class="active" aria-current="page"{% endif %}><i>▤</i><span>ประวัติการขาย</span></a>
         <a href="{{url_for('reporting.reconciliations')}}" {% if request.endpoint=='reporting.reconciliations' %}class="active" aria-current="page"{% endif %}><i>✓</i><span>ปิดยอดประจำวัน</span></a>
+      </div>
+    </section>
+    <section class="nav-section" data-nav-section="online-orders" data-default-expanded="true">
+      <button class="nav-group" type="button" aria-expanded="true" aria-controls="navOnlineOrders"><span>ออเดอร์ออนไลน์</span><span class="nav-group-arrow" aria-hidden="true">^</span></button>
+      <div id="navOnlineOrders" class="nav-group-items">
+        <a href="{{url_for('online_staff.index')}}" {% if request.blueprint=='online_staff' %}class="active" aria-current="page"{% endif %}><i>◉</i><span class="nav-label">จัดการออเดอร์</span></a>
+        {% if current_staff.role_code in ('admin','manager') %}<a href="{{url_for('online_admin.settings')}}" {% if request.endpoint=='online_admin.settings' %}class="active"{% endif %}><i>⚙</i><span>ตั้งค่าออนไลน์</span></a><a href="{{url_for('online_admin.customers')}}" {% if request.endpoint=='online_admin.customers' %}class="active"{% endif %}><i>◌</i><span>ลูกค้าออนไลน์</span></a>{% endif %}
       </div>
     </section>
     <section class="nav-section" data-nav-section="stock-count" data-default-expanded="false">
@@ -53,6 +54,7 @@
         <a href="{{url_for('inventory.adjust')}}" {% if request.endpoint=='inventory.adjust' %}class="active" aria-current="page"{% endif %}><i>±</i><span>ปรับสต็อก</span></a>
         <a href="{{url_for('inventory.ledger')}}" {% if request.endpoint=='inventory.ledger' %}class="active" aria-current="page"{% endif %}><i>≡</i><span>ประวัติสต็อก</span></a>
         <a href="{{url_for('products.quick_edit')}}" {% if request.endpoint=='products.quick_edit' %}class="active" aria-current="page"{% endif %}><i>⚡</i><span>แก้ไขสินค้าด่วน</span></a>
+        <a href="{{url_for('products.pos_buttons')}}" {% if request.endpoint=='products.pos_buttons' %}class="active" aria-current="page"{% endif %}><i>▦</i><span>ตั้งค่าปุ่มขาย</span></a>
       </div>
     </section>
     <section class="nav-section" data-nav-section="analytics" data-default-expanded="false">
@@ -82,7 +84,7 @@
     <form class="sidebar-logout" method="post" action="{{url_for('auth.logout')}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button type="submit"><i>↪</i><span>ออกจากระบบ</span></button></form>
   </div>
 </aside>
-<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R3.0.9</span></header>
+<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R3.1.0</span></header>
 <div id="sidebarOverlay" class="sidebar-overlay"></div>
 {% endif %}
 <main id="mainContent" class="shell {% block shell_class %}{% endblock %}">
@@ -97,7 +99,7 @@
   <a href="{{url_for('stock_count.index')}}" {% if request.blueprint=='stock_count' %}class="active" aria-current="page"{% endif %}><i>⌁</i><span>นับสต็อก</span></a>
   <a href="{{url_for('main.index')}}" {% if request.endpoint=='main.index' %}class="active" aria-current="page"{% endif %}><i>⌂</i><span>หน้าหลัก</span></a>
 </nav>
-<script src="{{url_for('static',filename='js/sidebar.js',v=4)}}"></script>
+<script src="{{url_for('static',filename='js/sidebar.js',v=5)}}"></script>
 <script src="{{url_for('static',filename='js/receipt-popup.js',v=1)}}"></script>
 <script src="{{url_for('static',filename='js/online-order-alerts.js',v=3)}}"></script>
 {% endif %}

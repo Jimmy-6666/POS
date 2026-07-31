@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "3.0.8",
+    [string]$Version = "3.1.0",
     [string]$Ref = "HEAD",
     [string]$OutputDirectory
 )
@@ -36,7 +36,7 @@ try {
             "requirements.lock.txt",
             "install-production.ps1",
             "verify-production.ps1",
-            "VERSION_3.0.8.md"
+            "VERSION_3.1.0.md"
         )
         foreach ($name in $required) {
             if ($names -notcontains $name) {

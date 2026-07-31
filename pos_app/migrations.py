@@ -207,6 +207,41 @@ def _add_sale_item_manual_price_reference(db: sqlite3.Connection) -> None:
     )
 
 
+def _add_pos_button_layout(db: sqlite3.Connection) -> None:
+    """Add independently configured text-only POS button menus and products."""
+
+    db.executescript(
+        """CREATE TABLE IF NOT EXISTS pos_button_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name_th TEXT NOT NULL CHECK(length(trim(name_th)) BETWEEN 1 AND 80),
+            position INTEGER NOT NULL UNIQUE CHECK(position >= 1),
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+            created_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+            updated_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS pos_button_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL REFERENCES pos_button_groups(id) ON DELETE CASCADE,
+            product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+            position INTEGER NOT NULL CHECK(position >= 1),
+            created_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+            updated_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(group_id, position),
+            UNIQUE(group_id, product_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_pos_button_groups_active_position
+        ON pos_button_groups(is_active,position);
+        CREATE INDEX IF NOT EXISTS idx_pos_button_items_group_position
+        ON pos_button_items(group_id,position);
+        CREATE INDEX IF NOT EXISTS idx_pos_button_items_product
+        ON pos_button_items(product_id);"""
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(20, "enable configured negative stock", _enable_configured_negative_stock),
     Migration(21, "add LINE customer identity", _add_line_customer_identity),
@@ -216,6 +251,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(25, "add reconciliation void total", _add_reconciliation_void_total),
     Migration(26, "record second-factor verified staff sessions", _add_staff_session_two_factor_assurance),
     Migration(27, "add sale-item manual-price references", _add_sale_item_manual_price_reference),
+    Migration(28, "add configurable POS button layout", _add_pos_button_layout),
 )
 
 

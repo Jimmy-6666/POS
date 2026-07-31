@@ -115,11 +115,12 @@ class MigrationHistoryTests(unittest.TestCase):
                 (25, "add reconciliation void total", 1),
                 (26, "record second-factor verified staff sessions", 1),
                 (27, "add sale-item manual-price references", 1),
+                (28, "add configurable POS button layout", 1),
             ])
             connection.close()
             create_app({"TESTING": True, "DATABASE": str(database)})
             connection = sqlite3.connect(database)
-            self.assertEqual(connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 9)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 10)
             connection.close()
         finally:
             folder.cleanup()

@@ -127,7 +127,21 @@ No new product scope should be invented. The next catalog task remains
 customer selling-price entry and photography, followed by an explicit decision
 to enable selected products online.
 
-Version 3.0.9 is the current source and Production baseline. It formalizes the
+Version 3.1.0 is the current source candidate; Version 3.0.9 remains the
+Production baseline until explicit release authorization. Version 3.1.0 makes
+POS cashier-first: every staff login enters `/pos`, fresh login collapses the
+sidebar, and `ขายหน้าร้าน` is first. Manual selection is an independently
+configured text-only 3×3 menu/product grid with nine-position pagination and
+global search; it does not load product images. Manager/Admin configuration is
+audited and Migration 28 adds only `pos_button_groups` and
+`pos_button_items`. Closing money fields share an on-screen Numpad and do not
+require a new PIN. Focused regression passed 57/57; the full suite completed
+185 tests with 184 passed and one existing capability skip. Headless
+1920×1080 verification confirmed 3×3 paging, no product-image requests,
+viewport fit, and Numpad focus behavior. The accepted scope is documented in
+`VERSION_3.1.0.md`.
+
+Version 3.0.9 formalizes the
 separate `SYSTEM` server and standard local `POS` launcher setup, repair,
 least-privilege ACL, shared Desktop Python, reboot-safe display state, and
 Public Desktop recovery behavior documented in `VERSION_3.0.9.md`. It retains

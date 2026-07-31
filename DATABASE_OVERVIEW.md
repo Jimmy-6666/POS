@@ -45,7 +45,7 @@ databases.
 |---|---|
 | References/settings | `categories`, `units`, `adjustment_reasons`, `payment_methods`, `settings` |
 | Identity/security | `roles`, `permissions`, `role_permissions`, `staff`, `staff_sessions`, `login_events`, `audit_logs` |
-| Catalog | `products` |
+| Catalog | `products`, `pos_button_groups`, `pos_button_items` |
 | Sales/payments | `receipt_sequences`, `sales`, `sale_items`, `held_bills`, `sale_voids`, `sale_void_items` |
 | Billing/credit | `billing_customers`, `billed_sales`, `billed_sale_payments` |
 | Inventory/receiving | `stock_movements`, `stock_receipts`, `stock_receipt_items`, `suppliers` |
@@ -61,6 +61,9 @@ databases.
 - Product stock and count quantities are real values because some products
   allow decimal quantities.
 - Barcodes and receipt numbers are unique.
+- POS button-menu positions are globally unique. Product-button positions and
+  products are unique within each menu. These mappings control only manual POS
+  visibility; they do not replace product category, barcode, or UUID identity.
 - `products.product_uuid` is a globally unique immutable UUID. It is the only
   product identity exposed to routes, browser payloads, and module boundaries;
   `products.id` remains a private numeric foreign key for historic tables.
@@ -125,6 +128,9 @@ databases.
 - `settings.backup_schedule_enabled` and `settings.backup_schedule_time` store
   the daily Asia/Bangkok database-plus-product-image sync preference. They are
   operational settings only; no business-data migration is required.
+- Schema Migration 28 adds only the configurable POS menu and item mappings.
+  It does not seed or rewrite products, so the Manager/Admin explicitly chooses
+  the small manual-sale set.
 
 ## Migration rule
 

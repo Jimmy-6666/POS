@@ -9,15 +9,15 @@ from pos_app.runtime_paths import DEFAULT_APP_VERSION
 ROOT = Path(__file__).resolve().parent.parent
 
 
-class Version309ReleaseTests(unittest.TestCase):
+class Version310ReleaseTests(unittest.TestCase):
     def test_release_identity_is_consistent(self):
-        self.assertEqual(DEFAULT_APP_VERSION, "3.0.9")
-        self.assertIn("R3.0.9", (ROOT / "pos_app" / "templates" / "base.html").read_text(encoding="utf-8"))
+        self.assertEqual(DEFAULT_APP_VERSION, "3.1.0")
+        self.assertIn("R3.1.0", (ROOT / "pos_app" / "templates" / "base.html").read_text(encoding="utf-8"))
         launcher = (ROOT / "pos_desktop.py").read_text(encoding="utf-8")
-        self.assertIn("Saengngam POS 3.0.9", launcher)
+        self.assertIn("Saengngam POS 3.1.0", launcher)
         ast.parse(launcher)
         production = (ROOT / "production-common.ps1").read_text(encoding="utf-8")
-        self.assertIn('AppVersion = "3.0.9"', production)
+        self.assertIn('AppVersion = "3.1.0"', production)
         self.assertIn("$env:POS_APP_VERSION = $Context.AppVersion", production)
         self.assertIn('ServerIp = "192.168.0.200"', production)
         self.assertIn("Push-Location $Context.InstallRoot", production)
@@ -53,6 +53,10 @@ class Version309ReleaseTests(unittest.TestCase):
         self.assertIn("configure-production-kiosk-user.ps1", release_note)
         self.assertIn("runtime/pos-desktop/display_state.json", release_note)
         self.assertIn("C:\\Users\\Public\\Desktop\\Saengngam POS.lnk", release_note)
+        release_310 = (ROOT / "VERSION_3.1.0.md").read_text(encoding="utf-8")
+        self.assertIn("text-only", release_310)
+        self.assertIn("Migration 28", release_310)
+        self.assertIn("Numpad", release_310)
         self.assertTrue((ROOT / "NEXT_SESSION_PROMPT.md").is_file())
 
     def test_default_product_image_is_the_approved_asset(self):

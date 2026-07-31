@@ -1,3 +1,35 @@
+# Release 3.1.0 — 2026-07-31
+
+- Changed every successful staff login to enter the POS sale screen and added a
+  one-shot fresh-login sidebar collapse without changing later manual sidebar
+  control.
+- Moved the `ขายหน้าร้าน` sidebar section to the top.
+- Replaced the POS category rail and image cards with a configurable text-only
+  3×3 menu/product grid. Positions paginate in groups of nine, and global
+  search, exact barcode scanning, cart, manual pricing, and payment remain.
+- Tightened product-button typography after UAT review: barcode text is hidden,
+  names use up to two substantially larger lines, and selling-price type is
+  approximately doubled to fill the button without adding images.
+- Vertically centered one-line product names inside the reserved two-line name
+  area while retaining the two-line clamp and price separation.
+- Simplified menu buttons to a centered two-line name only, removed the menu
+  number/manual/helper labels, and aligned each open menu title with the Back
+  control.
+- Successful checkout now clears the lookup and returns the manual selector to
+  the top-level menu for the next sale.
+- Added Manager/Admin `ตั้งค่าปุ่มขาย` configuration with audited group/item
+  create, update, move, enable/disable, and remove operations.
+- Added additive Migration 28 for `pos_button_groups` and `pos_button_items`;
+  no product, category, sale, stock, or image row is rewritten.
+- Added a shared touch Numpad to the four close-round money inputs. No
+  close-round PIN requirement was added.
+- Added focused Release 3.1.0 coverage for migration integrity, permissions,
+  audit records, APIs, text-only rendering, login landing, pagination wiring,
+  and reconciliation Numpad behavior.
+- Verification passed 57/57 affected tests and the full 185-test suite
+  (184 passed, one existing capability skip). A 1920×1080 headless check
+  confirmed 3×3 paging, no image requests, viewport fit, and Numpad focus.
+
 # Release 3.0.9 — 2026-07-31
 
 - Advanced application, mobile badge, Production runtime, and Desktop

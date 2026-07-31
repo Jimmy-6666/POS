@@ -183,6 +183,37 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE INDEX IF NOT EXISTS idx_products_name_th ON products(name_th);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 
+CREATE TABLE IF NOT EXISTS pos_button_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name_th TEXT NOT NULL CHECK(length(trim(name_th)) BETWEEN 1 AND 80),
+    position INTEGER NOT NULL UNIQUE CHECK(position >= 1),
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    created_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    updated_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pos_button_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER NOT NULL REFERENCES pos_button_groups(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    position INTEGER NOT NULL CHECK(position >= 1),
+    created_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    updated_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(group_id, position),
+    UNIQUE(group_id, product_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pos_button_groups_active_position
+ON pos_button_groups(is_active, position);
+CREATE INDEX IF NOT EXISTS idx_pos_button_items_group_position
+ON pos_button_items(group_id, position);
+CREATE INDEX IF NOT EXISTS idx_pos_button_items_product
+ON pos_button_items(product_id);
+
 CREATE TABLE IF NOT EXISTS receipt_sequences (
     sale_date TEXT PRIMARY KEY,
     last_number INTEGER NOT NULL
