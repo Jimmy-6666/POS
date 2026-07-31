@@ -1,3 +1,25 @@
+# Release 3.1.2 — UAT-verified source candidate 2026-07-31
+
+- Added an additive per-product daily manual-price flag (Migration 29).
+- Reused the blocking Cashier price Numpad for flagged positive-price
+  products and retained their real product identity in Audit, sale items, and
+  receipts.
+- Added server-side quote/checkout enforcement so catalog price cannot bypass
+  a flagged product's required manual price.
+- Removed online controls from new-product UI and made every standard
+  application create path offline by default without changing existing
+  products.
+- Added focused Release 3.1.2 migration, create-form, forged-request,
+  POS API, manual-price, checkout, Audit, and receipt regression coverage.
+- Granted Managers the existing Settings permission through additive
+  Migration 30. Managers can use `/settings` and settle billed balances
+  individually or in bulk; Cashiers remain denied and Admin-only staff,
+  Audit, backup, maintenance, security, and XLSX functions remain protected.
+- Verified 33 focused tests and the 194-test full suite with one existing
+  filesystem-capability skip. Headless Edge UAT passed asset-v37, create/edit,
+  flagged-product price prompt, real-name cart/reference, and focus recovery;
+  SQLite integrity and foreign keys passed. Production remains 3.1.0.
+
 # Release 3.1.1 — UAT candidate 2026-07-31
 
 - Returned focus to the POS barcode/search field after Cashier quantity

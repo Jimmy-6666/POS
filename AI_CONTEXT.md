@@ -151,6 +151,19 @@ removal styling, and zero JavaScript errors. UAT integrity and foreign keys
 passed. Production remains healthy on Version 3.1.0 until explicit approval.
 See `VERSION_3.1.1.md`.
 
+Version 3.1.2 is the current source candidate and includes 3.1.1. A product
+may require a fresh audit-backed whole-baht price for every POS line while
+retaining its real UUID/name and unchanged master price. New products now
+start active but offline; explicit online enablement remains on Edit and
+existing flags are preserved. Managers can now use `/settings` and clear
+individual or bulk billed balances; Cashiers remain denied and the other
+Admin-only surfaces stay protected. Additive Migration 29 adds the
+default-false product flag and Migration 30 grants the existing Settings
+permission to Manager without rewriting business rows. Focused regression
+passed 33/33; the full suite passed 194 tests with one capability skip.
+Headless Edge UAT, asset-v37, SQLite integrity, and foreign keys passed.
+Production remains Version 3.1.0. See `VERSION_3.1.2.md`.
+
 Version 3.0.9 formalizes the
 separate `SYSTEM` server and standard local `POS` launcher setup, repair,
 least-privilege ACL, shared Desktop Python, reboot-safe display state, and

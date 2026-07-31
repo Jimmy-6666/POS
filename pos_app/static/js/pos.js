@@ -224,7 +224,7 @@
     $('#manualPriceSubmit').disabled = false;
     $('#manualPriceCancel').disabled = false;
     manualPriceDialog.showModal();
-    playManualPriceAlert(reason === 'manual_price_barcode');
+    playManualPriceAlert(['manual_price_barcode', 'product_manual_price'].includes(reason));
     setTimeout(() => $('#manualPriceInput').focus({ preventScroll: true }), 40);
   }
   async function cancelManualPrice() {
@@ -240,11 +240,19 @@
   }
   function addProduct(product, manualPrice = null) {
     if (!product) return;
-    if (!manualPrice && (Number(product.price_satang) <= 0 || product.barcode === manualBarcode)) {
+    if (!manualPrice && (
+      Number(product.price_satang) <= 0
+      || product.barcode === manualBarcode
+      || Boolean(product.requires_manual_price)
+    )) {
       openManualPrice(
         product,
         product.barcode,
-        product.barcode === manualBarcode ? 'manual_price_barcode' : 'zero_catalog_price',
+        product.barcode === manualBarcode
+          ? 'manual_price_barcode'
+          : product.requires_manual_price
+            ? 'product_manual_price'
+            : 'zero_catalog_price',
       );
       return;
     }
@@ -386,7 +394,7 @@
       const payload = { items: cart, bill_discount_satang: 0, customer_note: $('#customerNote').value, payment_method: paymentMethod, amount_received_satang: Math.round((Number($('#receivedInput').value) || 0) * 100), payment_confirmed: paymentMethod === 'scan', billing_customer_id: $('#billingCustomer').value, billing_note: $('#billingNote').value };
       const result = await api('/api/pos/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       $('#successReceipt').textContent = result.receipt_number;
-      $('#successItems').innerHTML = reviewItems.map((item) => `<div><span>${escapeHtml(item.manual_price_reference ? `รายการระบุราคา ${item.manual_price_reference}` : item.name)} × ${item.quantity}</span><strong>${money(item.price_satang * item.quantity - item.discount_satang)}</strong></div>`).join('');
+      $('#successItems').innerHTML = reviewItems.map((item) => `<div><span>${escapeHtml(item.manual_price_reference && item.manual_price_reason !== 'product_manual_price' ? `รายการระบุราคา ${item.manual_price_reference}` : item.name)} × ${item.quantity}</span><strong>${money(item.price_satang * item.quantity - item.discount_satang)}</strong></div>`).join('');
       $('#successTotal').textContent = money(reviewTotal);
       $('#successChange').textContent = paymentMethod === 'cash' ? money(result.change_satang) : '—';
       const manualReceiptLink = $('#manualReceiptLink');

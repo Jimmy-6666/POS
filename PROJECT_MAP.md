@@ -80,6 +80,10 @@ button grid and closing Numpad; Production was advanced to 3.1.0 on 2026-07-31.
 manual-price cancellation, the fixed top-level Manual Price slot 9, and
 POS-button removal styling. It has no migration; Production remains 3.1.0
 until explicit release approval.
+`VERSION_3.1.2.md` is the current source-candidate contract for per-product
+daily manual pricing, offline-by-default product creation, and Manager access
+to Settings/billed-balance settlement. Migrations 29–30 are additive and
+preserve all existing product flags and business data.
 
 The sanitized, crash-resumable customer-machine workflow and reusable Codex
 prompt are in `docs/CUSTOMER_MACHINE_DEPLOYMENT_PLAYBOOK_3.0.md`.

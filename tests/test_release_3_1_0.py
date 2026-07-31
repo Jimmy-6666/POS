@@ -224,8 +224,8 @@ class Release310Tests(unittest.TestCase):
         script = (Path(self.app.root_path).parent / "build-release.ps1").read_text(
             encoding="utf-8"
         )
-        self.assertIn('[string]$Version = "3.1.1"', script)
-        self.assertIn('"VERSION_3.1.1.md"', script)
+        self.assertIn('[string]$Version = "3.1.2"', script)
+        self.assertIn('"VERSION_3.1.2.md"', script)
         self.assertNotIn('"VERSION_3.0.8.md"', script)
 
 

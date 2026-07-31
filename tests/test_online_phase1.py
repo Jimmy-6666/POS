@@ -17,7 +17,7 @@ class OnlinePhase1Tests(unittest.TestCase):
     def tearDown(self):
         self.folder.cleanup()
 
-    def test_schema_defaults_all_products_online_and_seeds_permissions(self):
+    def test_schema_defaults_new_products_offline_and_seeds_permissions(self):
         with self.app.app_context():
             db = get_db()
             columns = {row["name"] for row in db.execute("PRAGMA table_info(products)")}
@@ -31,7 +31,7 @@ class OnlinePhase1Tests(unittest.TestCase):
             self.assertEqual(db.execute("SELECT value FROM settings WHERE key='online_allow_negative_stock'").fetchone()[0], "1")
             self.assertEqual(
                 db.execute("SELECT sql FROM sqlite_master WHERE name='products'").fetchone()[0]
-                .split("is_online_available", 1)[1].split(",", 1)[0].count("DEFAULT 1"),
+                .split("is_online_available", 1)[1].split(",", 1)[0].count("DEFAULT 0"),
                 1,
             )
             self.assertIn("online_bank_accounts", {

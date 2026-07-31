@@ -62,19 +62,19 @@
       <div id="navAnalytics" class="nav-group-items">
         <a href="{{url_for('main.index')}}" {% if request.endpoint=='main.index' %}class="active" aria-current="page"{% endif %}><i>⌂</i><span>Dashboard</span></a>
         <a href="{{url_for('reporting.reports')}}" {% if request.endpoint=='reporting.reports' %}class="active" aria-current="page"{% endif %}><i>↗</i><span>รายงาน</span></a>
-        {% if current_staff.role_code=='admin' %}<a href="{{url_for('reporting.billing_report')}}" {% if request.endpoint in ('reporting.billing_report','reporting.receive_billing_payment') %}class="active" aria-current="page"{% endif %}><i>฿</i><span>จัดการยอดวางบิล</span></a>{% endif %}
+        <a href="{{url_for('reporting.billing_report')}}" {% if request.endpoint in ('reporting.billing_report','reporting.receive_billing_payment','reporting.receive_bulk_billing_payment','reporting.export_billing_csv') %}class="active" aria-current="page"{% endif %}><i>฿</i><span>จัดการยอดวางบิล</span></a>
       </div>
     </section>
     {% endif %}
-    {% if current_staff.role_code=='admin' %}
+    {% if current_staff.role_code in ('admin','manager') %}
     <section class="nav-section" data-nav-section="administration" data-default-expanded="false">
-      <button class="nav-group" type="button" aria-expanded="false" aria-controls="navAdministration"><span>ผู้ดูแลระบบ</span><span class="nav-group-arrow" aria-hidden="true">^</span></button>
+      <button class="nav-group" type="button" aria-expanded="false" aria-controls="navAdministration"><span>{{'ผู้ดูแลระบบ' if current_staff.role_code=='admin' else 'ตั้งค่าระบบ'}}</span><span class="nav-group-arrow" aria-hidden="true">^</span></button>
       <div id="navAdministration" class="nav-group-items">
-        <a href="{{url_for('admin.staff')}}" {% if request.endpoint=='admin.staff' %}class="active" aria-current="page"{% endif %}><i>♙</i><span>พนักงาน</span></a>
+        {% if current_staff.role_code=='admin' %}<a href="{{url_for('admin.staff')}}" {% if request.endpoint=='admin.staff' %}class="active" aria-current="page"{% endif %}><i>♙</i><span>พนักงาน</span></a>{% endif %}
         <a href="{{url_for('admin.settings')}}" {% if request.endpoint=='admin.settings' %}class="active" aria-current="page"{% endif %}><i>⚙</i><span>ตั้งค่า</span></a>
-        <a href="{{url_for('admin.audit_logs')}}" {% if request.endpoint=='admin.audit_logs' %}class="active" aria-current="page"{% endif %}><i>◷</i><span>Audit Log</span></a>
+        {% if current_staff.role_code=='admin' %}<a href="{{url_for('admin.audit_logs')}}" {% if request.endpoint=='admin.audit_logs' %}class="active" aria-current="page"{% endif %}><i>◷</i><span>Audit Log</span></a>
         <a href="{{url_for('admin.backups')}}" {% if request.endpoint=='admin.backups' %}class="active" aria-current="page"{% endif %}><i>⇩</i><span>สำรองข้อมูล</span></a>
-        <a href="{{url_for('maintenance.index')}}" {% if request.blueprint=='maintenance' %}class="active" aria-current="page"{% endif %}><i>⚙</i><span>ดูแลระบบ</span></a>
+        <a href="{{url_for('maintenance.index')}}" {% if request.blueprint=='maintenance' %}class="active" aria-current="page"{% endif %}><i>⚙</i><span>ดูแลระบบ</span></a>{% endif %}
       </div>
     </section>
     {% endif %}
@@ -84,7 +84,7 @@
     <form class="sidebar-logout" method="post" action="{{url_for('auth.logout')}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button type="submit"><i>↪</i><span>ออกจากระบบ</span></button></form>
   </div>
 </aside>
-<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R3.1.1</span></header>
+<header class="mobile-topbar"><button id="mobileMenuButton" type="button" aria-label="เปิดเมนู" aria-expanded="false">☰</button><strong>แสนงาม มินิมาร์ท</strong><span class="release-badge">R3.1.2</span></header>
 <div id="sidebarOverlay" class="sidebar-overlay"></div>
 {% endif %}
 <main id="mainContent" class="shell {% block shell_class %}{% endblock %}">
