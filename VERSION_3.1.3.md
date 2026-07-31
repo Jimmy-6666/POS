@@ -71,3 +71,7 @@ product image is written to the log.
   job and returns to the queue; the receipt is no longer asked to print from
   an iframe. This preserves the existing Edge/Windows driver path while
   avoiding the observed iframe print freeze.
+- For the current Wilai fallback setup, a user Startup shortcut runs the
+  print-agent launcher after logon. It waits for production health, reads the
+  protected token locally, and starts one hidden Edge agent; it does not start
+  the POS server or alter the `POS` user boundary.

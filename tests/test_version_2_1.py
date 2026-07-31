@@ -92,11 +92,15 @@ class Version21DisplayTests(unittest.TestCase):
         self.assertIn('icacls.exe $Path /deny', kiosk)
         self.assertIn("Test-ProductionDesktopPython $context", verify)
         launcher = (root / "pos_desktop.py").read_text(encoding="utf-8")
+        wilai_agent = (root / "start-wilai-production-print-agent.ps1").read_text(encoding="utf-8")
         self.assertNotIn("from pos_app.runtime_paths import", launcher)
         self.assertIn("spec_from_file_location", launcher)
         self.assertIn('module_name = "_saengngam_runtime_paths"', launcher)
         self.assertIn('error_log = PROFILE_ROOT / "desktop-error.log"', launcher)
         self.assertIn('os.environ.get("POS_DISPLAY_STATE_FILE"', launcher)
+        self.assertIn("wilai-production-print-agent-v2", wilai_agent)
+        self.assertIn("/print-agent?token=", wilai_agent)
+        self.assertIn("http://127.0.0.1:$Port/health", wilai_agent)
 
 if __name__ == "__main__":
     unittest.main()

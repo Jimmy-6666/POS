@@ -15,6 +15,9 @@
   top-level print wrapper. The wrapper logs the loaded document, prints using
   the same Edge/Windows driver route, acknowledges the job after printing,
   and then resumes polling the queue.
+- Added a Wilai-user startup launcher for the verified browser print agent.
+  It is a printer-only fallback and waits for the existing production server;
+  it does not start a server or replace the standard `POS` account setup.
 
 # Release 3.1.2 — released 2026-07-31
 
