@@ -13,6 +13,14 @@ try {
     Ensure-RuntimeDirectories $context
     $null = Ensure-ProductionPrintAgentToken $context
     Write-ProductionRuntimeConfig $context
+    try {
+        $backupSecretRepair = Repair-ProductionVpsBackupSecrets $context
+        if ($backupSecretRepair.configured) {
+            Write-Output "Production VPS backup key ownership and ACL repaired for SYSTEM."
+        }
+    } catch {
+        Write-Warning "Production VPS backup secret repair failed; local POS startup will continue: $($_.Exception.Message)"
+    }
     Ensure-VirtualEnvironment $context $systemPython
     Initialize-ProductionApplication $context
     Register-ProductionStartup $context

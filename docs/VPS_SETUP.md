@@ -5,12 +5,12 @@ store computer and the POS does not require internet access to sell.
 
 ## 1. Create a key on the POS computer
 
-Run OpenSSH's key generator as the Windows account that runs the POS. Store the
-private key outside Git, for example under the
-production runtime config directory, and protect it with Windows ACLs:
+Run OpenSSH's key generator from an elevated PowerShell window. Store the
+private key outside Git in the protected Production backup-secret directory:
 
-    ssh-keygen -t ed25519 -f C:\ProgramData\SaengngamPOS\config\vps-backup-ed25519
-    ssh-keyscan -H 169.58.77.35 > C:\ProgramData\SaengngamPOS\config\vps-known-hosts
+    New-Item -ItemType Directory -Force C:\ProgramData\SanngamPOS\secrets\vps-backup
+    ssh-keygen -t ed25519 -f C:\ProgramData\SanngamPOS\secrets\vps-backup\id_ed25519
+    ssh-keyscan -H 169.58.77.35 > C:\ProgramData\SanngamPOS\secrets\vps-backup\known_hosts
 
 Review the host key out-of-band before trusting the known-hosts file. The
 private key is never copied into this repository or printed in a support
@@ -45,20 +45,24 @@ tokens in Git:
     POS_VPS_PORT=22
     POS_VPS_ROOT=/
     POS_VPS_STORE_ID=store-001
-    POS_VPS_KEY_FILE=C:\ProgramData\SaengngamPOS\config\vps-backup-ed25519
-    POS_VPS_KNOWN_HOSTS=C:\ProgramData\SaengngamPOS\config\vps-known-hosts
+    POS_VPS_KEY_FILE=C:\ProgramData\SanngamPOS\secrets\vps-backup\id_ed25519
+    POS_VPS_KNOWN_HOSTS=C:\ProgramData\SanngamPOS\secrets\vps-backup\known_hosts
     POS_VPS_VERIFY_DOWNLOAD=1
     POS_VPS_RETRIES=3
     POS_SYNC_PATHS=uploads/products
 
-Test from the POS computer with the same key and known-hosts file:
+Repair ownership and ACLs for the actual SYSTEM scheduler context, then run a
+read-only application connection test under SYSTEM:
 
-    sftp -o BatchMode=yes -o StrictHostKeyChecking=yes `
-      -o UserKnownHostsFile=C:\ProgramData\SaengngamPOS\config\vps-known-hosts `
-      -i C:\ProgramData\SaengngamPOS\config\vps-backup-ed25519 `
-      posbackup@169.58.77.35
+    .\repair-production-backup-key.ps1 -InstallRoot C:\SanngamPOS -RuntimeRoot C:\SanngamPOS\runtime -Port 8000
+    .\test-production-backup-connection.ps1 -InstallRoot C:\SanngamPOS -RuntimeRoot C:\SanngamPOS\runtime -Port 8000
 
-Then run a manual backup:
+The private key owner must be SYSTEM. Its explicit allow rules must be limited
+to SYSTEM and Administrators; otherwise OpenSSH may ignore the key as
+unprotected even when an interactive Admin test succeeds. The connection test
+uses SFTP `pwd` only and does not upload Production data.
+
+Then create a verified local backup:
 
     .\backup-production.ps1
 

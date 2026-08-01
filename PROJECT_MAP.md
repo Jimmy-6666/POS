@@ -30,7 +30,7 @@ Release 2.2 server. Batch files select the port and runtime root.
 | Shared UI | `pos_app/templates/base.html`, `static/css/app.css`, `static/css/v2.css`, `static/js/sidebar.js` |
 | Receipt UI | `receipt.html`, `static/css/receipt.css`, `receipt-popup.js` |
 | Windows launch/display/network | `pos_desktop.py`, `pos_app/launcher.py`, `pos_app/display_state.py`, `production-common.ps1`, `configure-production-network.ps1`, `start-*.bat`, `install-*.bat` |
-| Production backup/recovery | `pos_app/services/backup.py`, `pos_app/services/file_sync.py`, `pos_app/services/remote_backup.py`, `pos_app/backup_cli.py`, `backup-production.ps1`, `scripts/*recovery*.ps1` |
+| Production backup/recovery | `pos_app/services/backup.py`, `pos_app/services/file_sync.py`, `pos_app/services/remote_backup.py`, `pos_app/backup_cli.py`, `backup-production.ps1`, `repair-production-backup-key.ps1`, `test-production-backup-connection.ps1`, `scripts/*recovery*.ps1` |
 | VPS provisioning | `deploy/vps/*.sh` |
 | UAT fixtures | `seed_uat.py`, `start-uat.bat`, `install-uat.bat`, `uat_runtime/` (generated) |
 | Makro catalog preparation | `work/makro-pos-import/*.mjs`, `imports/makro-products/` inputs/artifacts, `outputs/` review workbooks |
@@ -89,6 +89,10 @@ auto-scroll, scanner-focus recovery after non-action clicks, and ignoring the
 ledger-owned stock column on existing-product XLSX imports. It has no
 migration. `docs/DEPLOYMENT_LESSONS.md` records the Windows/UAC/process causes
 that delayed this rollout and the required checklist for the next release.
+`VERSION_3.1.5.md` is the Production/UAT contract for SYSTEM-owned VPS backup
+secrets, read-only SYSTEM connection testing, retained actionable retry
+errors, and port-scoped Production stopping that preserves isolated UAT. It
+has no migration.
 
 The sanitized, crash-resumable customer-machine workflow and reusable Codex
 prompt are in `docs/CUSTOMER_MACHINE_DEPLOYMENT_PLAYBOOK_3.0.md`.
