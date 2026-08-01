@@ -3,46 +3,37 @@
 <head><meta charset="utf-8"><title>Receipt Print Agent</title></head>
 <body>
 <p id="status">พร้อมพิมพ์ใบเสร็จ</p>
-<iframe id="printFrame" title="เอกสารที่กำลังพิมพ์" style="width:100%;height:100vh;border:0"></iframe>
 <script>
 (() => {
   const token = {{token|tojson}};
-  const frame = document.querySelector('#printFrame');
+  const desktopUser = {{desktop_user|tojson}};
   const status = document.querySelector('#status');
-  let activeJob = null;
-  let fallbackTimer = null;
 
-  async function acknowledge() {
-    if (!activeJob) return;
-    const jobId = activeJob;
-    activeJob = null;
-    clearTimeout(fallbackTimer);
-    await fetch(`/print-agent/ack/${encodeURIComponent(jobId)}?token=${encodeURIComponent(token)}`, {method: 'POST'});
-    frame.removeAttribute('src');
-    status.textContent = 'พร้อมพิมพ์ใบเสร็จ';
-    setTimeout(poll, 350);
+  function requestUrl(path) {
+    return `${path}?token=${encodeURIComponent(token)}&desktop_user=${encodeURIComponent(desktopUser)}`;
+  }
+
+  function logEvent(event, details = {}) {
+    return fetch(requestUrl('/print-agent/event'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({event, ...details}),
+    }).catch(() => undefined);
   }
 
   async function poll() {
-    if (activeJob) return;
     try {
-      const response = await fetch(`/print-agent/next?token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+      const response = await fetch(requestUrl('/print-agent/next'), {cache: 'no-store'});
       const data = await response.json();
       if (!data.job) return setTimeout(poll, 800);
-      activeJob = data.job.id;
       status.textContent = 'กำลังพิมพ์เอกสาร';
-      frame.src = `${data.job.render_url}?token=${encodeURIComponent(token)}`;
-      fallbackTimer = setTimeout(acknowledge, 15000);
+      await logEvent('browser_print_requested', {job_id: data.job.id, document_type: data.job.document_type});
+      window.location.replace(requestUrl(data.job.render_url));
     } catch (_) {
       setTimeout(poll, 1500);
     }
   }
 
-  addEventListener('message', (event) => {
-    if (event.origin === location.origin && event.data?.type === 'print-complete' && event.data.jobId === activeJob) {
-      acknowledge();
-    }
-  });
   poll();
 })();
 </script>

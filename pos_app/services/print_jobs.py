@@ -4,6 +4,8 @@ import time
 
 from flask import current_app, url_for
 
+from .print_diagnostics import record_print_event
+
 
 class PrintJobQueue:
     def __init__(self):
@@ -50,14 +52,30 @@ def init_app(app):
 
 def enqueue_print(document_type, entity_id):
     if not current_app.config.get("PRINT_AGENT_TOKEN"):
+        record_print_event(
+            "queue_unavailable",
+            source="server",
+            details={"document_type": document_type, "entity_id": entity_id, "reason": "print-agent-token-missing"},
+        )
         return None
-    return current_app.extensions["print_jobs"].enqueue(document_type, entity_id)
+    job_id = current_app.extensions["print_jobs"].enqueue(document_type, entity_id)
+    record_print_event(
+        "queue_created",
+        source="server",
+        details={"job_id": job_id, "document_type": document_type, "entity_id": entity_id},
+    )
+    return job_id
 
 
 def claim_print():
     job = current_app.extensions["print_jobs"].claim()
     if not job:
         return None
+    record_print_event(
+        "queue_claimed",
+        source="server",
+        details={"job_id": job["id"], "document_type": job["document_type"], "entity_id": job["entity_id"]},
+    )
     job["render_url"] = url_for("print_agent.render_job", job_id=job["id"])
     return job
 
@@ -67,4 +85,10 @@ def get_print_job(job_id):
 
 
 def acknowledge_print(job_id):
-    return current_app.extensions["print_jobs"].acknowledge(job_id)
+    acknowledged = current_app.extensions["print_jobs"].acknowledge(job_id)
+    record_print_event(
+        "queue_acknowledged" if acknowledged else "queue_acknowledge_missing",
+        source="server",
+        details={"job_id": job_id},
+    )
+    return acknowledged

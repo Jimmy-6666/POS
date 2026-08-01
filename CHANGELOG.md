@@ -1,3 +1,24 @@
+# Release 3.1.3 — deployed 2026-07-31
+
+- Preserved the existing browser print-agent and Windows printer-driver path.
+- Added a POS-user-readable, bounded `runtime/pos-desktop/print-diagnostics.log`
+  that correlates sale/reconciliation, queue, browser-agent, print-request,
+  afterprint/timeout, and acknowledgement events by job ID.
+- Added a launcher button that opens the local log in Notepad for a `POS`
+  account test without Codex access. The log excludes token/PIN/session data
+  and cannot affect a completed transaction.
+- The attach-only `POS` launcher now self-heals its per-user default receipt
+  printer to `POSPrinter POS-80` before opening the kiosk print agent and
+  writes the Windows setup result to that same diagnostics log. UAT and the
+  Wilai profile are not changed.
+- Changed automatic receipts to open the real receipt document at the top
+  level before calling `window.print()`. This removes the remaining printable
+  iframe, then logs, acknowledges, and resumes the queue after `afterprint`.
+- Added a Wilai-user startup launcher for the verified browser print agent.
+  It is a printer-only fallback and coordinates with the production desktop
+  launcher so Wilai has exactly one worker after restart; it does not start a
+  server or replace the standard `POS` account setup.
+
 # Release 3.1.2 — released 2026-07-31
 
 - Added an additive per-product daily manual-price flag (Migration 29).

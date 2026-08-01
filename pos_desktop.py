@@ -13,6 +13,7 @@ import urllib.request
 from pathlib import Path
 from ctypes import wintypes
 from tkinter import messagebox
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent
 
@@ -41,6 +42,8 @@ RUNTIME = RUNTIME_PATHS.root
 PROFILE_ROOT = Path(os.environ.get("POS_DESKTOP_PROFILE_ROOT", RUNTIME)).expanduser().resolve()
 BROWSER_PROFILE = PROFILE_ROOT / "browser-profile"
 PRINT_BROWSER_PROFILE = PROFILE_ROOT / "print-browser-profile"
+PRINT_DIAGNOSTICS_LOG = PROFILE_ROOT / "print-diagnostics.log"
+RECEIPT_PRINTER_NAME = os.environ.get("POS_RECEIPT_PRINTER", "POSPrinter POS-80").strip()
 RUNTIME_CONFIG = load_runtime_config(ROOT, {**os.environ, "POS_RUNTIME_ROOT": str(RUNTIME)})
 STATE_FILE = Path(
     os.environ.get("POS_DISPLAY_STATE_FILE", RUNTIME_PATHS.display_state)
@@ -48,11 +51,12 @@ STATE_FILE = Path(
 LOG_FILE = RUNTIME_PATHS.launcher_log
 PORT = int(os.environ.get("POS_PORT", "8002"))
 ATTACH_ONLY = str(os.environ.get("POS_DESKTOP_ATTACH_ONLY", "")).lower() in {"1", "true", "yes"}
+EXTERNAL_PRINT_AGENT = str(os.environ.get("POS_EXTERNAL_PRINT_AGENT", "")).lower() in {"1", "true", "yes"}
 URL = f"http://127.0.0.1:{PORT}"
 SERVER_IP = os.environ.get("POS_SERVER_IP", RUNTIME_CONFIG.server_ip or DEFAULT_SERVER_IP)
 LAN_NETWORKS = os.environ.get("POS_LAN_NETWORKS", RUNTIME_CONFIG.lan_networks or DEFAULT_LAN_NETWORKS)
 LAN_URL = f"http://{SERVER_IP}:{PORT}"
-LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 3.1.2")
+LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 3.1.3")
 MUTEX_NAME = os.environ.get("POS_LAUNCHER_MUTEX", "SaengngamPOS306DesktopLauncher")
 CREATE_NO_WINDOW = 0x08000000
 ERROR_ALREADY_EXISTS = 183
@@ -88,15 +92,76 @@ def main_browser_args(browser_exe, profile):
     ]
 
 
-def print_browser_args(browser_exe, profile, token):
+def print_browser_args(browser_exe, profile, token, desktop_user):
     return [
-        str(browser_exe), f"--app={URL}/print-agent?token={token}", "--new-window",
+        str(browser_exe), f"--app={URL}/print-agent?token={quote(token)}&desktop_user={quote(desktop_user)}", "--new-window",
         "--window-size=320,240", "--window-position=-32000,-32000",
         f"--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check",
         "--disable-session-crashed-bubble", "--kiosk-printing",
         "--disable-save-password-bubble", "--disable-background-mode", "--disable-sync",
         "--disable-signin-promo",
     ]
+
+
+def record_launcher_print_event(event, **details):
+    """Best-effort local diagnostics for per-user Windows printer setup."""
+    try:
+        safe_details = {
+            str(key): str(value).replace("\r", " ").replace("\n", " ").replace("|", "/")[:180]
+            for key, value in details.items()
+        }
+        parts = [
+            time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "source=desktop-launcher",
+            f"event={event}",
+        ]
+        parts.extend(f"{key}={value}" for key, value in safe_details.items())
+        PRINT_DIAGNOSTICS_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with PRINT_DIAGNOSTICS_LOG.open("a", encoding="utf-8") as stream:
+            stream.write(" | ".join(parts) + "\n")
+    except OSError:
+        # Printer setup must never prevent POS from opening or recording a sale.
+        pass
+
+
+def configure_attach_only_default_printer(desktop_user):
+    """Set the driver-backed receipt printer in the standard POS profile only."""
+    if not ATTACH_ONLY or not RECEIPT_PRINTER_NAME:
+        return
+    try:
+        legacy_mode = subprocess.run(
+            [
+                "reg.exe", "add", r"HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows",
+                "/v", "LegacyDefaultPrinterMode", "/t", "REG_DWORD", "/d", "1", "/f",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            creationflags=CREATE_NO_WINDOW,
+            check=False,
+        )
+        printer_mode = subprocess.run(
+            ["rundll32.exe", "printui.dll,PrintUIEntry", "/y", "/n", RECEIPT_PRINTER_NAME],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            creationflags=CREATE_NO_WINDOW,
+            check=False,
+        )
+        record_launcher_print_event(
+            "default_printer_configured",
+            desktop_user=desktop_user,
+            printer=RECEIPT_PRINTER_NAME,
+            registry_exit=legacy_mode.returncode,
+            printer_exit=printer_mode.returncode,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        record_launcher_print_event(
+            "default_printer_configuration_failed",
+            desktop_user=desktop_user,
+            printer=RECEIPT_PRINTER_NAME,
+            error=type(exc).__name__,
+        )
 
 
 class PosDesktop:
@@ -114,6 +179,7 @@ class PosDesktop:
         self.browser_exe = self.find_browser()
         self.attach_only = ATTACH_ONLY
         self.print_agent_token = load_print_agent_token() if self.browser_exe else ""
+        self.desktop_user = os.environ.get("USERNAME", "unknown")
         self.known_chrome_windows = set(self.chrome_windows())
         self.fullscreen = False
         self.last_state_stamp = None
@@ -149,9 +215,11 @@ class PosDesktop:
         stop_label = "ปิด Launcher" if self.attach_only else "ปิดระบบ"
         self.stop_button = tk.Button(content, text=stop_label, command=self.close, bg="#f9e7e7", fg="#8b2020", relief="solid", bd=1, font=("Tahoma", 10, "bold"), pady=9, cursor="hand2")
         self.stop_button.grid(row=3, column=2, sticky="ew", pady=(10, 0), padx=(5, 0))
+        self.print_log_button = tk.Button(content, text="เปิด Log การพิมพ์", command=self.open_print_diagnostics, bg="white", fg="#164a35", relief="solid", bd=1, font=("Tahoma", 10, "bold"), pady=8, cursor="hand2")
+        self.print_log_button.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(10, 0))
         for column in range(3):
             content.grid_columnconfigure(column, weight=1)
-        tk.Label(content, text="Login จะเปิดเป็นหน้าต่างปกติ · Login สำเร็จจะเต็มจอ · Logout จะกลับเป็นหน้าต่างปกติ", fg="#65746b", bg="#eef4ef", wraplength=500, justify="left", font=("Tahoma", 9)).grid(row=4, column=0, columnspan=3, sticky="w", pady=(16, 0))
+        tk.Label(content, text="Login จะเปิดเป็นหน้าต่างปกติ · Login สำเร็จจะเต็มจอ · Logout จะกลับเป็นหน้าต่างปกติ", fg="#65746b", bg="#eef4ef", wraplength=500, justify="left", font=("Tahoma", 9)).grid(row=5, column=0, columnspan=3, sticky="w", pady=(16, 0))
 
     def find_browser(self):
         candidates = [
@@ -186,7 +254,7 @@ class PosDesktop:
             POS_DISPLAY_STATE_FILE=str(STATE_FILE), POS_PRINT_AGENT_TOKEN=self.print_agent_token,
             POS_BIND_HOST="0.0.0.0", POS_SERVER_IP=SERVER_IP,
             POS_LAN_ACCESS_ENABLED="1", POS_LAN_NETWORKS=LAN_NETWORKS,
-            POS_APP_VERSION="3.1.2",
+            POS_APP_VERSION="3.1.3",
         )
         try:
             LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -281,14 +349,31 @@ class PosDesktop:
             self.print_browser_process and self.print_browser_process.poll() is None
         ):
             return
+        configure_attach_only_default_printer(self.desktop_user)
+        if EXTERNAL_PRINT_AGENT:
+            record_launcher_print_event(
+                "external_print_agent_in_use",
+                desktop_user=self.desktop_user,
+                printer=RECEIPT_PRINTER_NAME,
+            )
+            return
         known_windows = set(self.chrome_windows())
         profile = PRINT_BROWSER_PROFILE
         self.configure_browser_profile(profile)
         self.print_browser_process = subprocess.Popen(
-            print_browser_args(self.browser_exe, profile, self.print_agent_token),
+            print_browser_args(self.browser_exe, profile, self.print_agent_token, self.desktop_user),
             creationflags=CREATE_NO_WINDOW,
         )
         threading.Thread(target=self.capture_print_window, args=(known_windows,), daemon=True).start()
+
+    def open_print_diagnostics(self):
+        try:
+            PRINT_DIAGNOSTICS_LOG.parent.mkdir(parents=True, exist_ok=True)
+            if not PRINT_DIAGNOSTICS_LOG.exists():
+                PRINT_DIAGNOSTICS_LOG.write_text("ยังไม่มีรายการพิมพ์\n", encoding="utf-8")
+            subprocess.Popen(["notepad.exe", str(PRINT_DIAGNOSTICS_LOG)])
+        except OSError as exc:
+            messagebox.showerror(LAUNCHER_TITLE, f"ไม่สามารถเปิด Log การพิมพ์ได้\n\n{exc}")
 
     def capture_print_window(self, known_windows):
         for _ in range(50):

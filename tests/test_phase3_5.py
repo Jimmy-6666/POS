@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pos_app import create_app
 from pos_app.database import get_db
+from pos_app.services.print_diagnostics import diagnostic_log_path
 from pos_app.services.money import baht_to_satang, change_breakdown
 from pos_app.services.sales import SaleError, calculate_cart, complete_sale, void_sale
 from tests.staff_helpers import staff_login
@@ -124,13 +125,34 @@ class Phase3To5Tests(unittest.TestCase):
         self.assertNotIn("addEventListener('load',()=>window.print())", receipt_page)
 
         self.assertEqual(self.client.get("/print-agent/next").status_code, 404)
-        job = self.client.get("/print-agent/next?token=test-print-token").get_json()["job"]
+        job = self.client.get("/print-agent/next?token=test-print-token&desktop_user=POS").get_json()["job"]
         self.assertEqual(job["document_type"], "sale_receipt")
-        print_page = self.client.get(f"{job['render_url']}?token=test-print-token").get_data(as_text=True)
+        print_page = self.client.get(f"{job['render_url']}?token=test-print-token&desktop_user=POS").get_data(as_text=True)
         self.assertIn("addEventListener('load',()=>window.print())", print_page)
+        self.assertIn("/print-agent/ack/", print_page)
+        self.assertIn("browser_afterprint", print_page)
+        self.assertNotIn('id="printDocument"', print_page)
+        document_page = self.client.get(
+            f"/print-agent/document/{job['id']}?token=test-print-token&desktop_user=POS"
+        ).get_data(as_text=True)
+        self.assertNotIn("addEventListener('load',()=>window.print())", document_page)
+        self.assertIn(result["receipt_number"], document_page)
         self.assertTrue(
-            self.client.post(f"/print-agent/ack/{job['id']}?token=test-print-token").get_json()["ok"]
+            self.client.post(
+                "/print-agent/event?token=test-print-token&desktop_user=POS",
+                json={"event": "browser_print_requested", "job_id": job["id"], "document_type": "sale_receipt"},
+            ).get_json()["ok"]
         )
+        self.assertTrue(
+            self.client.post(f"/print-agent/ack/{job['id']}?token=test-print-token&desktop_user=POS").get_json()["ok"]
+        )
+        with self.app.app_context():
+            diagnostics = diagnostic_log_path().read_text(encoding="utf-8")
+        self.assertIn("event=transaction_completed", diagnostics)
+        self.assertIn("event=queue_created", diagnostics)
+        self.assertIn("event=agent_received_job", diagnostics)
+        self.assertIn("event=browser_print_requested", diagnostics)
+        self.assertIn("desktop_user=POS", diagnostics)
 
     def test_partial_and_full_void_restore_stock_and_keep_audit_history(self):
         with self.app.app_context():
