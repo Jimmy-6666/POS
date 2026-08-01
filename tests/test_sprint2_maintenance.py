@@ -21,7 +21,7 @@ from pos_app.services.backup import (
     verify_backup,
 )
 from pos_app.services.file_sync import sync_files
-from pos_app.services.remote_backup import RemoteBackupConfig, SftpTransport
+from pos_app.services.remote_backup import RemoteBackupConfig, RemoteBackupError, SftpTransport
 
 
 class FakeTransport:
@@ -172,6 +172,46 @@ class Sprint2MaintenanceTests(unittest.TestCase):
         self.assertTrue(any("-rename" in batch for batch in version_batches))
         transport.upload_files([(self.paths.product_images / "coffee.png", "file-snapshots/uploads/products/coffee.png")])
         self.assertIn("put", calls[-1][1])
+
+    def test_sftp_retry_preserves_the_last_actionable_error(self):
+        def runner(_args, **_kwargs):
+            return SimpleNamespace(
+                returncode=255,
+                stdout="",
+                stderr="Permission denied (publickey).\nConnection closed",
+            )
+
+        key = Path(self.folder.name) / "backup.key"
+        known_hosts = Path(self.folder.name) / "known_hosts"
+        key.write_text("private-key-not-in-production", encoding="ascii")
+        known_hosts.write_text("host-key", encoding="ascii")
+        transport = SftpTransport(
+            RemoteBackupConfig("backup.example", "posbackup", key, known_hosts, "store-test"),
+            runner=runner,
+        )
+        with patch("pos_app.services.remote_backup.time.sleep"), self.assertRaises(RemoteBackupError) as raised:
+            transport.upload_with_retry(
+                self.paths.product_images / "coffee.png",
+                "file-snapshots/uploads/products/coffee.png",
+                retries=3,
+            )
+        self.assertIn("after 3 attempt(s)", str(raised.exception))
+        self.assertIn("Permission denied (publickey)", str(raised.exception))
+
+    def test_connection_cli_uses_read_only_transport_probe(self):
+        output = StringIO()
+        config = SimpleNamespace(
+            paths=self.paths,
+            app_version="3.1.5",
+            store_id="store-test",
+            config_file=None,
+        )
+        transport = SimpleNamespace(test_connection=lambda: True)
+        with patch.object(backup_cli, "_config", return_value=config), \
+             patch.object(backup_cli, "_remote", return_value=transport), \
+             redirect_stdout(output):
+            self.assertEqual(backup_cli.main(["test-connection"]), 0)
+        self.assertEqual(json.loads(output.getvalue()), {"status": "complete", "connection": "ok"})
 
     def test_vps_failure_reports_degraded_status_after_verified_local_backup(self):
         artifact = create_local_backup(self.paths, self.config)

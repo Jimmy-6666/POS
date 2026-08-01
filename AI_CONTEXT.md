@@ -16,7 +16,7 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- The active Release 3.1.4 Production instance uses port `8000` and `runtime/`.
+- The active Release 3.1.5 Production instance uses port `8000` and `runtime/`.
   `SaengngamPOS-Production` starts the server under `SYSTEM` at Windows startup;
   `SaengngamPOS-Desktop` opens an attach-only launcher for the local standard
   `POS` account at logon. The account has no password, cannot administer the
@@ -31,6 +31,10 @@ and prints 80 mm receipts through the browser.
   verification passed the static network and Private/LocalSubnet firewall
   checks.
 - UAT launcher uses port `8001` and `uat_runtime/`.
+- Release 3.1.5 is deployed to Production and isolated UAT. It provides
+  SYSTEM-safe VPS backup key ownership/ACL repair, read-only connection
+  diagnostics, actionable SFTP retry errors, and port-scoped Production
+  stopping that preserves isolated UAT.
 - Release 3.1.4 is deployed to Production after isolated UAT approval. It keeps
   the existing-product XLSX stock column ledger-owned by ignoring it during
   import, auto-scrolls the POS sale list, and restores scanner focus after
@@ -171,7 +175,7 @@ history. Protected SYSTEM/POS startup tasks, static LAN, firewall, runtime,
 health, database integrity, and the Public Desktop recovery shortcut passed
 after deployment. See `VERSION_3.1.2.md`.
 
-Version 3.1.4 is the current Production release after owner-approved UAT.
+Version 3.1.4 was the prior Production release after owner-approved UAT.
 The POS sale list scrolls to its bottom after every cart render, and a click
 outside interactive/action controls returns focus to the scanner field while
 no blocking dialog is open. Existing-product XLSX imports ignore
@@ -186,6 +190,22 @@ SQLite integrity, foreign keys, version/asset identity, protected startup
 tasks, and backup/rollback hashes passed. The owner manually confirmed the two
 Cashier behaviors. See `VERSION_3.1.4.md`; deployment delays and the next-run
 checklist are recorded in `docs/DEPLOYMENT_LESSONS.md`.
+
+Version 3.1.5 is the current Production release. The failed 2026-08-01 02:00
+scheduled run created a valid local backup but remote SFTP failed because the
+private key was owned by the interactive Admin account. Windows OpenSSH under
+SYSTEM rejected it as unprotected and then failed public-key authentication.
+The Production key owner was repaired to SYSTEM with unchanged SHA-256 and
+SYSTEM/Administrators-only ACL; read-only SYSTEM SFTP and candidate CLI probes
+now pass. The candidate preserves the last bounded retry cause, verifies the
+secret ACL during Production checks, and adds repeatable focused repair and
+SYSTEM connection-test scripts. There is no migration. Focused tests pass
+34/34 and the candidate full suite passes 201/201; post-deploy focused
+regression passes 23/23 and the full suite passes 201/201. Elevated Production
+verification passed, and the owner-approved SYSTEM full backup-and-sync
+download-verified its remote archive and uploaded 16/16 product images with
+zero errors. Migration 30 and all measured product/sales/stock row counts
+remained unchanged. See `VERSION_3.1.5.md`.
 
 Version 3.0.9 formalizes the
 separate `SYSTEM` server and standard local `POS` launcher setup, repair,

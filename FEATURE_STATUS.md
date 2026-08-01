@@ -36,6 +36,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.1.1 cashier focus/manual-price refinement | Released 2026-07-31; no migration; 187 passed, 1 capability skip | `VERSION_3.1.1.md`, `tests/test_release_3_1_1.py` |
 | Release 3.1.2 daily price, offline create, Manager Settings/billing | Deployed 2026-07-31; additive Migrations 29–30; 194 passed, 1 capability skip | `VERSION_3.1.2.md`, `tests/test_release_3_1_2.py` |
 | Release 3.1.4 POS scan continuity and XLSX negative-stock import fix | Production released 2026-08-02; no migration; focused 21/21, post-deploy full 197/197, live browser/XLSX/integrity/tasks passed | `VERSION_3.1.4.md`, `tests/test_release_3_1_4.py`, `tests/test_product_xlsx.py` |
+| Release 3.1.5 SYSTEM backup-key and SFTP diagnostics repair | Production released 2026-08-02; no migration; candidate focused 34/34 and full 201/201; post-deploy focused 23/23 and full 201/201; elevated lifecycle/runtime verification and SYSTEM full backup-and-sync passed | `VERSION_3.1.5.md`, `tests/test_release_3_1_5.py`, `tests/test_sprint2_maintenance.py` |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -290,6 +291,25 @@ and detailed verification remain in their linked version documents and tests.
 - Port-8001 UAT was restored after the legacy stop script matched it too
   broadly and finished healthy. Root causes and the next-release checklist are
   recorded in `docs/DEPLOYMENT_LESSONS.md`.
+
+## Version 3.1.5 deployed โ€” 2026-08-02
+
+- Production and UAT run Release 3.1.5 with no migration or business-data
+  rewrite. The release repairs SYSTEM ownership/ACL validation for VPS backup
+  secrets and preserves the final bounded SFTP retry error.
+- Elevated Production verification passed runtime identity, SQLite integrity,
+  foreign keys, protected SYSTEM/POS tasks, static LAN, Private/LocalSubnet
+  firewall, backup-key ACL, health, and `pip check`.
+- Post-deploy regression passed 23/23 affected focused tests and 201/201 full
+  tests. Migration 30 and the measured 818 products (817 active), 211 sales,
+  774 sale items, and 781 stock movements remained unchanged.
+- The owner-approved full backup-and-sync completed under
+  `NT AUTHORITY\SYSTEM`. Local and remote-download SHA-256 matched for
+  `backup-20260801T181553Z.zip`; image sync uploaded 16/16 with zero errors.
+- The Production stop lifecycle is now scoped to its requested port and exact
+  desktop script so an isolated UAT checkout under `staging/` is preserved.
+  Deployment delays and corrected helper assumptions are recorded in
+  `docs/DEPLOYMENT_LESSONS.md`.
 
 ## Online ordering operating model
 

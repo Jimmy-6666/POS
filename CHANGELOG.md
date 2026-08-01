@@ -1,3 +1,39 @@
+# Release 3.1.5 — Production backup-connection repair 2026-08-02
+
+- Diagnosed the failed 02:00 scheduled backup: the verified local SQLite
+  archive completed, DNS/TCP 22 were healthy, but Windows OpenSSH under SYSTEM
+  rejected the private key because its owner was the interactive Admin user.
+- Repaired the live Production key owner to SYSTEM while preserving its
+  content SHA-256 and SYSTEM/Administrators-only ACL. Read-only SFTP `pwd` and
+  candidate `backup_cli test-connection` probes now pass under SYSTEM.
+- Added repeatable Production secret-ACL repair and read-only SYSTEM
+  connection-test scripts. Production repair warns rather than blocking local
+  POS startup if optional VPS configuration is broken; Production verification
+  reports the exact local secret problem.
+- SFTP retries now retain the final bounded actionable error instead of
+  logging only a generic retries-exhausted message. No key/database content is
+  logged and the remote archive/image layout is unchanged.
+- No migration or business-data change. Candidate focused tests pass 34/34,
+  full suite 201/201, `pip check`, PowerShell parse, Python compile, dummy ACL
+  repair, and SYSTEM connection checks pass.
+- Post-deploy focused regression passed 23/23 and the full suite passed
+  201/201. SQLite integrity, foreign keys, Migration 30, and all measured
+  product/sales/stock row counts remained unchanged.
+- After explicit owner approval, promoted the exact 26-file Release 3.1.5
+  source to Production without a migration or business-data rewrite. Elevated
+  lifecycle/runtime verification and `pip check` passed; Production port 8000
+  and isolated UAT port 8001 finished `ok`/`ready`.
+- Ran one explicitly approved full `backup-and-sync` under
+  `NT AUTHORITY\SYSTEM`. Local and remote-download SHA-256 matched for
+  `backup-20260801T181553Z.zip`; product-image sync uploaded 16/16 with zero
+  errors.
+- Scoped `stop-production.ps1` to the requested listener port and exact
+  Production desktop script so isolated UAT below the install root is not
+  stopped by a broad launcher match.
+- Preserved the original 26-file 3.1.4 rollback archive and added a separate
+  hash-verified two-entry rollback addendum for the later Production stop
+  lifecycle change.
+
 # Release 3.1.4 — Production release 2026-08-02
 
 - Added automatic bottom scrolling to the POS `รายการขาย` container after

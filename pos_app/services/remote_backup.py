@@ -171,14 +171,18 @@ class SftpTransport:
 
     def _retry(self, operation, retries: int):
         last_error = None
-        for attempt in range(max(1, retries)):
+        attempts = max(1, retries)
+        for attempt in range(attempts):
             try:
                 return operation()
             except (RemoteBackupError, OSError) as exc:
                 last_error = exc
-                if attempt + 1 < max(1, retries):
+                if attempt + 1 < attempts:
                     time.sleep(2**attempt)
-        raise RemoteBackupError("Remote operation failed after retries.") from last_error
+        detail = " ".join(str(last_error or "unknown remote error").split())[:300]
+        raise RemoteBackupError(
+            f"Remote operation failed after {attempts} attempt(s): {detail}"
+        ) from last_error
 
     def quarantine_file(self, remote_relative: str, quarantine_relative: str) -> None:
         source = self._base(remote_relative)

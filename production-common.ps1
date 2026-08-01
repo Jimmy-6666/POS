@@ -17,6 +17,153 @@ function Assert-Administrator {
     }
 }
 
+function Get-ProductionBackupSetting {
+    param(
+        $LocalConfig,
+        [string]$EnvironmentName,
+        [string]$ConfigName
+    )
+    $processValue = [Environment]::GetEnvironmentVariable($EnvironmentName, "Process")
+    if (-not [string]::IsNullOrWhiteSpace($processValue)) {
+        return $processValue.Trim()
+    }
+    $machineValue = [Environment]::GetEnvironmentVariable($EnvironmentName, "Machine")
+    if (-not [string]::IsNullOrWhiteSpace($machineValue)) {
+        return $machineValue.Trim()
+    }
+    if ($LocalConfig -and $LocalConfig.PSObject.Properties.Name -contains $ConfigName) {
+        $configuredValue = [string]$LocalConfig.$ConfigName
+        if (-not [string]::IsNullOrWhiteSpace($configuredValue)) {
+            return $configuredValue.Trim()
+        }
+    }
+    return ""
+}
+
+function Get-ProductionVpsBackupConfiguration {
+    param($Context)
+    $localConfig = $null
+    $configPath = Join-Path $Context.RuntimeRoot "config\production.json"
+    if (Test-Path -LiteralPath $configPath) {
+        try {
+            $productionConfig = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+            if ($productionConfig.backup -and $productionConfig.backup.vps) {
+                $localConfig = $productionConfig.backup.vps
+            }
+        } catch {
+            throw "Production VPS backup configuration could not be read: $configPath"
+        }
+    }
+    return [pscustomobject]@{
+        Host = Get-ProductionBackupSetting $localConfig "POS_VPS_HOST" "host"
+        KeyFile = Get-ProductionBackupSetting $localConfig "POS_VPS_KEY_FILE" "key_file"
+        KnownHosts = Get-ProductionBackupSetting $localConfig "POS_VPS_KNOWN_HOSTS" "known_hosts"
+    }
+}
+
+function Test-ProductionVpsBackupSecrets {
+    param($Context)
+    $configuration = Get-ProductionVpsBackupConfiguration $Context
+    if ([string]::IsNullOrWhiteSpace($configuration.Host)) {
+        return [pscustomobject]@{ configured = $false; ok = $true; issues = @() }
+    }
+
+    $issues = New-Object System.Collections.Generic.List[string]
+    $systemSid = "S-1-5-18"
+    $administratorsSid = "S-1-5-32-544"
+    foreach ($entry in @(
+        [pscustomobject]@{ label = "private key"; path = $configuration.KeyFile },
+        [pscustomobject]@{ label = "known_hosts"; path = $configuration.KnownHosts }
+    )) {
+        if ([string]::IsNullOrWhiteSpace($entry.path)) {
+            $issues.Add("Configured VPS $($entry.label) path is missing.")
+            continue
+        }
+        try {
+            $item = Get-Item -LiteralPath $entry.path -Force -ErrorAction Stop
+            if ($item.PSIsContainer) {
+                $issues.Add("Configured VPS $($entry.label) is not a file: $($entry.path)")
+                continue
+            }
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                $issues.Add("Configured VPS $($entry.label) must not be a filesystem link: $($entry.path)")
+                continue
+            }
+            $acl = Get-Acl -LiteralPath $entry.path
+            $ownerSid = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+            if ($ownerSid -ne $systemSid) {
+                $issues.Add("Configured VPS $($entry.label) owner must be SYSTEM: $($entry.path)")
+            }
+            if (-not $acl.AreAccessRulesProtected) {
+                $issues.Add("Configured VPS $($entry.label) must disable inherited ACLs: $($entry.path)")
+            }
+            foreach ($rule in @($acl.Access)) {
+                $ruleSid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
+                if ($rule.IsInherited -or $rule.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or $ruleSid -notin @($systemSid, $administratorsSid)) {
+                    $issues.Add("Configured VPS $($entry.label) grants access outside SYSTEM/Administrators: $($entry.path)")
+                    break
+                }
+            }
+        } catch {
+            $issues.Add("Configured VPS $($entry.label) cannot be read: $($entry.path)")
+        }
+    }
+    return [pscustomobject]@{
+        configured = $true
+        ok = $issues.Count -eq 0
+        issues = @($issues | ForEach-Object { $_ })
+    }
+}
+
+function Repair-ProductionVpsBackupSecrets {
+    param($Context)
+    $configuration = Get-ProductionVpsBackupConfiguration $Context
+    if ([string]::IsNullOrWhiteSpace($configuration.Host)) {
+        return [pscustomobject]@{ configured = $false; repaired = @() }
+    }
+
+    $systemSid = New-Object Security.Principal.SecurityIdentifier("S-1-5-18")
+    $administratorsSid = New-Object Security.Principal.SecurityIdentifier("S-1-5-32-544")
+    $repaired = New-Object System.Collections.Generic.List[object]
+    foreach ($entry in @(
+        [pscustomobject]@{ label = "private key"; path = $configuration.KeyFile },
+        [pscustomobject]@{ label = "known_hosts"; path = $configuration.KnownHosts }
+    )) {
+        if ([string]::IsNullOrWhiteSpace($entry.path)) {
+            throw "Configured VPS $($entry.label) path is missing."
+        }
+        $item = Get-Item -LiteralPath $entry.path -Force -ErrorAction Stop
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Configured VPS $($entry.label) must be a regular file: $($entry.path)"
+        }
+        $beforeHash = (Get-FileHash -LiteralPath $entry.path -Algorithm SHA256).Hash.ToLowerInvariant()
+        $acl = Get-Acl -LiteralPath $entry.path
+        $acl.SetAccessRuleProtection($true, $false)
+        foreach ($rule in @($acl.Access)) {
+            $acl.RemoveAccessRuleSpecific($rule)
+        }
+        $acl.SetOwner($systemSid)
+        $systemRule = New-Object Security.AccessControl.FileSystemAccessRule($systemSid, [Security.AccessControl.FileSystemRights]::FullControl, [Security.AccessControl.AccessControlType]::Allow)
+        $administratorsRule = New-Object Security.AccessControl.FileSystemAccessRule($administratorsSid, [Security.AccessControl.FileSystemRights]::FullControl, [Security.AccessControl.AccessControlType]::Allow)
+        $acl.AddAccessRule($systemRule)
+        $acl.AddAccessRule($administratorsRule)
+        Set-Acl -LiteralPath $entry.path -AclObject $acl
+        $afterHash = (Get-FileHash -LiteralPath $entry.path -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($afterHash -ne $beforeHash) {
+            throw "Configured VPS $($entry.label) content changed during ACL repair."
+        }
+        $repaired.Add([pscustomobject]@{ label = $entry.label; path = $entry.path; sha256 = $afterHash })
+    }
+    $verification = Test-ProductionVpsBackupSecrets $Context
+    if (-not $verification.ok) {
+        throw "Production VPS backup secret ACL repair did not verify: $($verification.issues -join '; ')"
+    }
+    return [pscustomobject]@{
+        configured = $true
+        repaired = @($repaired | ForEach-Object { $_ })
+    }
+}
+
 function Get-ProductionContext {
     param(
         [string]$InstallRoot,
@@ -43,7 +190,7 @@ function Get-ProductionContext {
         InstallRoot = $resolvedInstallRoot
         RuntimeRoot = $resolvedRuntimeRoot
         Port = $Port
-        AppVersion = "3.1.4"
+        AppVersion = "3.1.5"
         ServerIp = "192.168.0.200"
         LanNetworks = "192.168.0.0/24"
         DefaultGateway = "192.168.0.1"

@@ -42,6 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("recovery-bundle")
     sub.add_parser("backup-and-sync")
     sub.add_parser("sync")
+    sub.add_parser("test-connection")
     verify_parser = sub.add_parser("verify")
     verify_parser.add_argument("archive", type=Path)
     restore_parser = sub.add_parser("restore-drill")
@@ -61,6 +62,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "backup":
             artifact = create_local_backup(config.paths, config, retention=retention)
             print(json.dumps({"status": "complete", "backup": str(artifact.path), "sha256": artifact.archive_sha256}, ensure_ascii=False))
+            return 0
+        if args.command == "test-connection":
+            transport = _remote(config)
+            transport.test_connection()
+            print(json.dumps({"status": "complete", "connection": "ok"}, ensure_ascii=False))
             return 0
         if args.command == "recovery-bundle":
             artifact = create_local_recovery_bundle(config.paths, config)

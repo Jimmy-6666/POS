@@ -80,3 +80,59 @@ These are recorded follow-ups, not changes included in Release 3.1.4:
 - Add one structured elevated deploy command that emits a machine-readable
   result and preserves a complete log.
 - Separate code release-identity tests from mutable deployment-state wording.
+
+## Release 3.1.5 backup connection incident — 2026-08-02
+
+- A successful interactive Admin SFTP test did not represent the scheduler.
+  The scheduler runs under SYSTEM, and Windows OpenSSH rejected a private key
+  owned by the Admin account as unprotected despite its narrow ACL.
+- For backup incidents, test in this order: confirm the local archive/hash,
+  check DNS and TCP 22, inspect key owner/ACL without reading key content, then
+  run the application `test-connection` command under SYSTEM. Do not trigger a
+  real Production upload until that external write is explicitly approved.
+- Private key and known-hosts files must be regular files, owned by SYSTEM,
+  inheritance-disabled, and explicitly accessible only to SYSTEM and
+  Administrators. Verify hashes before/after ACL repair.
+- Retry wrappers must preserve a bounded form of the final transport error;
+  a generic retries-exhausted message turns a short owner fix into a long
+  network investigation.
+
+### Release 3.1.5 deployment delays and corrections
+
+1. Sandbox elevation and Windows Administrator/UAC are separate boundaries.
+   The first orchestrator run correctly stopped at its Administrator preflight
+   and made no change. Future runs should request the single UAC elevation
+   before starting the measured downtime window.
+2. The first port-scoped stop helper used terminating error handling when
+   querying port 8000 after its scheduled task stopped. An empty listener set
+   was the expected success state but was reported as failure. Listener probes
+   now accept an empty result and explicitly fail only if the port remains
+   open after the deadline.
+3. Promotion, health, and `verify-production.ps1` had passed, but an auxiliary
+   Python runtime check ran outside the install-root working directory and
+   raised `ModuleNotFoundError`. All file-backed Python checks must set their
+   working directory before module execution.
+4. That false failure entered rollback. Windows PowerShell 5.1 retained the
+   top-level rollback JSON array as a nested object, so count validation failed
+   after Production had been stopped but before any source was restored. The
+   parser now forces pipeline enumeration; validate rollback parsing and file
+   count before downtime, not first during recovery.
+5. The Codex-side 120-second wait expired while the approved SYSTEM backup was
+   still syncing images. The SYSTEM task completed normally after 116 seconds.
+   A client/tool timeout is not proof of backup failure: inspect the unique
+   result file, temporary task, process list, and `remote-backup.jsonl` before
+   ever starting a second upload.
+6. Windows PowerShell 5.1 exposes Python `unittest` progress written to stderr
+   as native error records. With `ErrorActionPreference=Stop`, the first normal
+   test line falsely terminated the wrapper before its exit code was read.
+   Capture native output with non-terminating preference and treat the process
+   exit code as authoritative; this avoids an unnecessary extra UAC run.
+
+The corrected run finished with Production/UAT healthy on 3.1.5. The approved
+SYSTEM backup uploaded and download-verified the database archive and synced
+16 product images without errors. Most elapsed deployment time came from the
+two incorrect helper assumptions and repeated UAC transitions, not dependency
+installation or application startup. Because the port-scoped stop fix was
+accepted after the original 26-file rollback archive was frozen, its exact
+3.1.4 predecessor is retained in a separate hash-verified rollback addendum;
+never mutate an already recorded rollback artifact in place.
