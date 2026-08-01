@@ -170,20 +170,52 @@ class ProductXlsxTests(unittest.TestCase):
             self.assertEqual(product_audit["entity_id"], product["product_uuid"])
             self.assertNotIn("สินค้าใหม่", product_audit["new_value"])
 
-    def test_invalid_uuid_formula_and_existing_stock_overwrite_are_rejected(self):
+    def test_invalid_uuid_and_formula_are_rejected(self):
         content = workbook_bytes([
             row_values(product_uuid="not-a-uuid", barcode="00124", name_th="ผิด", category=self.category, unit=self.unit, cost_price_baht=1, selling_price_baht=2),
             row_values(product_uuid=self.product_uuid, barcode="=DANGEROUS"),
-            row_values(product_uuid=self.product_uuid, stock_quantity=99),
         ])
         preview = self.upload(content)
         body = preview.get_data(as_text=True)
         self.assertEqual(preview.status_code, 200)
         self.assertIn("Product UUID", body)
         self.assertIn("Formula-like", body)
-        self.assertIn("Stock quantity is read-only", body)
+
+    def test_existing_negative_stock_is_ignored_while_catalog_fields_update(self):
         with self.app.app_context():
-            self.assertEqual(get_db().execute("SELECT stock_quantity FROM products WHERE product_uuid=?", (self.product_uuid,)).fetchone()[0], 4)
+            db = get_db()
+            db.execute(
+                "UPDATE products SET stock_quantity=-3 WHERE product_uuid=?",
+                (self.product_uuid,),
+            )
+            db.commit()
+
+        content = workbook_bytes([
+            row_values(
+                product_uuid=self.product_uuid,
+                name_th="แก้ชื่อแม้สต็อกติดลบ",
+                stock_quantity=-3,
+            ),
+        ])
+        preview = self.upload(content)
+        body = preview.get_data(as_text=True)
+        self.assertEqual(preview.status_code, 200)
+        self.assertNotIn("Stock quantity", body)
+        self.assertEqual(self.confirm(preview).status_code, 302)
+        with self.app.app_context():
+            db = get_db()
+            product = db.execute(
+                "SELECT name_th,stock_quantity FROM products WHERE product_uuid=?",
+                (self.product_uuid,),
+            ).fetchone()
+            self.assertEqual(tuple(product), ("แก้ชื่อแม้สต็อกติดลบ", -3))
+            audit = db.execute(
+                "SELECT new_value FROM audit_logs WHERE action='product_xlsx_update'"
+            ).fetchone()
+            self.assertEqual(
+                json.loads(audit["new_value"])["changed_fields"],
+                ["name_th"],
+            )
 
     def test_repeated_product_uuid_is_rejected_in_preview(self):
         content = workbook_bytes([

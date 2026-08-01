@@ -10,8 +10,27 @@ $ErrorActionPreference = "Stop"
 try {
     Assert-Windows
     $context = Get-ProductionContext $InstallRoot $RuntimeRoot $Port
-    if (-not $Desktop -and -not (Test-Path -LiteralPath $context.Python)) {
-        throw "Production virtual environment was not found. Run install-production.ps1 or repair-production.ps1."
+    if (-not $Desktop) {
+        # SYSTEM can execute the locked production venv.  A standard-user
+        # fallback task may be unable to launch that venv because of its ACL;
+        # use the shared read-only runtime with the same site-packages so a
+        # reboot still brings the POS back up and keeps the printer usable.
+        $pythonRunnable = $false
+        if (Test-Path -LiteralPath $context.Python) {
+            try {
+                $null = & $context.Python -B -c "import sys" 2>$null
+                $pythonRunnable = ($LASTEXITCODE -eq 0)
+            } catch {
+                $pythonRunnable = $false
+            }
+        }
+        if (-not $pythonRunnable) {
+            if (-not (Test-Path -LiteralPath $context.DesktopPython)) {
+                throw "Production Python runtime was not found or cannot be launched. Run install-production.ps1 or repair-production.ps1."
+            }
+            $context.Python = $context.DesktopPython
+            $env:PYTHONPATH = Join-Path $context.InstallRoot ".venv\Lib\site-packages"
+        }
     }
     if ($Desktop -and $AttachOnly) {
         if (-not (Test-Path -LiteralPath $context.PrintAgentTokenFile)) {
@@ -22,6 +41,11 @@ try {
         $null = Ensure-ProductionPrintAgentToken $context
     }
     Set-ProductionEnvironment $context
+    # Receipt delivery uses the verified Windows printer-driver path instead
+    # of the browser kiosk worker. Keep this setting in the startup script so
+    # an ordinary Windows restart cannot fall back to Edge printing.
+    $env:POS_DIRECT_WINDOWS_PRINTING = "1"
+    $env:POS_RECEIPT_PRINTER = "POSPrinter POS-80"
     if ($Desktop) {
         if (-not (Test-Path -LiteralPath $context.DesktopPython)) {
             throw "Shared desktop Python environment was not found. Run configure-production-kiosk-user.ps1 as Administrator."

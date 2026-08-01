@@ -84,6 +84,11 @@ until explicit release approval.
 daily manual pricing, offline-by-default product creation, and Manager access
 to Settings/billed-balance settlement. Migrations 29–30 are additive and
 preserve all existing product flags and business data.
+`VERSION_3.1.4.md` is the deployed Production contract for POS cart
+auto-scroll, scanner-focus recovery after non-action clicks, and ignoring the
+ledger-owned stock column on existing-product XLSX imports. It has no
+migration. `docs/DEPLOYMENT_LESSONS.md` records the Windows/UAC/process causes
+that delayed this rollout and the required checklist for the next release.
 
 The sanitized, crash-resumable customer-machine workflow and reusable Codex
 prompt are in `docs/CUSTOMER_MACHINE_DEPLOYMENT_PLAYBOOK_3.0.md`.

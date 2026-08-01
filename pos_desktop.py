@@ -1,4 +1,4 @@
-"""Friendly Windows launcher for Saengngam Minimart POS 3.1.2."""
+"""Friendly Windows launcher for Saengngam Minimart POS 3.1.4."""
 import ctypes
 import importlib.util
 import json
@@ -52,11 +52,12 @@ LOG_FILE = RUNTIME_PATHS.launcher_log
 PORT = int(os.environ.get("POS_PORT", "8002"))
 ATTACH_ONLY = str(os.environ.get("POS_DESKTOP_ATTACH_ONLY", "")).lower() in {"1", "true", "yes"}
 EXTERNAL_PRINT_AGENT = str(os.environ.get("POS_EXTERNAL_PRINT_AGENT", "")).lower() in {"1", "true", "yes"}
+DIRECT_WINDOWS_PRINTING = str(os.environ.get("POS_DIRECT_WINDOWS_PRINTING", "")).lower() in {"1", "true", "yes"}
 URL = f"http://127.0.0.1:{PORT}"
 SERVER_IP = os.environ.get("POS_SERVER_IP", RUNTIME_CONFIG.server_ip or DEFAULT_SERVER_IP)
 LAN_NETWORKS = os.environ.get("POS_LAN_NETWORKS", RUNTIME_CONFIG.lan_networks or DEFAULT_LAN_NETWORKS)
 LAN_URL = f"http://{SERVER_IP}:{PORT}"
-LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 3.1.3")
+LAUNCHER_TITLE = os.environ.get("POS_LAUNCHER_TITLE", "Saengngam POS 3.1.4")
 MUTEX_NAME = os.environ.get("POS_LAUNCHER_MUTEX", "SaengngamPOS306DesktopLauncher")
 CREATE_NO_WINDOW = 0x08000000
 ERROR_ALREADY_EXISTS = 183
@@ -196,7 +197,7 @@ class PosDesktop:
         header.pack(fill="x")
         header.pack_propagate(False)
         tk.Label(header, text="แสนงาม มินิมาร์ท", fg="white", bg="#0b3d2a", font=("Tahoma", 20, "bold")).pack(anchor="w", padx=24, pady=(15, 0))
-        tk.Label(header, text="POS Desktop Launcher · Version 3.1.2", fg="#cce6d5", bg="#0b3d2a", font=("Tahoma", 9)).pack(anchor="w", padx=25)
+        tk.Label(header, text="POS Desktop Launcher · Version 3.1.4", fg="#cce6d5", bg="#0b3d2a", font=("Tahoma", 9)).pack(anchor="w", padx=25)
 
         content = tk.Frame(self.root, bg="#eef4ef")
         content.pack(fill="both", expand=True, padx=24, pady=20)
@@ -254,7 +255,7 @@ class PosDesktop:
             POS_DISPLAY_STATE_FILE=str(STATE_FILE), POS_PRINT_AGENT_TOKEN=self.print_agent_token,
             POS_BIND_HOST="0.0.0.0", POS_SERVER_IP=SERVER_IP,
             POS_LAN_ACCESS_ENABLED="1", POS_LAN_NETWORKS=LAN_NETWORKS,
-            POS_APP_VERSION="3.1.3",
+            POS_APP_VERSION="3.1.4",
         )
         try:
             LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -286,7 +287,7 @@ class PosDesktop:
     def server_failed(self, detail):
         self.status.config(text="ไม่สามารถเริ่มระบบได้")
         self.status_dot.config(fg="#ad2929")
-        messagebox.showerror("POS 3.1.2", f"เริ่มเซิร์ฟเวอร์ไม่สำเร็จ\n\n{detail}\n\nดูรายละเอียดที่ runtime\\launcher.log")
+        messagebox.showerror("POS 3.1.4", f"เริ่มเซิร์ฟเวอร์ไม่สำเร็จ\n\n{detail}\n\nดูรายละเอียดที่ runtime\\launcher.log")
 
     def open_browser(self):
         if not self.browser_exe:
@@ -350,6 +351,13 @@ class PosDesktop:
         ):
             return
         configure_attach_only_default_printer(self.desktop_user)
+        if DIRECT_WINDOWS_PRINTING:
+            record_launcher_print_event(
+                "direct_windows_printing_enabled",
+                desktop_user=self.desktop_user,
+                printer=RECEIPT_PRINTER_NAME,
+            )
+            return
         if EXTERNAL_PRINT_AGENT:
             record_launcher_print_event(
                 "external_print_agent_in_use",

@@ -330,13 +330,14 @@ def _parse_row(db, row_number: int, values: dict[str, Any], categories, units):
 
     raw_stock = values.get("stock_quantity")
     opening_stock = None
-    if raw_stock is not None and (not isinstance(raw_stock, str) or raw_stock.strip()):
+    # Existing-product stock is ledger-owned and intentionally ignored.  In
+    # particular, an exported negative or stale balance must not block an
+    # administrator from importing unrelated catalog changes.
+    if action_type == "create" and raw_stock is not None and (not isinstance(raw_stock, str) or raw_stock.strip()):
         try:
             if _has_formula(raw_stock):
                 raise SpreadsheetError("Formula-like values are not allowed")
             opening_stock = _decimal(raw_stock, "stock_quantity")
-            if action_type == "update" and current and Decimal(str(opening_stock)) != Decimal(str(current["stock_quantity"])):
-                raise SpreadsheetError("Stock quantity is read-only for existing products; use stock adjustment instead")
         except SpreadsheetError as exc:
             errors.append({"row": row_number, "column": "stock_quantity", "reason": str(exc)})
 
@@ -600,7 +601,7 @@ def build_export_workbook(db) -> bytes:
         ("Optional", "sku, name_en, minimum_stock, status and online fields. Blank optional cells do not overwrite an existing product."),
         ("Clear value", f"Type {CLEAR_TOKEN} only for SKU, English name, or online max quantity when intentionally clearing it."),
         ("SKU and barcode", "They are editable fields, remain unique, and never identify a product during import. Keep them as text to preserve leading zeroes."),
-        ("Stock safety", "For an existing product stock_quantity is read-only; use stock adjustment/receiving. For a new product it becomes an audited opening balance."),
+        ("Stock safety", "For an existing product stock_quantity is ignored during import, including stale or negative exported values; use stock adjustment/receiving to change it. For a new product it becomes an audited opening balance."),
         ("Accepted status", "yes/no, true/false, 1/0, or Thai ใช่/ไม่. Category and unit must be active configured values."),
         ("Safety", "Do not enter formulas or text starting with =, +, - or @. The preview changes nothing; confirmation commits all valid rows atomically."),
     ]

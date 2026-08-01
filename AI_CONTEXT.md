@@ -16,7 +16,7 @@ and prints 80 mm receipts through the browser.
 - Python runtime dependencies include Flask, Waitress, `pyotp`, `cryptography`,
   `qrcode`, and `openpyxl`; the last is used by the admin-only product XLSX
   import/export feature.
-- The active Release 3.1.3 Production instance uses port `8000` and `runtime/`.
+- The active Release 3.1.4 Production instance uses port `8000` and `runtime/`.
   `SaengngamPOS-Production` starts the server under `SYSTEM` at Windows startup;
   `SaengngamPOS-Desktop` opens an attach-only launcher for the local standard
   `POS` account at logon. The account has no password, cannot administer the
@@ -26,22 +26,20 @@ and prints 80 mm receipts through the browser.
   Mutable launcher state is shared through
   `runtime/pos-desktop/display_state.json`, whose parent ACL remains writable
   when the server recreates the file after a reboot.
-- Release 3.1.3 retains the browser print-agent and installed Windows printer
-  driver while making it observable from the standard `POS` account. Its
-  bounded `runtime/pos-desktop/print-diagnostics.log` correlates completed
-  transactions, queue/agent/render/browser acknowledgement stages by opaque
-  job ID and is opened through a Launcher button. It never records a token,
-  PIN, session, or payment evidence, and logging cannot affect a sale.
 - The accepted network contract remains fixed server address `192.168.0.200`
   on trusted private LAN `192.168.0.0/24`. Release 3.1.0 elevated Production
   verification passed the static network and Private/LocalSubnet firewall
   checks.
 - UAT launcher uses port `8001` and `uat_runtime/`.
+- Release 3.1.4 is deployed to Production after isolated UAT approval. It keeps
+  the existing-product XLSX stock column ledger-owned by ignoring it during
+  import, auto-scrolls the POS sale list, and restores scanner focus after
+  non-action clicks. UAT remains isolated on port `8001`.
 - The port `8002` profile is not the canonical customer Production instance.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
-  at `/online-orders`. Products default to online-enabled, except the current
-  Production catalog snapshot: 742 products are active, 51 have zero price,
-  726 have no image, all 742 have zero stock, and 199 are online-enabled.
+  at `/online-orders`. Products default to online-enabled. The Release 3.1.4
+  Production verification snapshot contains 818 products (817 active), 211
+  sales, 774 sale items, and 781 stock movements; Migration 30 remains latest.
 
 An auxiliary Makro catalog preparation pipeline lives in
 `work/makro-pos-import/`. It uses Node and Codex spreadsheet tooling only for
@@ -157,7 +155,7 @@ removal styling, and zero JavaScript errors. UAT integrity and foreign keys
 passed. It is deployed cumulatively through Version 3.1.2.
 See `VERSION_3.1.1.md`.
 
-Version 3.1.2 is the current Production release and includes 3.1.1. A product
+Version 3.1.2 was the previous cumulative Production release and includes 3.1.1. A product
 may require a fresh audit-backed whole-baht price for every POS line while
 retaining its real UUID/name and unchanged master price. New products now
 start active but offline; explicit online enablement remains on Edit and
@@ -173,14 +171,21 @@ history. Protected SYSTEM/POS startup tasks, static LAN, firewall, runtime,
 health, database integrity, and the Public Desktop recovery shortcut passed
 after deployment. See `VERSION_3.1.2.md`.
 
-Version 3.1.3 is the current Production diagnostic build. It intentionally
-keeps the established browser/driver receipt method while the `POS` user tests
-the actual driver. The server records transaction/queue events and the hidden
-agent records its launch, claim, print request, afterprint/timeout, and ack in
-the readable local diagnostic log. No migration or business-data rewrite was
-made. Full regression passed 194 tests with one existing capability skip;
-Production 8000 and UAT 8001 health were ready after deployment. See
-`VERSION_3.1.3.md`.
+Version 3.1.4 is the current Production release after owner-approved UAT.
+The POS sale list scrolls to its bottom after every cart render, and a click
+outside interactive/action controls returns focus to the scanner field while
+no blocking dialog is open. Existing-product XLSX imports ignore
+`stock_quantity` completely so negative or stale exported balances cannot
+block unrelated catalog adjustments; new-product audited opening stock is
+unchanged. There is no migration. Focused regression passed 21/21; full-suite
+verification completed 197 tests with 196 passed and one existing filesystem-
+capability skip. Post-deploy elevated regression passed all 197 tests and
+`pip check`. Live UAT browser scroll/focus/dialog checks, the 670-row XLSX
+round-trip including four negative-stock products, both health endpoints,
+SQLite integrity, foreign keys, version/asset identity, protected startup
+tasks, and backup/rollback hashes passed. The owner manually confirmed the two
+Cashier behaviors. See `VERSION_3.1.4.md`; deployment delays and the next-run
+checklist are recorded in `docs/DEPLOYMENT_LESSONS.md`.
 
 Version 3.0.9 formalizes the
 separate `SYSTEM` server and standard local `POS` launcher setup, repair,

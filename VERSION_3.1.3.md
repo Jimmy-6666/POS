@@ -1,6 +1,6 @@
 # Saengngam Minimart POS — Version 3.1.3
 
-Status: deployed to Production 2026-07-31
+Status: Production print-driver diagnostics update
 
 Migration: none
 
@@ -39,6 +39,16 @@ product image is written to the log.
 - The file is limited to 512 KiB and retains the newest 256 KiB on rotation.
   Logging is best-effort: a locked log can never block a transaction or print.
 
+## Post-restart printing hotfix
+
+- Automatic print jobs now open the existing receipt document in Edge's
+  top-level frame. The receipt uses its standard print hook, then sends an
+  afterprint acknowledgement before returning to the protected print queue.
+  No printable iframe remains in the browser flow.
+- The Wilai Startup helper and production desktop launcher coordinate so only
+  one Edge print worker runs after Windows starts. The standard `POS` account
+  remains on its launcher-managed worker and default printer setup.
+
 ## Compatibility
 
 - No schema migration or business-data change.
@@ -47,33 +57,3 @@ product image is written to the log.
   user boundary remain unchanged.
 - The raw-driver experiment is not enabled by this release; this diagnostic
   build intentionally observes the established Windows driver path first.
-
-## Deployment verification
-
-- The full suite completed 194 tests with one existing filesystem-capability
-  skip. Focused receipt/online/launcher diagnostics tests passed before
-  deployment.
-- A verified local backup and full recovery bundle were created before update.
-  Production port 8000 returned ready health as R3.1.3 afterward. UAT port
-  8001 was restored and also returned ready health.
-
-## Printer-driver recovery hotfix
-
-- The attach-only launcher sets `POSPrinter POS-80` as the Windows default
-  printer only in the local `POS` user profile before it opens the hidden
-  kiosk print-agent. Windows' automatic default-printer selection is disabled
-  only for that profile, so it cannot redirect Wilai's or UAT's printer.
-- The same diagnostic log records the selected printer and the exit status of
-  the registry and Windows PrintUI calls. A setup failure remains diagnostic
-  only and never blocks the cashier, transaction, or launcher.
-- The browser agent now opens the existing receipt HTML as its top-level
-  document. It invokes the receipt's normal `window.print()` hook there,
-  records `afterprint`, acknowledges the job, and returns to the queue. No
-  printable iframe is used, avoiding the Windows-driver freeze observed with
-  nested browser documents.
-- For the current Wilai fallback setup, a user Startup shortcut runs the
-  print-agent launcher after logon. It waits for production health and lets an
-  already-started production launcher own the single agent; otherwise it starts
-  one hidden Edge agent. The production launcher similarly defers to that
-  Wilai-only fallback, preventing duplicate agents while retaining the normal
-  `POS` user boundary.

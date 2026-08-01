@@ -22,8 +22,8 @@ if (-not (Test-Path -LiteralPath $tokenPath)) { exit 0 }
 $token = (Get-Content -Raw -LiteralPath $tokenPath).Trim()
 if (-not $token) { exit 0 }
 
-# Allow the production desktop launcher a short startup window.  If it owns an
-# agent in this session, leave it as the single worker.  Otherwise this script
+# Allow the production desktop launcher a short startup window. If it owns an
+# agent in this session, leave it as the single worker. Otherwise this script
 # remains the Wilai-only fallback worker.
 Start-Sleep -Seconds 12
 $printAgentMarker = "--app=http://127.0.0.1:$Port/print-agent"
