@@ -35,7 +35,7 @@ and detailed verification remain in their linked version documents and tests.
 | Release 3.1.0 cashier-first text-only POS button grid | Deployed 2026-07-31; Migration 28; 185 passed, 1 capability skip | `VERSION_3.1.0.md`, `tests/test_release_3_1_0.py` |
 | Release 3.1.1 cashier focus/manual-price refinement | Released 2026-07-31; no migration; 187 passed, 1 capability skip | `VERSION_3.1.1.md`, `tests/test_release_3_1_1.py` |
 | Release 3.1.2 daily price, offline create, Manager Settings/billing | Deployed 2026-07-31; additive Migrations 29–30; 194 passed, 1 capability skip | `VERSION_3.1.2.md`, `tests/test_release_3_1_2.py` |
-| Release 3.1.3 POS-user print-driver diagnostics | Deployed 2026-07-31; no migration; 194 passed, 1 capability skip | `VERSION_3.1.3.md`, print-agent and Phase 3–5 tests |
+| Release 3.1.4 POS scan continuity and XLSX negative-stock import fix | Production released 2026-08-02; no migration; focused 21/21, post-deploy full 197/197, live browser/XLSX/integrity/tasks passed | `VERSION_3.1.4.md`, `tests/test_release_3_1_4.py`, `tests/test_product_xlsx.py` |
 | Customer online ordering, delivery, and reconciliation | Implemented; verified LINE identity, public privacy policy, delivery-payment lifecycle, customer order-detail sprint 1, active-order refresh/cancel/stock-state sprint 1.1, and Thai staff workflow sprint 2 | online phases 1–6, public host |
 | Makro catalog enrichment/import tooling | UAT only; portable raw JSON/CSV retrieval with exact-ID report; production approval incomplete | `work/makro-pos-import/README.md`, manifest and `verify-uat.mjs` |
 
@@ -273,20 +273,23 @@ and detailed verification remain in their linked version documents and tests.
   server/POS launcher tasks, static LAN, Private/LocalSubnet firewall, and
   health. Port-8001 UAT remained ready.
 
-## Version 3.1.3 print diagnostics deployed — 2026-07-31
+## Version 3.1.4 deployed — 2026-08-02
 
-- Production continues to use the existing browser print-agent and Windows
-  printer-driver method; the native RAW experiment is not enabled.
-- Every automatic receipt/checked-order print now records completed
-  transaction, queue, agent, render/print request, afterprint/timeout, and
-  acknowledgement stages in the bounded POS-user-readable
-  `runtime/pos-desktop/print-diagnostics.log`.
-- The POS launcher provides `เปิด Log การพิมพ์` to open that file in Notepad
-  under the passwordless standard `POS` account. The log excludes tokens,
-  PINs, sessions, and payment evidence; its failure cannot affect a sale.
-- Full regression: 194 passed, one existing capability skip. Production
-  port 8000 and restored UAT port 8001 both returned ready health after the
-  deployment.
+- POS cart rendering now keeps the newest scanned line visible, and non-action
+  clicks restore scanner focus without intercepting actions or open dialogs.
+- Existing-product XLSX import ignores the ledger-owned stock column while
+  retaining audited opening stock for new products. No migration was added.
+- Pre-deployment UAT focused regression passed 21/21; its full suite completed
+  197 tests with 196 passes and one filesystem-capability skip. Post-deploy
+  elevated verification passed focused 21/21 and full 197/197; `pip check`
+  reported no broken requirements.
+- Production health/runtime, protected SYSTEM/POS tasks, static network and
+  firewall, raw asset hash, SQLite integrity, foreign keys, backups, recovery,
+  and rollback hashes passed. Migration 30 remained latest with 818 products
+  (817 active), 211 sales, 774 sale items, and 781 stock movements unchanged.
+- Port-8001 UAT was restored after the legacy stop script matched it too
+  broadly and finished healthy. Root causes and the next-release checklist are
+  recorded in `docs/DEPLOYMENT_LESSONS.md`.
 
 ## Online ordering operating model
 

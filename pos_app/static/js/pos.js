@@ -339,13 +339,15 @@
     $('#mobileCartBar').classList.toggle('has-items', cart.length > 0);
   }
   function renderCart() {
-    $('#cartItems').innerHTML = cart.map((item, index) => `
+    const cartItems = $('#cartItems');
+    cartItems.innerHTML = cart.map((item, index) => `
       <article class="cart-row-v2">
         <div class="cart-row-main"><strong>${escapeHtml(item.name)}</strong>${item.manual_price_reference ? `<small>${escapeHtml(item.manual_price_reference)}</small>` : ''}<span>${money(item.price_satang)} × ${item.quantity}</span></div>
         <strong class="line-total">${money(item.price_satang * item.quantity - item.discount_satang)}</strong>
         <div class="quantity-v2"><button type="button" data-action="minus" data-i="${index}" aria-label="ลดจำนวน">−</button><input aria-label="จำนวน ${escapeHtml(item.name)}" data-action="qty" data-i="${index}" type="number" min="${item.allow_decimal ? '.001' : '1'}" step="${item.allow_decimal ? '.001' : '1'}" value="${item.quantity}"><button type="button" data-action="plus" data-i="${index}" aria-label="เพิ่มจำนวน">+</button></div>
         <div class="row-tools"><button class="remove" type="button" data-action="remove" data-i="${index}">ลบ</button></div>
       </article>`).join('') || '<div class="empty-cart"><span>▧</span><strong>ตะกร้ายังว่าง</strong><p>สแกนบาร์โค้ดหรือเลือกสินค้าด้านซ้าย</p></div>';
+    cartItems.scrollTop = cartItems.scrollHeight;
     quote();
   }
   function updateCash() {
@@ -463,6 +465,11 @@
   $('#mobileCartBar').onclick = openMobileCart;
   $('#closeMobileCart').onclick = closeMobileCart;
   $('#cartBackdrop').onclick = closeMobileCart;
+  document.addEventListener('click', (event) => {
+    if (scannerBlocked() || !(event.target instanceof Element)) return;
+    const action = event.target.closest('a, button, input, select, textarea, summary, label, dialog, [role="button"], [contenteditable="true"], [data-action], #cartBackdrop');
+    if (!action) focusProductLookup();
+  });
   manualPriceDialog.addEventListener('cancel', (event) => { event.preventDefault(); cancelManualPrice(); });
   $('#manualPriceCancel').addEventListener('click', cancelManualPrice);
   $('#manualPriceNumpad').addEventListener('click', (event) => {

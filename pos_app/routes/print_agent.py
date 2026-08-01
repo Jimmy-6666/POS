@@ -70,7 +70,7 @@ def render_top_level_print_document(job, job_id, desktop_user):
 
     Chromium reliably prints a top-level receipt document, while an outer page
     that prints an iframe can leave the Windows driver dialog open and never
-    emit ``afterprint``.  Keep the established receipt template/layout and add
+    emit ``afterprint``. Keep the established receipt template/layout and add
     only the agent acknowledgement hook after its normal print hook.
     """
     context = document_context(job, autoprint=True, print_job_id=job_id)

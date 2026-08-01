@@ -1,4 +1,38 @@
-# Release 3.1.3 — deployed 2026-07-31
+# Release 3.1.4 — Production release 2026-08-02
+
+- Added automatic bottom scrolling to the POS `รายการขาย` container after
+  every cart render so the most recently appended scan stays visible.
+- Added scanner-focus recovery when the Cashier clicks a non-action area;
+  interactive controls and open blocking dialogs retain their existing focus.
+- Changed existing-product XLSX preview/import to ignore `stock_quantity`
+  completely. Negative or stale exported balances no longer reject unrelated
+  catalog edits and cannot bypass the stock ledger.
+- Preserved new-product audited opening stock and its `opening_balance`
+  movement. No schema migration or business-data rewrite is required.
+- Advanced UAT and canonical Production to Release 3.1.4 and POS asset `v=38`
+  after explicit owner approval.
+- Focused Release 3.1.4, XLSX, POS focus, and sales regression passed 21/21.
+  The full suite completed 197 tests with 196 passed and one existing
+  filesystem-capability skip; `pip check` passed.
+- Before Production approval, deployed the isolated source to UAT port 8001.
+  Browser QA verified a
+  ten-line cart at its exact scroll bottom, non-action focus recovery, dialog
+  focus protection, asset `v=38`, cart cleanup without a sale, and zero
+  console errors. The owner manually confirmed both Cashier behaviors.
+- Live XLSX round-trip parsed all 670 UAT products, including four negative-
+  stock rows, with zero rejected/errors and no writes.
+- Before Production promotion, created a verified local database backup, full
+  recovery bundle, and exact source rollback archive. The protected SYSTEM
+  server and POS desktop startup tasks were repaired.
+- Post-deploy focused tests passed 21/21, the elevated full suite passed
+  197/197, and `pip check` passed. Production/UAT health, runtime Version 3.1.4,
+  raw served/source asset hash, static network/firewall, SQLite quick check,
+  zero foreign-key violations, Migration 30, and unchanged measured business
+  row counts all passed.
+- Recorded the process/UAC/UAT/runtime causes of deployment delay and the
+  next-release checklist in `docs/DEPLOYMENT_LESSONS.md`.
+
+# Release 3.1.3 — Production print-driver diagnostics update 2026-07-31
 
 - Preserved the existing browser print-agent and Windows printer-driver path.
 - Added a POS-user-readable, bounded `runtime/pos-desktop/print-diagnostics.log`
@@ -7,17 +41,10 @@
 - Added a launcher button that opens the local log in Notepad for a `POS`
   account test without Codex access. The log excludes token/PIN/session data
   and cannot affect a completed transaction.
-- The attach-only `POS` launcher now self-heals its per-user default receipt
-  printer to `POSPrinter POS-80` before opening the kiosk print agent and
-  writes the Windows setup result to that same diagnostics log. UAT and the
-  Wilai profile are not changed.
-- Changed automatic receipts to open the real receipt document at the top
-  level before calling `window.print()`. This removes the remaining printable
-  iframe, then logs, acknowledges, and resumes the queue after `afterprint`.
-- Added a Wilai-user startup launcher for the verified browser print agent.
-  It is a printer-only fallback and coordinates with the production desktop
-  launcher so Wilai has exactly one worker after restart; it does not start a
-  server or replace the standard `POS` account setup.
+- Removed the printable iframe from automatic receipts. Edge now prints the
+  actual top-level receipt HTML, then acknowledges the job on `afterprint`.
+- Prevented the Wilai fallback helper and production launcher from running two
+  hidden Edge print agents after restart.
 
 # Release 3.1.2 — released 2026-07-31
 

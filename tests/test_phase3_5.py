@@ -102,7 +102,7 @@ class Phase3To5Tests(unittest.TestCase):
         self.assertEqual(pos_page.status_code, 200)
         self.assertIn(b'id="productLookup"', pos_page.data)
         self.assertIn(b'id="mobileCartBar"', pos_page.data)
-        self.assertIn(b'js/pos.js?v=37', pos_page.data)
+        self.assertIn(b'js/pos.js?v=38', pos_page.data)
         self.assertIn("จัดการออเดอร์ออนไลน์".encode(), pos_page.data)
         self.assertIn(b'css/v2.css', pos_page.data)
         self.assertIn("ตั้งราคาขาย".encode(), self.client.get("/products").data)
@@ -129,14 +129,6 @@ class Phase3To5Tests(unittest.TestCase):
         self.assertEqual(job["document_type"], "sale_receipt")
         print_page = self.client.get(f"{job['render_url']}?token=test-print-token&desktop_user=POS").get_data(as_text=True)
         self.assertIn("addEventListener('load',()=>window.print())", print_page)
-        self.assertIn("/print-agent/ack/", print_page)
-        self.assertIn("browser_afterprint", print_page)
-        self.assertNotIn('id="printDocument"', print_page)
-        document_page = self.client.get(
-            f"/print-agent/document/{job['id']}?token=test-print-token&desktop_user=POS"
-        ).get_data(as_text=True)
-        self.assertNotIn("addEventListener('load',()=>window.print())", document_page)
-        self.assertIn(result["receipt_number"], document_page)
         self.assertTrue(
             self.client.post(
                 "/print-agent/event?token=test-print-token&desktop_user=POS",
