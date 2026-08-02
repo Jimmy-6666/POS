@@ -1,4 +1,4 @@
-# LINE Product-Maintenance Bot — UAT Setup
+# LINE Product-Maintenance Bot — UAT and Production Setup
 
 This document configures the separately deployed VPS bot.  It does not turn the
 POS staff application into a public product-management endpoint.
@@ -16,58 +16,45 @@ login channel) in LINE Developers Console.
    Official Account Manager, keep **Webhooks** enabled, turn off the greeting
    message and response hours, and select **Manual chat** so LINE's own canned
    replies cannot conflict with the product-maintenance flow.
-4. Do not set the webhook URL yet.  It is set after the VPS service and a
-   public HTTPS hostname are healthy.
+4. Keep the approved existing webhook URL when it is already healthy. Group
+   Mode isolates Vision UAT on that webhook; do not replace it with a second
+   UAT URL.
 
 Treat the secret and access token as passwords.  Do not commit them, put them
 in screenshots, or paste them in a Git issue.  They are stored only on the VPS
 in `/etc/raisanngam-line-bot/line-bot.env` (mode `0640`, root-owned).
 
-## 2. DNS and tunnel required for UAT
+## 2. Shared Production webhook and tunnel for Group Mode UAT
 
-`https://dev.raisanngam.com` remains the POS UAT endpoint on port 8002. The
-current UAT deployment uses its own public hostname:
-
-```text
-https://linebot-uat.raisanngam.com/webhook  ->  VPS localhost:8010
-```
-
-Use an outbound Cloudflare Tunnel on the VPS when the existing zone permits it.
-No inbound port 8010 or router/firewall opening is required.  The POS bot
-integration remains behind the existing UAT tunnel at:
+The approved existing endpoint is:
 
 ```text
-https://dev.raisanngam.com/_internal/line-bot/...
+https://linebot.raisanngam.com/webhook  ->  raisanngam-linebot-prd  ->  VPS 127.0.0.1:8010
 ```
 
-If Cloudflare WAF/Access protects `dev.raisanngam.com`, add an allow/skip rule
-for VPS source IP `169.58.77.35` scoped as narrowly as possible to
-`/_internal/line-bot/*`. The route still requires the independent timestamped
-HMAC signature. Without this Cloudflare rule, the VPS receives Cloudflare
-error `1010` before the POS can verify a request.
+Use this same webhook/channel/service for Vision UAT. Isolation is by the
+allowlisted Vision group ID, not by a new hostname, tunnel, or webhook. Keep
+port 8010 bound to localhost; do not open it to the Internet or add router
+port-forwarding. Before the first write, inspect the current signed POS target
+and WAF rule read-only. Do not switch a shared POS base URL if it would change
+the behavior of a legacy group.
 
-The UAT zone plan does not provide the certificate support needed for the
-multi-level `bot.dev.raisanngam.com` hostname, so UAT deliberately uses the
-single-level `linebot-uat.raisanngam.com` name instead. Do not route either
-hostname to the Windows POS directly.
+## 3. Signed POS shared secret
 
-## 3. UAT shared secret
-
-The UAT POS and VPS bot must share one new random secret of at least 32 bytes.
-Generate it once on the Windows UAT machine, place only this line in the
-ignored runtime file below, and place the same value in the VPS environment
-file:
+The bot and POS must use the existing Production-only secret of at least 32
+bytes. Never reuse a development secret or paste this value into source or
+chat. The server-only runtime configuration and VPS environment file retain the
+same value:
 
 ```text
 uat_runtime/config/line-bot-integration.env
 POS_LINE_BOT_SHARED_SECRET=<new random value>
 ```
 
-`start-uat.bat` loads that ignored file, enables the signed service boundary,
-uses port 8002, and trusts `dev.raisanngam.com`. Cloudflare Tunnel replaces the
-original VPS address, so UAT does not use a source-IP filter; HMAC with a
-fresh timestamp is the required authorization control on every call. A direct
-production transport may add an independently verified source-IP filter later.
+The Production startup configuration must load the server-only file after a
+reboot. HMAC with a fresh timestamp remains mandatory on every call. Keep any
+source-IP restriction only when the origin can prove the VPS egress IP without
+allowlisting broad Cloudflare ranges.
 
 ## 4. VPS environment file
 
@@ -79,14 +66,34 @@ example at `/etc/raisanngam-line-bot/line-bot.env` with:
 LINE_BOT_CHANNEL_SECRET=<from LINE Developers>
 LINE_BOT_CHANNEL_ACCESS_TOKEN=<long-lived token from LINE Developers>
 LINE_BOT_ALLOWED_GROUP_IDS=<set after first UAT group event>
+LINE_BOT_VISION_PRODUCT_GROUP_IDS=<UAT/Production Vision group; must be allowed>
 LINE_BOT_ENROLLMENT_MODE=1
 LINE_BOT_USER_ID=<Your user ID from Basic settings>
-POS_LINE_BOT_BASE_URL=https://dev.raisanngam.com
-POS_LINE_BOT_SHARED_SECRET=<same UAT shared secret>
+POS_LINE_BOT_BASE_URL=https://posbot.raisanngam.com
+POS_LINE_BOT_SHARED_SECRET=<existing Production-only shared secret>
 LINE_BOT_DATA_ROOT=/var/lib/raisanngam-line-bot
 LINE_BOT_PORT=8010
 LINE_BOT_RETRY_SECONDS=300
+GEMINI_API_KEY=<required only when a Vision group is enabled>
+# Use a provider-verified structured-Vision model. `gemini-3.1-flash` is not
+# an interchangeable model ID; the current supported example is Flash-Lite.
+GEMINI_MODEL=gemini-3.1-flash-lite
+GEMINI_TIMEOUT_SECONDS=25
+# Exactly one provider attempt per product; failures use manual fallback.
+GEMINI_MAX_ATTEMPTS=1
+GEMINI_MONTHLY_BUDGET_USD=1.00
+# USD per 1M tokens; update these together with GEMINI_MODEL after checking
+# the enabled billing project's current provider pricing.
+GEMINI_INPUT_USD_PER_MILLION_TOKENS=0.25
+GEMINI_OUTPUT_USD_PER_MILLION_TOKENS=1.50
 ```
+
+The model must be enabled and successfully probed in the billing project before
+this configuration is deployed. The bot disables its thinking budget so the
+bounded response allowance is available for the prompt-constrained JSON object,
+then validates that object against its local schema before using it; a
+malformed, unavailable, or empty response always falls back to manual name
+entry.
 
 Set permissions and start only after all placeholders have values:
 
@@ -100,8 +107,9 @@ curl -fsS http://127.0.0.1:8010/health
 
 ## 5. Connect LINE and obtain the group allowlist value
 
-1. Set the LINE webhook URL to
-   `https://linebot-uat.raisanngam.com/webhook` and press **Verify**.
+1. Retain the approved existing Production LINE webhook URL and press
+   **Verify**. UAT uses Group Mode on the same webhook; do not create or switch
+   to a second webhook URL.
 2. Start once with `LINE_BOT_ENROLLMENT_MODE=1` and an empty allowlist. This
    temporary mode records a signed group ID but never sends a reply or runs a
    product operation.
@@ -117,12 +125,18 @@ curl -fsS http://127.0.0.1:8010/health
    unknown/placeholder, cancel, stale-product conflict, and POS-outage
    retry flows.
 
+To enable the automatic Vision Product Flow for the captured UAT group, add its
+value to `LINE_BOT_VISION_PRODUCT_GROUP_IDS`, add the Gemini values above, and
+restart the service. This list must be a subset of the allowlist. After UAT
+acceptance, promote the same group ID without changing the webhook/channel.
+
 ## 6. Group interaction behavior
 
 Every choice button uses a LINE **Message action**, not a postback. The selected
 label is therefore visible in the group as a message from the staff member and
-the bot receives that member's user ID before advancing the owner-bound flow.
-This avoids silent confirmation actions in group chats.
+the bot receives that member's user ID before advancing the flow. Legacy Quote
+flows are intentionally shared by the group; Vision Product flows remain
+owner-bound. This avoids silent confirmation actions in group chats.
 
 The bot does not send a greeting when it is called. Its first chat message is
 the barcode/product result. That result uses the Quote event's reply token when
@@ -138,14 +152,83 @@ and must be greater than any nonzero cost. Normal POS product-image controls
 remain separate and unchanged.
 
 Quoted LINE image bytes are decoded in memory and are never written to the VPS
-filesystem. The bot retains only the LINE message ID plus group/user ownership
-needed to validate a later Quote. That reference becomes unusable after 24
-hours and the worker removes expired references within the next five-minute
-cleanup cycle. This retention does not delete the original message from the
-LINE group; only LINE/the sender controls that chat history.
+filesystem. The bot retains only the LINE message ID and source group needed to
+validate a later Quote. Any member of that same group may Quote the image within
+24 hours, and all group members may progress, cancel, or confirm that group's
+one active legacy flow. The signed POS command records the actual confirmer.
+Vision Product flows remain owner-bound. The worker removes expired references
+within the next five-minute cleanup cycle. This retention does not delete the
+original message from the LINE group; only LINE/the sender controls that chat
+history.
 
 When an existing barcode is found, the first choice message shows the current
 Thai product name, cost, and selling price before offering price maintenance.
+
+### Vision Product Group behavior
+
+A group in `LINE_BOT_VISION_PRODUCT_GROUP_IDS` receives exactly two product
+photos automatically. The Bot collects `imageSet` indexes deterministically,
+including reversed webhook order. Without `imageSet` metadata it pairs only the
+same group/user's two images within 15 seconds. It stores only temporary LINE
+message IDs in Bot SQLite, never image bytes.
+
+The dedicated Vision worker validates both images in memory, decodes a linear
+barcode locally, and calls signed POS lookup before Gemini. Existing named
+products never call Gemini: the staff member may change only the selling price
+and the Bot sends the unchanged current `cost_satang` back to the existing POS
+price endpoint. For unknown barcodes and Placeholders, Gemini may propose a
+name which the owner must confirm or edit; the Bot then asks only for a positive
+whole-baht selling price and sends `create_or_complete` with `cost_satang=0`.
+No Vision command contains an image field or changes a POS product image.
+
+Gemini is limited to one durable job at a time and is separate from the webhook,
+legacy flow, and POS retry worker. Timeout, exhausted 429/5xx, invalid
+structured output, safety refusal, or an unreadable name falls back to manual
+name entry when one barcode was decoded. Missing/ambiguous barcodes or clearly
+different products require two new photos.
+
+### Gemini monthly spending control
+
+`GEMINI_MONTHLY_BUDGET_USD` is an application-enforced hard cap, defaulting to
+`1.00`. Before a Gemini request, the Bot atomically reserves a conservative
+maximum for the two bounded images and 512 output tokens. If the reservation
+would exceed the calendar-month cap in Thailand time, the Bot does not call
+Gemini and continues in `VISION_NAME_EDIT` with: “วงเงิน AI สำหรับเดือนนี้ครบแล้วครับ
+กรุณาพิมพ์ชื่อสินค้าเองได้เลย 😊”. The new calendar month naturally starts a
+new ledger; no manual reset or deletion is needed.
+
+The Bot stores only aggregate monthly usage and idempotent request ledger data:
+month, request count, reserved/estimated cost, actual token-derived cost when
+the SDK returns usage metadata, timestamps, and the job/attempt key. A repeated
+webhook, worker recovery, or retry cannot reuse that attempt key to call Gemini
+again. Missing usage metadata deliberately retains the full reservation. This
+is stricter than assuming a failed or partial API response was free.
+
+Existing named products never reach this ledger: the worker decodes the barcode
+locally and performs signed POS lookup first. Only unknown/Placeholder products
+with one barcode can reserve one Gemini call for their two images. Keep
+`GEMINI_MAX_ATTEMPTS` is fixed at `1`: a transient Gemini failure proceeds to
+manual name entry instead of retrying the provider. This prevents one new
+product from consuming two attempts and preserves the most products within the
+monthly limit.
+
+Run this privileged, secret-free diagnostic on the VPS (it outputs no API key,
+token, group ID, or image data):
+
+```bash
+sudo -u raisanngam-line-bot sh -c 'set -a; . /etc/raisanngam-line-bot/line-bot.env; set +a; /opt/raisanngam-line-bot/venv/bin/python -m line_bot gemini-budget'
+```
+
+It reports the Thailand calendar month, request count, estimated and actual
+USD cost, and remaining budget. It is intentionally not a public HTTP endpoint.
+
+Also create a matching Google Cloud Billing budget for the same project: choose
+monthly calendar period, USD 1.00 amount, and email alerts at 50%, 90%, and
+100%. Budget alerts are monitoring only and do not stop requests immediately;
+the Bot ledger above remains the enforcement control. Before changing
+`GEMINI_MODEL`, verify the provider's exact current input/output prices and
+update both `GEMINI_*_USD_PER_MILLION_TOKENS` values. The cap is only as
+conservative as those configured prices.
 
 Each group/user flow expires one minute after its latest interaction. The worker
 closes expired flows once per second and sends `ผมยกเลิกรายการแล้วเนื่องจากเกินเวลาที่กำหนด
@@ -167,9 +250,10 @@ barcode image again.
 - LINE Messaging API channel secret
 - LINE long-lived channel access token
 - LINE Bot user ID
-- permission to create/route the VPS HTTPS bot hostname, or the resulting
-  hostname and its existing tunnel route
+- verified access to the existing `raisanngam-linebot-prd` tunnel and
+  `linebot.raisanngam.com` route
 - UAT group ID, captured after the first signed webhook event
+- Gemini API key and an approved stable Vision model when a Vision group is enabled
 
 The application has no fallback to the customer LIFF credentials; customer
 ordering identity and staff group-bot authority remain separate.

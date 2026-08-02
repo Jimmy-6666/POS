@@ -25,6 +25,10 @@ class LineMessageRejected(RuntimeError):
     pass
 
 
+class LineContentRejected(RuntimeError):
+    pass
+
+
 LOG = logging.getLogger(__name__)
 
 
@@ -95,13 +99,22 @@ class LineMessagingClient:
         if reply_token:
             self._post("/reply", {"replyToken": reply_token, "messages": [self._buttons_message(text, labels)]})
 
-    def message_content(self, message_id: str) -> bytes:
+    def message_content(self, message_id: str, *, max_bytes: int = 8 * 1024 * 1024) -> bytes:
         request = Request(
             f"https://api-data.line.me/v2/bot/message/{message_id}/content",
             headers={"Authorization": f"Bearer {self.access_token}"},
         )
         with urlopen(request, timeout=30) as response:
-            return response.read()
+            content_type = str(response.headers.get("Content-Type", "")).split(";", 1)[0].strip().lower()
+            if not content_type.startswith("image/"):
+                raise LineContentRejected("LINE message content was not an image.")
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > max_bytes:
+                raise LineContentRejected("LINE image content exceeded the size limit.")
+            content = response.read(max_bytes + 1)
+            if len(content) > max_bytes:
+                raise LineContentRejected("LINE image content exceeded the size limit.")
+            return content
 
 
 class PosIntegrationClient:

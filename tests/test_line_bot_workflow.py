@@ -82,14 +82,14 @@ class LineBotWorkflowTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def image_event(self, message_id="image-1"):
-        return {"type": "message", "source": {"type": "group", "groupId": self.group_id, "userId": self.user_id},
+    def image_event(self, message_id="image-1", *, user_id=None):
+        return {"type": "message", "source": {"type": "group", "groupId": self.group_id, "userId": user_id or self.user_id},
                 "message": {"type": "image", "id": message_id}}
 
-    def quote_event(self):
+    def quote_event(self, *, user_id=None, quote_id="image-1"):
         return {"type": "message", "replyToken": "reply-1",
-                "source": {"type": "group", "groupId": self.group_id, "userId": self.user_id},
-                "message": {"type": "text", "id": "quote-1", "text": "บอท", "quotedMessageId": "image-1"}}
+                "source": {"type": "group", "groupId": self.group_id, "userId": user_id or self.user_id},
+                "message": {"type": "text", "id": "quote-1", "text": "บอท", "quotedMessageId": quote_id}}
 
     def button_event(self, text, *, user_id=None):
         return {"type": "message", "replyToken": f"reply-button-{text}",
@@ -102,7 +102,7 @@ class LineBotWorkflowTests(unittest.TestCase):
                 return label
         self.fail(f"Missing action {name}")
 
-    def test_existing_product_price_flow_is_owner_bound_and_commits_once(self):
+    def test_existing_product_price_flow_is_group_shared_and_records_actual_confirmer(self):
         self.workflow.handle_event(self.image_event())
         self.workflow.handle_event(self.quote_event())
         self.assertEqual(self.line.button_reply_tokens[-1], "reply-1")
@@ -112,24 +112,59 @@ class LineBotWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(self.line.buttons[-1][2], ["แก้ราคาทุน/ราคาขาย"])
         price_action = self.current_action("แก้ราคาทุน/ราคาขาย")
-        # A different group member cannot advance the quoted user's session.
-        self.workflow.handle_event(self.button_event(price_action, user_id="U-other"))
-        self.workflow.handle_event(self.button_event(price_action))
+        cashier_id = "U-other"
+        self.workflow.handle_event(self.button_event(price_action, user_id=cashier_id))
+        self.assertEqual(self.store.conversation(self.group_id, self.user_id)["state"], "PRICE_COST")
         self.assertEqual(
             self.line.texts[-1][1],
             "แก้ราคาทุนเป็นเท่าไหร่ดีครับ\n(หากไม่ทราบระบุ 0) 😊",
         )
-        self.workflow.handle_text_input(self.group_id, self.user_id, "15.50")
-        self.workflow.handle_text_input(self.group_id, self.user_id, "25")
+        self.workflow.handle_text_input(self.group_id, cashier_id, "15.50")
+        self.workflow.handle_text_input(self.group_id, cashier_id, "25")
         confirm = self.current_action("ยืนยัน")
-        self.workflow.handle_event(self.button_event(confirm))
+        self.workflow.handle_event(self.button_event(confirm, user_id=cashier_id))
         self.assertEqual(len(self.pos.applied), 1)
         command = self.pos.applied[0]
         self.assertEqual(command["operation"], "update_prices")
         self.assertEqual((command["cost_satang"], command["sale_baht"]), (1550, 25))
-        self.assertEqual(command["source"]["line_user_id"], self.user_id)
+        self.assertEqual(command["source"]["line_user_id"], cashier_id)
+        self.assertIsNone(self.store.conversation(self.group_id, self.user_id))
         self.assertEqual(self.line.replies[-1][1], "ผมกำลังทำการเชื่อมต่อกับร้านเพื่อแก้ไขข้อมูลครับ ⏳")
-        self.assertEqual(self.line.texts[-1][2], self.user_id)
+        self.assertEqual(self.line.texts[-1][2], cashier_id)
+
+    def test_group_member_can_quote_another_members_image_and_share_the_flow(self):
+        cashier_id = "U-test-cashier"
+        self.workflow.handle_event(self.image_event(user_id=cashier_id))
+        self.workflow.handle_event(self.quote_event())
+
+        conversation = self.store.conversation(self.group_id, self.user_id)
+        self.assertEqual(conversation["state"], "EXISTING_CHOICE")
+        self.assertEqual(conversation["data"]["source_image_id"], "image-1")
+        price_action = self.current_action("แก้ราคาทุน/ราคาขาย")
+
+        self.workflow.handle_event(self.button_event(price_action, user_id=cashier_id))
+        self.assertEqual(self.store.conversation(self.group_id, self.user_id)["state"], "PRICE_COST")
+        self.workflow.handle_text_input(self.group_id, self.user_id, "15.00")
+        self.assertEqual(self.store.conversation(self.group_id, self.user_id)["state"], "PRICE_SALE")
+
+    def test_quote_cannot_use_an_image_from_a_different_group(self):
+        self.store.remember_source_image("other-group-image", "C-other", "U-test-cashier")
+        self.workflow.handle_event(self.quote_event(quote_id="other-group-image"))
+        self.assertIsNone(self.store.conversation(self.group_id, self.user_id))
+        self.assertIn("ในกลุ่มนี้", self.line.texts[-1][1])
+
+    def test_new_quote_does_not_replace_an_active_group_legacy_flow(self):
+        cashier_id = "U-test-cashier"
+        self.workflow.handle_event(self.image_event())
+        self.workflow.handle_event(self.quote_event())
+        self.line.contents["image-2"] = b"barcode-source"
+        self.workflow.handle_event(self.image_event("image-2", user_id=cashier_id))
+        self.workflow.handle_event(self.quote_event(user_id=cashier_id, quote_id="image-2"))
+
+        conversation = self.store.conversation(self.group_id, self.user_id)
+        self.assertEqual(conversation["state"], "EXISTING_CHOICE")
+        self.assertEqual(conversation["data"]["source_image_id"], "image-1")
+        self.assertIn("กำลังดำเนินการอยู่", self.line.replies[-1][1])
 
     def test_legacy_pos_summary_without_cost_satang_still_starts_the_flow(self):
         self.pos.product.pop("cost_satang")
@@ -369,7 +404,9 @@ class LineBotWebhookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             settings = BotSettings(
                 channel_secret="line-channel-secret-for-tests", channel_access_token="line-access-token-for-tests",
-                allowed_group_ids=frozenset(), bot_user_id="U-bot",
+                # Enrollment has precedence even when this group had already
+                # been allowlisted, so no legacy event can produce a write.
+                allowed_group_ids=frozenset({"C-enroll"}), bot_user_id="U-bot",
                 pos_base_url="https://pos.example.test", pos_shared_secret="x" * 32,
                 data_root=Path(temporary), enrollment_mode=True,
             )
