@@ -1,29 +1,45 @@
 *{box-sizing:border-box}
 :root{font-family:Tahoma,"Noto Sans Thai",Arial,sans-serif;color:#000;background:#eee}
 body{margin:0;font-size:12px;line-height:1.35}
-.receipt{width:72mm;min-height:40mm;margin:12px auto;padding:3mm;background:#fff;box-shadow:0 2px 14px #0002;overflow-wrap:anywhere}
-.receipt header{text-align:center}
-.receipt h1{margin:0;font-size:18px;line-height:1.25}
-.receipt h2{margin:0 0 3mm;padding:2mm;border:2px solid #000;text-align:center;font-size:18px}
-.receipt p{margin:1.5mm 0}
-.meta{display:grid;gap:.6mm;margin:2.5mm 0;padding:2mm 0;border-block:1px dashed #000;font-size:11px}
-.receipt table{width:100%;table-layout:fixed;border-collapse:collapse}
-.receipt th{padding:1.5mm 0;border-bottom:1px solid #000;text-align:left;font-size:11px}
-.receipt th:last-child,.receipt td:last-child{width:21mm;text-align:right;white-space:nowrap}
-.receipt td{padding:1.7mm 0;vertical-align:top;border-bottom:1px dotted #999}
-.receipt td:first-child{padding-right:2mm;word-break:break-word}
-.receipt small{display:block;margin-top:.4mm;font-size:10px}
+.receipt{width:80mm;min-height:297mm;margin:12px auto;padding:4mm;background:#fff;box-shadow:0 2px 14px #0002;overflow-wrap:anywhere}
+.void-banner{margin:0 0 3mm;padding:2mm;border:2px solid #000;text-align:center;font-size:18px;font-weight:700}
+.receipt-header{text-align:center}
+.receipt-logo{display:block;width:72mm;height:72mm;margin:0;object-fit:contain}
+.receipt-header h1{margin:1.5mm 0 0;font-size:18px;line-height:1.2}
+.receipt-header p{margin:.6mm 0}
+.store-phone{font-size:12px}
+.receipt-title{font-size:16px;font-weight:700}
+.receipt-meta{margin:2.5mm 0;padding:2mm 0;border-block:1px dashed #000;font-size:11px}
+.receipt-meta p{margin:.5mm 0}
+.receipt-meta span{font-weight:700}
+.receipt-items{width:100%;table-layout:fixed;border-collapse:collapse}
+.item-column{width:51mm}
+.amount-column{width:21mm}
+.receipt-items th{padding:1.5mm 0;border-bottom:1px solid #000;text-align:left;font-size:11px}
+.receipt-items th:last-child,.receipt-items td:last-child{text-align:right;white-space:nowrap}
+.receipt-items td{padding:1.7mm 0;vertical-align:top;border-bottom:1px dotted #999}
+.receipt-items td:first-child{padding-right:2mm;word-break:break-word}
+.receipt-items strong{font-size:12px}
+.receipt-items small{display:block;margin-top:.4mm;font-size:10px}
+.manual-price-reference{font-weight:700}
 .void-note{font-weight:700}
-.totals{margin-top:2mm;padding-top:1mm;border-top:1px dashed #000}
-.totals p{display:flex;justify-content:space-between;gap:3mm}
-.totals p:first-child{padding-bottom:1.5mm;border-bottom:1px solid #000;font-size:15px}
-.totals strong,.totals span:last-child{text-align:right;white-space:nowrap}
-.receipt footer{margin:4mm 0 2mm;text-align:center}
+.receipt-totals{margin-top:2mm;border-top:1px solid #000}
+.receipt-totals p{display:flex;justify-content:space-between;gap:3mm;margin:0;padding:2mm 0;font-size:12px}
+.receipt-totals .grand-total{border-bottom:1px solid #000;font-size:15px;font-weight:700}
+.receipt-totals strong,.receipt-totals span:last-child{text-align:right;white-space:nowrap}
+.receipt-footer{margin:4mm 0 2mm;text-align:center;font-size:12px}
+.receipt-footer strong{font-size:13px}
 .print-button{width:100%;margin-top:3mm;padding:10px;border:0;border-radius:6px;color:#fff;background:#176b46;font:700 14px inherit;cursor:pointer}
+
 @media print{
- :root,body{width:80mm;background:#fff}
- .receipt{width:72mm;margin:0 auto;padding:2mm 0;box-shadow:none}
- .print-button{display:none!important}
- @page{size:80mm auto;margin:4mm}
+  :root,body{width:80mm;min-height:297mm;background:#fff}
+  .receipt{width:80mm;min-height:297mm;margin:0;padding:4mm;box-shadow:none}
+  .receipt-items tr,.receipt-totals,.receipt-footer{break-inside:avoid}
+  .print-button{display:none!important}
+  @page{size:80mm 297mm;margin:0}
 }
-@media screen and (max-width:420px){.receipt{width:min(72mm,100%);margin:0 auto;box-shadow:none}}
+
+@media screen and (max-width:420px){
+  .receipt{width:min(80mm,100%);margin:0 auto;box-shadow:none}
+  .receipt-logo{width:100%;height:auto;aspect-ratio:1}
+}
