@@ -40,6 +40,15 @@ and prints 80 mm receipts through the browser.
   import, auto-scrolls the POS sale list, and restores scanner focus after
   non-action clicks. UAT remains isolated on port `8001`.
 - The port `8002` profile is not the canonical customer Production instance.
+- A LINE group product-maintenance bot candidate is synchronized onto Release
+  3.1.5. It runs as a separate VPS service, uses a timestamped HMAC boundary to
+  the POS, accepts only allowlisted group flows, and adds Migration 31 for
+  idempotent product commands. It has no product-image maintenance flow.
+- Package revision `v3.1.5-prd-linebot-hotfix1` also persists the Production
+  LINE integration environment for SYSTEM server startup and lets the
+  standard `POS` attach-only shortcut skip that intentionally protected
+  server-only file after reboot. Server, backup, and verification paths still
+  load and validate it; no credential ACL is weakened.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
   at `/online-orders`. Products default to online-enabled. The Release 3.1.4
   Production verification snapshot contains 818 products (817 active), 211
@@ -65,6 +74,15 @@ production-ready without barcode and price approval.
 - Keep assets local and the project movable to another Windows PC.
 
 ## Current health
+
+On 2026-08-02, the Release 3.1.5 plus LINE Bot candidate passed 43 focused
+tests (42 passed and one filesystem-capability skip) and the complete 221-test
+suite (220 passed and the same skip).
+
+The final `v3.1.5-prd-linebot-hotfix1` source revision passed 33/33 focused
+LINE/POS/runtime tests and the complete 222-test suite (221 passed with the
+same filesystem-capability skip). Packaging required no Production server
+restart and changed no runtime data, database, migration, or secret.
 
 On 2026-07-30, `python -m unittest discover -s tests -q` completed 179 tests:
 178 passed with one filesystem-capability skip, including Release 3.0.8

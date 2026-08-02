@@ -1,3 +1,50 @@
+# Release 3.1.5 PRD LINE Bot Hotfix 1 source revision — 2026-08-02
+
+- Published one cumulative source package on the exact GitHub `v3.1.5` base
+  commit with the approved LINE Bot candidate, signed POS integration,
+  Migration 31, and Production repair retained together.
+- Added persistent loading and validation of the protected Production LINE
+  integration environment for the SYSTEM server path.
+- Fixed the post-reboot Public Desktop shortcut: the standard-user
+  attach-only launcher no longer attempts to read the server-only LINE secret
+  file. Server, backup, and verification paths still load it, so the
+  SYSTEM/Administrators-only ACL remains unchanged.
+- Packaging and verification did not restart or replace the running
+  Production server and did not include runtime data, databases, uploads,
+  credentials, private keys, browser profiles, or virtual environments.
+- Final focused regression passed 33/33. The full candidate suite completed
+  222 tests with 221 passed and one existing filesystem-capability skip.
+
+# LINE Bot candidate on Release 3.1.5 — 2026-08-02
+
+- Synchronized the approved LINE group product-maintenance bot onto GitHub
+  Release 3.1.5 without replacing its SYSTEM backup-key/SFTP repair, lifecycle
+  scripts, or Production/UAT version identity.
+- Added a separate VPS LINE Messaging API service with signed webhook
+  validation, group allowlisting, Quote + `บอท` and actual `@bot` triggers,
+  visible message-action choices, and one active one-minute flow per
+  `(groupId, userId)`.
+- Added linear-barcode-only decoding with a 10-second bound. Downloaded image
+  bytes remain memory-only; Quote ownership references expire after 24 hours
+  and are swept every five minutes.
+- Existing products show current name, cost, and selling price before the
+  price-change flow. Cost accepts exact satang, selling price remains positive
+  whole baht and must exceed nonzero cost, and the existing
+  `requires_manual_price` flag is retained.
+- Missing and `สินค้าไม่ทราบชื่อ (...)` products use the create/complete flow
+  with defaults `อื่น ๆ`/`ชิ้น`, active/offline state, and no image step.
+- Added the opt-in timestamped HMAC POS boundary, idempotent command and
+  revision checks, source-hash audit provenance, and additive Migration 31.
+  Failed POS connections retry every five minutes without expiry and retain
+  failure logs; later success is announced in the original group with the
+  requester mentioned.
+- Removed every product-image add/edit option from the LINE Bot. Normal POS
+  product-image maintenance is unchanged.
+- Added VPS/systemd setup, LINE Console guidance, Production deployment prompt,
+  and focused integration/workflow regression tests.
+- Verification passed 43 focused tests (42 passed, one filesystem-capability
+  skip) and the complete 221-test suite (220 passed, the same skip).
+
 # Release 3.1.5 — Production backup-connection repair 2026-08-02
 
 - Diagnosed the failed 02:00 scheduled backup: the verified local SQLite

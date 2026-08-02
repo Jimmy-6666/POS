@@ -23,6 +23,7 @@ from .routes.online_admin import bp as online_admin_bp
 from .routes.online_staff import bp as online_staff_bp
 from .routes.print_agent import bp as print_agent_bp
 from .routes.line_auth import bp as line_auth_bp
+from .routes.line_bot_integration import bp as line_bot_integration_bp
 from .routes.maintenance import bp as maintenance_bp
 from .services.print_jobs import init_app as init_print_jobs
 from .services.backup_scheduler import init_app as init_backup_scheduler
@@ -93,6 +94,10 @@ def create_app(test_config=None):
         LINE_LOGIN_FAILURE_LIMIT=int(os.environ.get("LINE_LOGIN_FAILURE_LIMIT", "12")),
         LINE_LOGIN_FAILURE_WINDOW_MINUTES=int(os.environ.get("LINE_LOGIN_FAILURE_WINDOW_MINUTES", "5")),
         APP_BASE_URL=os.environ.get("APP_BASE_URL", "").rstrip("/"),
+        POS_LINE_BOT_ENABLED=os.environ.get("POS_LINE_BOT_ENABLED", "").lower() in {"1", "true", "yes"},
+        POS_LINE_BOT_SHARED_SECRET=os.environ.get("POS_LINE_BOT_SHARED_SECRET", ""),
+        POS_LINE_BOT_ALLOWED_SOURCE_IPS=os.environ.get("POS_LINE_BOT_ALLOWED_SOURCE_IPS", ""),
+        POS_LINE_BOT_MAX_CLOCK_SKEW_SECONDS=int(os.environ.get("POS_LINE_BOT_MAX_CLOCK_SKEW_SECONDS", "300")),
         POS_UPDATE_SIGNER_THUMBPRINT=os.environ.get("POS_UPDATE_SIGNER_THUMBPRINT", runtime_config.update_signer_thumbprint).strip(),
         POS_UPDATE_POWERSHELL=os.environ.get("POS_UPDATE_POWERSHELL", "powershell.exe").strip(),
     )
@@ -149,6 +154,7 @@ def create_app(test_config=None):
     app.register_blueprint(online_staff_bp)
     app.register_blueprint(print_agent_bp)
     app.register_blueprint(line_auth_bp)
+    app.register_blueprint(line_bot_integration_bp)
     app.register_blueprint(maintenance_bp)
 
     @app.context_processor

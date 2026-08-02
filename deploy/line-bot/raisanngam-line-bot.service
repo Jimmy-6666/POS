@@ -1,0 +1,22 @@
+[Unit]
+Description=Raisanngam LINE product-maintenance bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=raisanngam-line-bot
+Group=raisanngam-line-bot
+WorkingDirectory=/opt/raisanngam-line-bot/app
+EnvironmentFile=/etc/raisanngam-line-bot/line-bot.env
+ExecStart=/opt/raisanngam-line-bot/venv/bin/python -m line_bot
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/raisanngam-line-bot
+
+[Install]
+WantedBy=multi-user.target

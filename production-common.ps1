@@ -214,8 +214,109 @@ function Get-ProductionContext {
     }
 }
 
-function Set-ProductionEnvironment {
+function Import-ProductionLineBotEnvironment {
     param($Context)
+    $configPath = Join-Path $Context.RuntimeRoot "config\line-bot-integration.env"
+    if (-not (Test-Path -LiteralPath $configPath)) {
+        return
+    }
+
+    $item = Get-Item -LiteralPath $configPath -Force
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Production LINE Bot configuration must be a regular file: $configPath"
+    }
+    if ($item.Length -gt 65536) {
+        throw "Production LINE Bot configuration is unexpectedly large: $configPath"
+    }
+
+    $allowedKeys = @(
+        "POS_LINE_BOT_ENABLED",
+        "POS_LINE_BOT_SHARED_SECRET",
+        "POS_LINE_BOT_ALLOWED_SOURCE_IPS",
+        "POS_LINE_BOT_MAX_CLOCK_SKEW_SECONDS",
+        "POS_TRUSTED_HOSTS",
+        "POS_TRUST_PROXY"
+    )
+    $values = @{}
+    $lineNumber = 0
+    foreach ($rawLine in @(Get-Content -LiteralPath $configPath -Encoding UTF8)) {
+        $lineNumber += 1
+        $line = [string]$rawLine
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith("#")) {
+            continue
+        }
+        $separator = $trimmed.IndexOf("=")
+        if ($separator -lt 1) {
+            throw "Invalid Production LINE Bot configuration line $lineNumber."
+        }
+        $key = $trimmed.Substring(0, $separator).Trim()
+        $value = $trimmed.Substring($separator + 1).Trim()
+        if ($key -notin $allowedKeys) {
+            throw "Unsupported Production LINE Bot configuration key: $key"
+        }
+        if ($values.ContainsKey($key)) {
+            throw "Duplicate Production LINE Bot configuration key: $key"
+        }
+        $values[$key] = $value
+    }
+
+    foreach ($requiredKey in $allowedKeys) {
+        if (-not $values.ContainsKey($requiredKey)) {
+            throw "Missing Production LINE Bot configuration key: $requiredKey"
+        }
+    }
+    if ($values["POS_LINE_BOT_ENABLED"].ToLowerInvariant() -notin @("0", "1", "false", "true", "no", "yes")) {
+        throw "POS_LINE_BOT_ENABLED must be a boolean value."
+    }
+    if ($values["POS_TRUST_PROXY"].ToLowerInvariant() -notin @("0", "1", "false", "true", "no", "yes")) {
+        throw "POS_TRUST_PROXY must be a boolean value."
+    }
+    if ($values["POS_LINE_BOT_SHARED_SECRET"].Length -lt 32) {
+        throw "POS_LINE_BOT_SHARED_SECRET must contain at least 32 characters."
+    }
+    $clockSkew = 0
+    if (-not [int]::TryParse($values["POS_LINE_BOT_MAX_CLOCK_SKEW_SECONDS"], [ref]$clockSkew) -or $clockSkew -lt 1 -or $clockSkew -gt 3600) {
+        throw "POS_LINE_BOT_MAX_CLOCK_SKEW_SECONDS must be between 1 and 3600."
+    }
+    foreach ($sourceIp in @($values["POS_LINE_BOT_ALLOWED_SOURCE_IPS"] -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+        $parsedAddress = $null
+        if (-not [Net.IPAddress]::TryParse($sourceIp, [ref]$parsedAddress)) {
+            throw "POS_LINE_BOT_ALLOWED_SOURCE_IPS contains an invalid IP address."
+        }
+    }
+    $configuredHosts = @($values["POS_TRUSTED_HOSTS"] -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if (-not $configuredHosts) {
+        throw "POS_TRUSTED_HOSTS must contain at least one hostname."
+    }
+    foreach ($configuredHost in $configuredHosts) {
+        if ($configuredHost -notmatch "^[A-Za-z0-9.-]+(?::[0-9]+)?$") {
+            throw "POS_TRUSTED_HOSTS contains an invalid hostname."
+        }
+    }
+
+    foreach ($key in $allowedKeys) {
+        [Environment]::SetEnvironmentVariable($key, [string]$values[$key], "Process")
+    }
+}
+
+function Set-ProductionEnvironment {
+    param(
+        $Context,
+        [switch]$DesktopAttachOnly
+    )
+    $trustedHostsBeforeRuntimeConfig = @(
+        @($env:POS_TRUSTED_HOSTS -split ",") |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ }
+    )
+    # The standard POS desktop account intentionally cannot read server-only
+    # integration secrets. Attach-only launchers need only the local health,
+    # display-state, and print-agent settings; the SYSTEM server still loads
+    # and validates the LINE Bot environment on every server startup.
+    if (-not $DesktopAttachOnly) {
+        Import-ProductionLineBotEnvironment $Context
+    }
     $env:POS_RUNTIME_ROOT = $Context.RuntimeRoot
     $env:POS_PORT = [string]$Context.Port
     $env:POS_BIND_HOST = "0.0.0.0"
@@ -231,12 +332,12 @@ function Set-ProductionEnvironment {
             $env:POS_PRINT_AGENT_TOKEN = $token
         }
     }
-    $trustedHosts = @(
+    $trustedHostsFromRuntimeConfig = @(
         @($env:POS_TRUSTED_HOSTS -split ",") |
             ForEach-Object { $_.Trim() } |
             Where-Object { $_ }
     )
-    $env:POS_TRUSTED_HOSTS = (@($trustedHosts + $Context.ServerIp + "localhost" + "127.0.0.1") |
+    $env:POS_TRUSTED_HOSTS = (@($trustedHostsBeforeRuntimeConfig + $trustedHostsFromRuntimeConfig + $Context.ServerIp + "localhost" + "127.0.0.1") |
         Select-Object -Unique) -join ","
 }
 

@@ -19,6 +19,7 @@ authentication context (`current_staff`, `csrf_token`) and shared shell/assets.
 | `templates/base.html`, `app.css`, `v2.css` | nearly every screen | Responsive layout, navigation, role-specific UI |
 | `routes/reporting.py` | closing, billing, reports, CSV | Settlement boundaries, cash totals, permissions |
 | `pos_desktop.py` / `display_state.py` | Windows Release 2.1 launch flow | Ports, process ownership, fullscreen state |
+| `routes/line_bot_integration.py` / `services/line_bot_products.py` | VPS LINE Bot only | HMAC boundary, product cost/selling-price master fields, idempotency, audit |
 
 ## Domain coupling
 
@@ -52,6 +53,14 @@ Use the full suite when changing any high-impact module.
 Production lifecycle work depends on runtime_paths.py, migrations.py, the
 locked dependency file, and the PowerShell scripts. It affects database
 startup, runtime data preservation, Task Scheduler, and firewall scope.
+
+The LINE Bot is a separate VPS process. Its `line_bot/storage.py` queue owns
+LINE webhook deduplication, one-minute group/user flows with a timeout notice,
+24-hour source-image reference metadata, and indefinite POS retry records. It
+reaches only the signed, opt-in POS integration routes; it never reuses
+customer LIFF credentials or browser staff sessions. The POS integration uses
+product price fields, audit logs, and Migration 31 command records, so its
+change set requires full database/product regression coverage.
 
 Sprint 2 maintenance flow:
 
