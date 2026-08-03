@@ -1,0 +1,52 @@
+def _sale_receipt_payload(sale_id, printer_name):
+    db = get_db()
+    settings = dict(db.execute("SELECT key,value FROM settings").fetchall())
+    sale = db.execute(
+        "SELECT s.*,st.display_name FROM sales s JOIN staff st ON st.id=s.cashier_id WHERE s.id=?",
+        (sale_id,),
+    ).fetchone()
+    if not sale:
+        raise ValueError("sale not found")
+    payment_label = {
+        "cash": "เงินสด",
+        "scan": "สแกนจ่าย",
+        "transfer": "โอนเงิน",
+        "billing": "วางบิล",
+    }.get(sale["payment_method_code"], sale["payment_method_code"])
+    lines = ["-" * 32]
+    items = db.execute(
+        "SELECT *,quantity-voided_quantity AS remaining_quantity FROM sale_items WHERE sale_id=?",
+        (sale_id,),
+    ).fetchall()
+    for item in items:
+        quantity = item["remaining_quantity"]
+        if quantity <= 0:
+            continue
+        line_total = item["line_total_satang"] * quantity // item["quantity"]
+        lines.extend((
+            item["product_name"],
+            f" {quantity:g} x {_money(item['unit_price_satang'])} = {_money(line_total)}",
+        ))
+    lines.extend((
+        "-" * 32,
+        f"รวม              {_money(sale['total_satang'])} บาท",
+        f"ชำระโดย          {payment_label}",
+    ))
+    if sale["payment_method_code"] == "cash":
+        lines.extend((
+            f"รับเงิน           {_money(sale['amount_received_satang'])}",
+            f"เงินทอน          {_money(sale['change_satang'])}",
+        ))
+    lines.extend(("-" * 32, "ขอบคุณที่ใช้บริการ"))
+    return {
+        "printer_name": printer_name,
+        "document_name": f"POS {sale['receipt_number']}",
+        "header": "\n".join((
+            settings.get("store_name") or "แสนงาม มินิมาร์ท",
+            "ใบเสร็จรับเงิน",
+            sale["receipt_number"],
+            _bangkok_datetime(sale["created_at"]),
+            f"แคชเชียร์: {sale['display_name']}",
+        )),
+        "body": "\n".join(lines),
+    }
