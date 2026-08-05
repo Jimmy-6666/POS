@@ -1,5 +1,7 @@
 import base64
+import gzip
 import hashlib
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -103,6 +105,10 @@ class ReceiptFormatTests(unittest.TestCase):
         self.assertEqual(payload["store_phone"], "02-123-4567")
         self.assertEqual(payload["receipt_number"], "POS-20260802-0001")
         self.assertEqual(payload["receipt_datetime"], "02/08/2026 10:04:05")
+        self.assertEqual(
+            hashlib.sha256(Path(payload["logo_path"]).read_bytes()).hexdigest(),
+            "ef7641365048ebb73d64e6282fc1a7d218080bb5c01f56bab3c8c703bd52b648",
+        )
         self.assertEqual(payload["delivery_fee"], "")
         self.assertEqual(payload["total"], "260.00")
         self.assertEqual(payload["amount_received"], "300.00")
@@ -118,7 +124,10 @@ class ReceiptFormatTests(unittest.TestCase):
         with self.app.app_context():
             payload = _sale_receipt_payload(self.sale_id, "POSPrinter POS-80")
         command = _windows_gdi_command(payload)
-        script = base64.b64decode(command[-1]).decode("utf-16le")
+        bootstrap = base64.b64decode(command[-1]).decode("utf-16le")
+        compressed = re.search(r"\$compressed = \[Convert\]::FromBase64String\('([^']+)'\)", bootstrap)
+        self.assertIsNotNone(compressed)
+        script = gzip.decompress(base64.b64decode(compressed.group(1))).decode("utf-16le")
         drawer_block = """try {
     # Keep the original single drawer pulse before the receipt job.
     $drawer = [byte[]](0x1B,0x40,0x1B,0x70,0,25,250)
@@ -129,10 +138,14 @@ class ReceiptFormatTests(unittest.TestCase):
 
         self.assertEqual(hashlib.sha256(drawer_block.encode("utf-8")).hexdigest(), DRAWER_BLOCK_SHA256)
         self.assertEqual(script.count("$drawer = [byte[]](0x1B,0x40,0x1B,0x70,0,25,250)"), 1)
-        self.assertLess(script.index("$drawer ="), script.index("$logo ="))
-        self.assertLess(script.index("$logo ="), script.index("::Print($payloadJson)"))
-        self.assertIn('new PaperSize("Receipt 80 x 297 mm", 315, 1169)', script)
-        self.assertIn("new Margins(16, 16, 4, 4)", script)
+        self.assertLess(script.index("$drawer ="), script.index("::Print($payloadJson)"))
+        self.assertIn("DrawReceiptLogo", script)
+        self.assertIn("payload.logo_path", script)
+        self.assertNotIn("$logo = [byte[]]", script)
+        self.assertIn('new PaperSize("80(72)mm x 297mm", 283, 1169)', script)
+        self.assertIn("available.Width == 283 && available.Height == 1169", script)
+        self.assertIn("document.DefaultPageSettings.Landscape = false", script)
+        self.assertIn("new Margins(0, 0, 16, 16)", script)
 
 
 if __name__ == "__main__":

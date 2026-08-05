@@ -1,4 +1,5 @@
 import base64
+import gzip
 import json
 import os
 import secrets
@@ -6,6 +7,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from flask import current_app, url_for
 
@@ -139,6 +141,7 @@ def _sale_receipt_payload(sale_id, printer_name):
         "document_name": f"POS {sale['receipt_number']}",
         "store_name": store_name,
         "store_phone": settings.get("store_phone") or "",
+        "logo_path": str(Path(current_app.root_path) / "static" / "img" / "receipt-logo.png"),
         "title": "ใบวางบิล" if sale["payment_method_code"] == "billing" else "ใบเสร็จรับเงิน",
         "status": sale["status"],
         "receipt_number": sale["receipt_number"],
@@ -235,6 +238,7 @@ public static class SaengngamReceiptPrinter {{
         public string body {{ get; set; }}
         public string store_name {{ get; set; }}
         public string store_phone {{ get; set; }}
+        public string logo_path {{ get; set; }}
         public string title {{ get; set; }}
         public string status {{ get; set; }}
         public string receipt_number {{ get; set; }}
@@ -293,6 +297,29 @@ public static class SaengngamReceiptPrinter {{
         }}
     }}
 
+    private static float DrawReceiptLogo(Graphics graphics, string logoPath, float x, float y, float width) {{
+        if (String.IsNullOrWhiteSpace(logoPath) || !System.IO.File.Exists(logoPath)) return 0f;
+        try {{
+            using (var logo = Image.FromFile(logoPath)) {{
+                const float maxLogoWidth = 180f;
+                const float maxLogoHeight = 180f;
+                float scale = Math.Min(
+                    Math.Min(maxLogoWidth, width) / logo.Width,
+                    maxLogoHeight / logo.Height
+                );
+                float logoWidth = logo.Width * scale;
+                float logoHeight = logo.Height * scale;
+                var previousInterpolation = graphics.InterpolationMode;
+                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                graphics.DrawImage(logo, new RectangleF(x + (width - logoWidth) / 2f, y, logoWidth, logoHeight));
+                graphics.InterpolationMode = previousInterpolation;
+                return logoHeight;
+            }}
+        }} catch {{
+            return 0f;
+        }}
+    }}
+
     private static float DrawLeftRight(
         Graphics graphics, string label, string value, Font leftFont, Font rightFont,
         Brush brush, float x, float y, float width
@@ -339,6 +366,7 @@ public static class SaengngamReceiptPrinter {{
                 y += DrawCentered(graphics, "VOID ทั้งบิล", titleFont, Brushes.Black, x, y + 4f, width) + 10f;
             }}
 
+            y += DrawReceiptLogo(graphics, payload.logo_path, x, y, width) + rowGap;
             y += DrawCentered(graphics, payload.store_name, storeFont, Brushes.Black, x, y, width) + 2f;
             if (!String.IsNullOrWhiteSpace(payload.store_phone)) {{
                 y += DrawCentered(graphics, "โทร. " + payload.store_phone, normalFont, Brushes.Black, x, y, width) + 1f;
@@ -452,8 +480,20 @@ public static class SaengngamReceiptPrinter {{
         document.PrintController = new StandardPrintController();
         bool isSaleReceipt = String.Equals(payload.layout, "sale_receipt_80mm", StringComparison.Ordinal);
         if (isSaleReceipt) {{
-            document.DefaultPageSettings.PaperSize = new PaperSize("Receipt 80 x 297 mm", 315, 1169);
-            document.DefaultPageSettings.Margins = new Margins(16, 16, 4, 4);
+            // POS-80 drivers expose an 80 mm roll as a 72 mm printable form:
+            // the remaining 4 mm at each side is the roll's hardware margin.
+            // Asking this driver for an 80 mm printable canvas clips the right
+            // edge after the software applies its own side margins.
+            PaperSize receiptPaper = new PaperSize("80(72)mm x 297mm", 283, 1169);
+            foreach (PaperSize available in document.PrinterSettings.PaperSizes) {{
+                if (available.Width == 283 && available.Height == 1169) {{
+                    receiptPaper = available;
+                    break;
+                }}
+            }}
+            document.DefaultPageSettings.Landscape = false;
+            document.DefaultPageSettings.PaperSize = receiptPaper;
+            document.DefaultPageSettings.Margins = new Margins(0, 0, 16, 16);
         }} else {{
             document.DefaultPageSettings.Margins = new Margins(3, 3, 3, 3);
         }}
@@ -473,18 +513,20 @@ try {{
 }} catch {{
     # Optional RAW drawer support must never suppress the receipt.
 }}
-try {{
-    # Print the printer-stored logo before the GDI receipt.  This is a
-    # separate RAW job so a driver that accepts GDI but rejects one combined
-    # job cannot prevent the receipt from printing.
-    $logo = [byte[]](0x1B,0x40,0x1B,0x74,20,0x1C,0x70,1,0,0x0A)
-    [SaengngamReceiptPrinter]::SendRaw([string]$payload.printer_name, $logo)
-}} catch {{
-    # Logo support is optional; receipt output remains authoritative.
-}}
+# The approved logo is embedded in the GDI receipt above.  The POS-80 stored
+# logo RAW command is not reliable from the SYSTEM production service, and a
+# separate RAW fallback can duplicate the logo for interactive printer users.
 [SaengngamReceiptPrinter]::Print($payloadJson)
 """
-    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    compressed_script = base64.b64encode(gzip.compress(script.encode("utf-16le"), compresslevel=9)).decode("ascii")
+    bootstrap = f"""
+$compressed = [Convert]::FromBase64String('{compressed_script}')
+$compressedStream = [IO.MemoryStream]::new($compressed)
+$gzipStream = [IO.Compression.GzipStream]::new($compressedStream, [IO.Compression.CompressionMode]::Decompress)
+$reader = [IO.StreamReader]::new($gzipStream, [Text.Encoding]::Unicode)
+Invoke-Expression $reader.ReadToEnd()
+"""
+    encoded = base64.b64encode(bootstrap.encode("utf-16le")).decode("ascii")
     return [
         "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
         "-EncodedCommand", encoded,

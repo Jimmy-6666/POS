@@ -1,3 +1,23 @@
+# Release 3.1.8 - 80 mm POSPrinter receipt rendering 2026-08-03
+
+- Corrected direct Windows GDI receipt rendering for the installed `POSPrinter
+  POS-80` driver. Its `80(72)mm x 297mm` form represents an 80 mm roll with a
+  72 mm printable area; requesting an 80 mm printable canvas could clip the
+  right-hand content.
+- The renderer now selects that native 72 mm form, uses its hardware side
+  margins, explicitly keeps portrait orientation, and retains 4 mm top/bottom
+  spacing. Receipt fields, the single drawer pulse, sales, inventory,
+  and database schema are unchanged.
+- Focused receipt tests passed 3/3, the generated C# renderer compiled without
+  printing, and an owner-approved historical receipt was submitted to the
+  physical USB printer after the Production restart. The customer confirmed
+  the corrected layout on the physical receipt.
+- Replaced the POS-80 stored-logo RAW command with the approved local
+  `receipt-logo.png` drawn inside the same GDI receipt job. The RAW command
+  was unreliable when the live service ran as `SYSTEM`; the customer confirmed
+  the GDI logo on the exact completed-sale print path. The command remains
+  below the Windows limit and the drawer pulse is unchanged.
+
 # Release 3.1.5 — Production backup-connection repair 2026-08-02
 
 - Diagnosed the failed 02:00 scheduled backup: the verified local SQLite

@@ -190,7 +190,7 @@ function Get-ProductionContext {
         InstallRoot = $resolvedInstallRoot
         RuntimeRoot = $resolvedRuntimeRoot
         Port = $Port
-        AppVersion = "3.1.5"
+        AppVersion = "3.1.8"
         ServerIp = "192.168.0.200"
         LanNetworks = "192.168.0.0/24"
         DefaultGateway = "192.168.0.1"

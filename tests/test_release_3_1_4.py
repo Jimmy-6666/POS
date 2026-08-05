@@ -32,7 +32,7 @@ class Release314Tests(unittest.TestCase):
         self.assertIn("if (!action) focusProductLookup();", js)
 
     def test_release_identity_is_314_and_uat_is_explicit(self):
-        self.assertEqual(DEFAULT_APP_VERSION, "3.1.5")
+        self.assertEqual(DEFAULT_APP_VERSION, "3.1.8")
         base = (ROOT / "pos_app" / "templates" / "base.html").read_text(
             encoding="utf-8"
         )
@@ -43,13 +43,13 @@ class Release314Tests(unittest.TestCase):
         launcher = (ROOT / "pos_desktop.py").read_text(encoding="utf-8")
         release_note = (ROOT / "VERSION_3.1.4.md").read_text(encoding="utf-8")
 
-        self.assertIn("R3.1.5", base)
+        self.assertIn("R3.1.8", base)
         self.assertIn("filename='js/pos.js',v=38", pos)
         self.assertIn('set "POS_PORT=8001"', start_uat)
-        self.assertIn('set "POS_APP_VERSION=3.1.5"', start_uat)
-        self.assertIn("3.1.5 UAT", start_uat)
-        self.assertIn("POS Desktop Launcher · Version 3.1.5", launcher)
-        self.assertIn('messagebox.showerror("POS 3.1.5"', launcher)
+        self.assertIn('set "POS_APP_VERSION=3.1.8"', start_uat)
+        self.assertIn("3.1.8 UAT", start_uat)
+        self.assertIn("POS Desktop Launcher · Version 3.1.8", launcher)
+        self.assertIn('messagebox.showerror("POS 3.1.8"', launcher)
         self.assertIn("Production", release_note)
         self.assertIn("deployed to Production", release_note)
 
