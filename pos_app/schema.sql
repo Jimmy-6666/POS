@@ -184,6 +184,36 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE INDEX IF NOT EXISTS idx_products_name_th ON products(name_th);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 
+CREATE TABLE IF NOT EXISTS line_bot_commands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    command_id TEXT NOT NULL UNIQUE,
+    payload_sha256 TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('applied','rejected','conflict')),
+    result_json TEXT NOT NULL,
+    source_group_hash TEXT,
+    source_user_hash TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    applied_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_line_bot_commands_created
+ON line_bot_commands(created_at);
+
+CREATE TABLE IF NOT EXISTS line_bot_image_cleanup (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    image_path TEXT NOT NULL UNIQUE,
+    product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+    reason TEXT NOT NULL,
+    delete_after TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+    failure_detail TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_line_bot_image_cleanup_due
+ON line_bot_image_cleanup(deleted_at,delete_after);
+
 CREATE TABLE IF NOT EXISTS pos_button_groups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name_th TEXT NOT NULL CHECK(length(trim(name_th)) BETWEEN 1 AND 80),

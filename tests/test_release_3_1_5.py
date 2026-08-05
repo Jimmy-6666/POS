@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 class Release315Tests(unittest.TestCase):
     def test_release_identity_and_backup_repair_tools_are_wired(self):
-        self.assertEqual(DEFAULT_APP_VERSION, "3.1.8")
+        self.assertEqual(DEFAULT_APP_VERSION, "3.2.0")
         base = (ROOT / "pos_app" / "templates" / "base.html").read_text(encoding="utf-8")
         production_common = (ROOT / "production-common.ps1").read_text(encoding="utf-8")
         repair = (ROOT / "repair-production.ps1").read_text(encoding="utf-8")
@@ -18,8 +18,8 @@ class Release315Tests(unittest.TestCase):
         stop_production = (ROOT / "stop-production.ps1").read_text(encoding="utf-8")
         release_note = (ROOT / "VERSION_3.1.5.md").read_text(encoding="utf-8")
 
-        self.assertIn("R3.1.8", base)
-        self.assertIn('AppVersion = "3.1.8"', production_common)
+        self.assertIn("R3.2.0", base)
+        self.assertIn('AppVersion = "3.2.0"', production_common)
         self.assertIn("Repair-ProductionVpsBackupSecrets", repair)
         self.assertIn("Test-ProductionVpsBackupSecrets", verify)
         self.assertIn("pos_app.backup_cli test-connection", connection_test)

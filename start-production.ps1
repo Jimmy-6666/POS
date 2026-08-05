@@ -40,7 +40,11 @@ try {
         Ensure-RuntimeDirectories $context
         $null = Ensure-ProductionPrintAgentToken $context
     }
-    Set-ProductionEnvironment $context
+    if ($Desktop -and $AttachOnly) {
+        Set-ProductionEnvironment $context -DesktopAttachOnly
+    } else {
+        Set-ProductionEnvironment $context
+    }
     # Receipt delivery uses the verified Windows printer-driver path instead
     # of the browser kiosk worker. Keep this setting in the startup script so
     # an ordinary Windows restart cannot fall back to Edge printing.
