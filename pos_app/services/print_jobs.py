@@ -1,4 +1,5 @@
 import base64
+import gzip
 import json
 import os
 import secrets
@@ -6,6 +7,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from flask import current_app, url_for
 
@@ -111,7 +113,7 @@ def _sale_receipt_payload(sale_id, printer_name):
         "transfer": "โอนเงิน",
         "billing": "วางบิล",
     }.get(sale["payment_method_code"], sale["payment_method_code"])
-    lines = ["-" * 32]
+    receipt_items = []
     items = db.execute(
         "SELECT *,quantity-voided_quantity AS remaining_quantity FROM sale_items WHERE sale_id=?",
         (sale_id,),
@@ -121,32 +123,48 @@ def _sale_receipt_payload(sale_id, printer_name):
         if quantity <= 0:
             continue
         line_total = item["line_total_satang"] * quantity // item["quantity"]
-        lines.extend((
-            item["product_name"],
-            f" {quantity:g} x {_money(item['unit_price_satang'])} = {_money(line_total)}",
-        ))
-    lines.extend((
-        "-" * 32,
-        f"รวม              {_money(sale['total_satang'])} บาท",
-        f"ชำระโดย          {payment_label}",
-    ))
-    if sale["payment_method_code"] == "cash":
-        lines.extend((
-            f"รับเงิน           {_money(sale['amount_received_satang'])}",
-            f"เงินทอน          {_money(sale['change_satang'])}",
-        ))
-    lines.extend(("-" * 32, "ขอบคุณที่ใช้บริการ"))
+        receipt_items.append({
+            "name": item["product_name"],
+            "detail": f"{quantity:g} × {_money(item['unit_price_satang'])} บาท",
+            "amount": _money(line_total),
+            "manual_price_reference": item["manual_price_reference"] or "",
+            "void_note": (
+                f"Void แล้ว {item['voided_quantity']:g}"
+                if item["voided_quantity"]
+                else ""
+            ),
+        })
+    store_name = settings.get("store_name") or "แสนงาม มินิมาร์ท"
     return {
+        "layout": "sale_receipt_80mm",
         "printer_name": printer_name,
         "document_name": f"POS {sale['receipt_number']}",
-        "header": "\n".join((
-            settings.get("store_name") or "แสนงาม มินิมาร์ท",
-            "ใบเสร็จรับเงิน",
-            sale["receipt_number"],
-            _bangkok_datetime(sale["created_at"]),
-            f"แคชเชียร์: {sale['display_name']}",
-        )),
-        "body": "\n".join(lines),
+        "store_name": store_name,
+        "store_phone": settings.get("store_phone") or "",
+        "logo_path": str(Path(current_app.root_path) / "static" / "img" / "receipt-logo.png"),
+        "title": "ใบวางบิล" if sale["payment_method_code"] == "billing" else "ใบเสร็จรับเงิน",
+        "status": sale["status"],
+        "receipt_number": sale["receipt_number"],
+        "receipt_datetime": _bangkok_datetime(sale["created_at"]),
+        "cashier": sale["display_name"],
+        "items": receipt_items,
+        # Delivery is not enabled for POS receipts yet. Keep the structured
+        # field for the Windows renderer, but leave it blank so no delivery
+        # row is emitted; the persisted sale total remains unchanged.
+        "delivery_fee": "",
+        "total": _money(sale["total_satang"]),
+        "payment_label": payment_label,
+        "amount_received": (
+            _money(sale["amount_received_satang"])
+            if sale["payment_method_code"] == "cash"
+            else ""
+        ),
+        "change": (
+            _money(sale["change_satang"])
+            if sale["payment_method_code"] == "cash"
+            else ""
+        ),
+        "footer_store_name": store_name,
     }
 
 
@@ -194,12 +212,47 @@ def _checked_order_payload(order_id, printer_name):
 def _windows_gdi_command(payload):
     payload_b64 = base64.b64encode(json.dumps(payload, ensure_ascii=False).encode("utf-8")).decode("ascii")
     script = f"""
-$payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload_b64}')) | ConvertFrom-Json
+$payloadJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload_b64}'))
+$payload = $payloadJson | ConvertFrom-Json
 Add-Type -TypeDefinition @'
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Printing;
+using System.Web.Script.Serialization;
 public static class SaengngamReceiptPrinter {{
+    public class ReceiptItem {{
+        public string name {{ get; set; }}
+        public string detail {{ get; set; }}
+        public string amount {{ get; set; }}
+        public string manual_price_reference {{ get; set; }}
+        public string void_note {{ get; set; }}
+    }}
+
+    public class ReceiptPayload {{
+        public string layout {{ get; set; }}
+        public string printer_name {{ get; set; }}
+        public string document_name {{ get; set; }}
+        public string header {{ get; set; }}
+        public string body {{ get; set; }}
+        public string store_name {{ get; set; }}
+        public string store_phone {{ get; set; }}
+        public string logo_path {{ get; set; }}
+        public string title {{ get; set; }}
+        public string status {{ get; set; }}
+        public string receipt_number {{ get; set; }}
+        public string receipt_datetime {{ get; set; }}
+        public string cashier {{ get; set; }}
+        public List<ReceiptItem> items {{ get; set; }}
+        public string delivery_fee {{ get; set; }}
+        public string total {{ get; set; }}
+        public string payment_label {{ get; set; }}
+        public string amount_received {{ get; set; }}
+        public string change {{ get; set; }}
+        public string footer_store_name {{ get; set; }}
+    }}
+
     private class DocInfo {{
         [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] public string pDocName = null;
         [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] public string pOutputFile = null;
@@ -229,32 +282,230 @@ public static class SaengngamReceiptPrinter {{
         }} finally {{ ClosePrinter(handle); }}
     }}
 
-    public static void Print(string printerName, string documentName, string header, string body) {{
-        var document = new PrintDocument();
-        document.PrinterSettings.PrinterName = printerName;
-        if (!document.PrinterSettings.IsValid) throw new InvalidOperationException("Printer unavailable");
-        document.DocumentName = documentName;
-        document.PrintController = new StandardPrintController();
-        document.DefaultPageSettings.Margins = new Margins(3, 3, 3, 3);
-        document.PrintPage += (sender, args) => {{
-            float x = args.MarginBounds.Left;
-            float width = args.MarginBounds.Width;
-            float y = args.MarginBounds.Top;
-            using (var title = new Font("Tahoma", 11, FontStyle.Bold))
-            using (var content = new Font("Tahoma", 8, FontStyle.Regular))
-            using (var centered = new StringFormat() {{ Alignment = StringAlignment.Center }}) {{
-                var headerBox = new RectangleF(x, y, width, args.MarginBounds.Height);
-                args.Graphics.DrawString(header, title, Brushes.Black, headerBox, centered);
-                y += args.Graphics.MeasureString(header, title, (int)width).Height + 4;
-                var bodyBox = new RectangleF(x, y, width, args.MarginBounds.Bottom - y);
-                args.Graphics.DrawString(body, content, Brushes.Black, bodyBox);
+    private static float DrawWrapped(Graphics graphics, string text, Font font, Brush brush, RectangleF bounds) {{
+        string value = text ?? "";
+        SizeF measured = graphics.MeasureString(value, font, Math.Max(1, (int)bounds.Width));
+        graphics.DrawString(value, font, brush, bounds);
+        return measured.Height;
+    }}
+
+    private static float DrawCentered(Graphics graphics, string text, Font font, Brush brush, float x, float y, float width) {{
+        using (var centered = new StringFormat() {{ Alignment = StringAlignment.Center }}) {{
+            SizeF measured = graphics.MeasureString(text ?? "", font, Math.Max(1, (int)width), centered);
+            graphics.DrawString(text ?? "", font, brush, new RectangleF(x, y, width, measured.Height), centered);
+            return measured.Height;
+        }}
+    }}
+
+    private static float DrawReceiptLogo(Graphics graphics, string logoPath, float x, float y, float width) {{
+        if (String.IsNullOrWhiteSpace(logoPath) || !System.IO.File.Exists(logoPath)) return 0f;
+        try {{
+            using (var logo = Image.FromFile(logoPath)) {{
+                const float maxLogoWidth = 180f;
+                const float maxLogoHeight = 180f;
+                float scale = Math.Min(
+                    Math.Min(maxLogoWidth, width) / logo.Width,
+                    maxLogoHeight / logo.Height
+                );
+                float logoWidth = logo.Width * scale;
+                float logoHeight = logo.Height * scale;
+                var previousInterpolation = graphics.InterpolationMode;
+                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                graphics.DrawImage(logo, new RectangleF(x + (width - logoWidth) / 2f, y, logoWidth, logoHeight));
+                graphics.InterpolationMode = previousInterpolation;
+                return logoHeight;
             }}
+        }} catch {{
+            return 0f;
+        }}
+    }}
+
+    private static float DrawLeftRight(
+        Graphics graphics, string label, string value, Font leftFont, Font rightFont,
+        Brush brush, float x, float y, float width
+    ) {{
+        const float amountWidth = 83f;
+        const float columnGap = 6f;
+        float leftWidth = Math.Max(1f, width - amountWidth - columnGap);
+        float leftHeight = graphics.MeasureString(label ?? "", leftFont, Math.Max(1, (int)leftWidth)).Height;
+        using (var right = new StringFormat() {{ Alignment = StringAlignment.Far }}) {{
+            float rightHeight = graphics.MeasureString(value ?? "", rightFont, Math.Max(1, (int)amountWidth), right).Height;
+            graphics.DrawString(label ?? "", leftFont, brush, new RectangleF(x, y, leftWidth, leftHeight));
+            graphics.DrawString(
+                value ?? "", rightFont, brush,
+                new RectangleF(x + width - amountWidth, y, amountWidth, rightHeight), right
+            );
+            return Math.Max(leftHeight, rightHeight);
+        }}
+    }}
+
+    private static void DrawLine(Graphics graphics, float x, float y, float width, DashStyle dashStyle) {{
+        using (var pen = new Pen(Color.Black, 0.8f) {{ DashStyle = dashStyle }}) {{
+            graphics.DrawLine(pen, x, y, x + width, y);
+        }}
+    }}
+
+    private static void DrawSaleReceipt(PrintPageEventArgs args, ReceiptPayload payload) {{
+        Graphics graphics = args.Graphics;
+        float x = args.MarginBounds.Left;
+        float width = args.MarginBounds.Width;
+        float y = args.MarginBounds.Top;
+        const float rowGap = 4f;
+
+        using (var storeFont = new Font("Tahoma", 11, FontStyle.Bold))
+        using (var titleFont = new Font("Tahoma", 10, FontStyle.Bold))
+        using (var normalFont = new Font("Tahoma", 8, FontStyle.Regular))
+        using (var labelFont = new Font("Tahoma", 8, FontStyle.Bold))
+        using (var itemFont = new Font("Tahoma", 8, FontStyle.Bold))
+        using (var smallFont = new Font("Tahoma", 7, FontStyle.Regular))
+        using (var totalFont = new Font("Tahoma", 10, FontStyle.Bold))
+        using (var footerFont = new Font("Tahoma", 9, FontStyle.Bold)) {{
+            if (String.Equals(payload.status, "voided", StringComparison.OrdinalIgnoreCase)) {{
+                float bannerHeight = 25f;
+                graphics.DrawRectangle(Pens.Black, x, y, width, bannerHeight);
+                y += DrawCentered(graphics, "VOID ทั้งบิล", titleFont, Brushes.Black, x, y + 4f, width) + 10f;
+            }}
+
+            y += DrawReceiptLogo(graphics, payload.logo_path, x, y, width) + rowGap;
+            y += DrawCentered(graphics, payload.store_name, storeFont, Brushes.Black, x, y, width) + 2f;
+            if (!String.IsNullOrWhiteSpace(payload.store_phone)) {{
+                y += DrawCentered(graphics, "โทร. " + payload.store_phone, normalFont, Brushes.Black, x, y, width) + 1f;
+            }}
+            y += DrawCentered(graphics, payload.title, titleFont, Brushes.Black, x, y, width) + rowGap;
+
+            DrawLine(graphics, x, y, width, DashStyle.Dash);
+            y += rowGap;
+            y += DrawWrapped(graphics, "เลขที่: " + payload.receipt_number, normalFont, Brushes.Black, new RectangleF(x, y, width, 30f));
+            y += 1f;
+            y += DrawWrapped(graphics, "วันที่/เวลา: " + payload.receipt_datetime, normalFont, Brushes.Black, new RectangleF(x, y, width, 30f));
+            y += 1f;
+            y += DrawWrapped(graphics, "แคชเชียร์: " + payload.cashier, normalFont, Brushes.Black, new RectangleF(x, y, width, 30f));
+            y += rowGap;
+            DrawLine(graphics, x, y, width, DashStyle.Dash);
+            y += rowGap;
+
+            y += DrawLeftRight(graphics, "รายการ", "จำนวนเงิน", labelFont, labelFont, Brushes.Black, x, y, width) + 2f;
+            DrawLine(graphics, x, y, width, DashStyle.Solid);
+            y += rowGap;
+
+            foreach (ReceiptItem item in payload.items ?? new List<ReceiptItem>()) {{
+                float itemStart = y;
+                const float amountWidth = 83f;
+                const float columnGap = 6f;
+                float nameWidth = Math.Max(1f, width - amountWidth - columnGap);
+                float nameHeight = DrawWrapped(
+                    graphics, item.name, itemFont, Brushes.Black,
+                    new RectangleF(x, itemStart, nameWidth, 80f)
+                );
+                using (var right = new StringFormat() {{ Alignment = StringAlignment.Far }}) {{
+                    graphics.DrawString(
+                        item.amount ?? "", normalFont, Brushes.Black,
+                        new RectangleF(x + width - amountWidth, itemStart, amountWidth, 30f), right
+                    );
+                }}
+                y = itemStart + nameHeight + 1f;
+                y += DrawWrapped(graphics, item.detail, smallFont, Brushes.Black, new RectangleF(x, y, nameWidth, 30f));
+                if (!String.IsNullOrWhiteSpace(item.manual_price_reference)) {{
+                    y += DrawWrapped(
+                        graphics, "อ้างอิงราคา: " + item.manual_price_reference,
+                        smallFont, Brushes.Black, new RectangleF(x, y, nameWidth, 30f)
+                    );
+                }}
+                if (!String.IsNullOrWhiteSpace(item.void_note)) {{
+                    y += DrawWrapped(graphics, item.void_note, labelFont, Brushes.Black, new RectangleF(x, y, nameWidth, 30f));
+                }}
+                y += 2f;
+                DrawLine(graphics, x, y, width, DashStyle.Dot);
+                y += rowGap;
+            }}
+
+            DrawLine(graphics, x, y, width, DashStyle.Solid);
+            y += rowGap;
+            if (!String.IsNullOrWhiteSpace(payload.delivery_fee)) {{
+                y += DrawLeftRight(
+                    graphics, "ค่าจัดส่ง", payload.delivery_fee + " บาท",
+                    normalFont, normalFont, Brushes.Black, x, y, width
+                ) + rowGap;
+                DrawLine(graphics, x, y, width, DashStyle.Solid);
+                y += rowGap;
+            }}
+            y += DrawLeftRight(
+                graphics, "รวม", payload.total + " บาท",
+                totalFont, totalFont, Brushes.Black, x, y, width
+            ) + rowGap;
+            DrawLine(graphics, x, y, width, DashStyle.Solid);
+            y += rowGap;
+            y += DrawLeftRight(
+                graphics, "ชำระโดย", payload.payment_label,
+                normalFont, normalFont, Brushes.Black, x, y, width
+            ) + rowGap;
+            if (!String.IsNullOrWhiteSpace(payload.amount_received)) {{
+                y += DrawLeftRight(
+                    graphics, "รับเงิน", payload.amount_received,
+                    normalFont, normalFont, Brushes.Black, x, y, width
+                ) + rowGap;
+                y += DrawLeftRight(
+                    graphics, "เงินทอน", payload.change,
+                    normalFont, normalFont, Brushes.Black, x, y, width
+                ) + rowGap;
+            }}
+
+            y += rowGap;
+            y += DrawCentered(graphics, "ขอบคุณที่ใช้บริการ", footerFont, Brushes.Black, x, y, width);
+            DrawCentered(graphics, payload.footer_store_name, normalFont, Brushes.Black, x, y, width);
+        }}
+    }}
+
+    private static void DrawLegacyDocument(PrintPageEventArgs args, ReceiptPayload payload) {{
+        float x = args.MarginBounds.Left;
+        float width = args.MarginBounds.Width;
+        float y = args.MarginBounds.Top;
+        using (var title = new Font("Tahoma", 11, FontStyle.Bold))
+        using (var content = new Font("Tahoma", 8, FontStyle.Regular))
+        using (var centered = new StringFormat() {{ Alignment = StringAlignment.Center }}) {{
+            var headerBox = new RectangleF(x, y, width, args.MarginBounds.Height);
+            args.Graphics.DrawString(payload.header, title, Brushes.Black, headerBox, centered);
+            y += args.Graphics.MeasureString(payload.header, title, (int)width).Height + 4;
+            var bodyBox = new RectangleF(x, y, width, args.MarginBounds.Bottom - y);
+            args.Graphics.DrawString(payload.body, content, Brushes.Black, bodyBox);
+        }}
+    }}
+
+    public static void Print(string payloadJson) {{
+        var payload = new JavaScriptSerializer().Deserialize<ReceiptPayload>(payloadJson);
+        var document = new PrintDocument();
+        document.PrinterSettings.PrinterName = payload.printer_name;
+        if (!document.PrinterSettings.IsValid) throw new InvalidOperationException("Printer unavailable");
+        document.DocumentName = payload.document_name;
+        document.PrintController = new StandardPrintController();
+        bool isSaleReceipt = String.Equals(payload.layout, "sale_receipt_80mm", StringComparison.Ordinal);
+        if (isSaleReceipt) {{
+            // POS-80 drivers expose an 80 mm roll as a 72 mm printable form:
+            // the remaining 4 mm at each side is the roll's hardware margin.
+            // Asking this driver for an 80 mm printable canvas clips the right
+            // edge after the software applies its own side margins.
+            PaperSize receiptPaper = new PaperSize("80(72)mm x 297mm", 283, 1169);
+            foreach (PaperSize available in document.PrinterSettings.PaperSizes) {{
+                if (available.Width == 283 && available.Height == 1169) {{
+                    receiptPaper = available;
+                    break;
+                }}
+            }}
+            document.DefaultPageSettings.Landscape = false;
+            document.DefaultPageSettings.PaperSize = receiptPaper;
+            document.DefaultPageSettings.Margins = new Margins(0, 0, 16, 16);
+        }} else {{
+            document.DefaultPageSettings.Margins = new Margins(3, 3, 3, 3);
+        }}
+        document.PrintPage += (sender, args) => {{
+            if (isSaleReceipt) DrawSaleReceipt(args, payload);
+            else DrawLegacyDocument(args, payload);
             args.HasMorePages = false;
         }};
         document.Print();
     }}
 }}
-'@ -ReferencedAssemblies System.Drawing
+'@ -ReferencedAssemblies System.Drawing,System.Web.Extensions
 try {{
     # Keep the original single drawer pulse before the receipt job.
     $drawer = [byte[]](0x1B,0x40,0x1B,0x70,0,25,250)
@@ -262,18 +513,20 @@ try {{
 }} catch {{
     # Optional RAW drawer support must never suppress the receipt.
 }}
-try {{
-    # Print the printer-stored logo before the GDI receipt.  This is a
-    # separate RAW job so a driver that accepts GDI but rejects one combined
-    # job cannot prevent the receipt from printing.
-    $logo = [byte[]](0x1B,0x40,0x1B,0x74,20,0x1C,0x70,1,0,0x0A)
-    [SaengngamReceiptPrinter]::SendRaw([string]$payload.printer_name, $logo)
-}} catch {{
-    # Logo support is optional; receipt output remains authoritative.
-}}
-[SaengngamReceiptPrinter]::Print([string]$payload.printer_name, [string]$payload.document_name, [string]$payload.header, [string]$payload.body)
+# The approved logo is embedded in the GDI receipt above.  The POS-80 stored
+# logo RAW command is not reliable from the SYSTEM production service, and a
+# separate RAW fallback can duplicate the logo for interactive printer users.
+[SaengngamReceiptPrinter]::Print($payloadJson)
 """
-    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    compressed_script = base64.b64encode(gzip.compress(script.encode("utf-16le"), compresslevel=9)).decode("ascii")
+    bootstrap = f"""
+$compressed = [Convert]::FromBase64String('{compressed_script}')
+$compressedStream = [IO.MemoryStream]::new($compressed)
+$gzipStream = [IO.Compression.GzipStream]::new($compressedStream, [IO.Compression.CompressionMode]::Decompress)
+$reader = [IO.StreamReader]::new($gzipStream, [Text.Encoding]::Unicode)
+Invoke-Expression $reader.ReadToEnd()
+"""
+    encoded = base64.b64encode(bootstrap.encode("utf-16le")).decode("ascii")
     return [
         "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
         "-EncodedCommand", encoded,

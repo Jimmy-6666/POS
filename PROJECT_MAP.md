@@ -32,6 +32,7 @@ Release 2.2 server. Batch files select the port and runtime root.
 | Windows launch/display/network | `pos_desktop.py`, `pos_app/launcher.py`, `pos_app/display_state.py`, `production-common.ps1`, `configure-production-network.ps1`, `start-*.bat`, `install-*.bat` |
 | Production backup/recovery | `pos_app/services/backup.py`, `pos_app/services/file_sync.py`, `pos_app/services/remote_backup.py`, `pos_app/backup_cli.py`, `backup-production.ps1`, `repair-production-backup-key.ps1`, `test-production-backup-connection.ps1`, `scripts/*recovery*.ps1` |
 | VPS provisioning | `deploy/vps/*.sh` |
+| LINE group product-maintenance bot | `line_bot/`, `pos_app/routes/line_bot_integration.py`, `pos_app/services/line_bot_products.py`, `deploy/line-bot/`, `docs/LINE_BOT_SETUP.md` |
 | UAT fixtures | `seed_uat.py`, `start-uat.bat`, `install-uat.bat`, `uat_runtime/` (generated) |
 | Makro catalog preparation | `work/makro-pos-import/*.mjs`, `imports/makro-products/` inputs/artifacts, `outputs/` review workbooks |
 | Automated verification | `tests/test_phase1.py`, `test_phase2.py`, `test_phase3_5.py`, `test_phase6_10.py`, `test_inventory.py`, `test_billing.py`, `test_version_2_1.py`, `test_version_2_2.py`, `test_release_3_transactions.py`, `test_public_host_access.py`, `test_sprint3_maintenance.py` |
@@ -53,6 +54,8 @@ imports, generated outputs, and UAT data are not source modules.
 - Auth/admin change: auth/admin route + relevant template + phase 1/2 tests.
 - Schema change: `schema.sql` + additive migration in `migrations.py` + affected
   domain code/tests + `DATABASE_OVERVIEW.md`.
+- LINE Bot change: `line_bot/` workflow/store/client + signed POS integration
+  route/service + migration + `test_line_bot_*.py` + `docs/LINE_BOT_SETUP.md`.
 - Online ordering change: affected customer/staff/admin route +
   `services/online_orders.py` for lifecycle/reservations + online UI +
   `test_online_phase*.py`; include sales tests when completion changes.
@@ -93,6 +96,11 @@ that delayed this rollout and the required checklist for the next release.
 secrets, read-only SYSTEM connection testing, retained actionable retry
 errors, and port-scoped Production stopping that preserves isolated UAT. It
 has no migration.
+`VERSION_3.1.8.md` is the deployed POS receipt contract;
+`VERSION_3.1.9.md` is the deployed VPS LINE Bot hotfix contract.
+`VERSION_3.2.0.md` is the cumulative source contract that brings those two
+previously divergent histories onto one release line and advances the source
+runtime identity to 3.2.0.
 
 The sanitized, crash-resumable customer-machine workflow and reusable Codex
 prompt are in `docs/CUSTOMER_MACHINE_DEPLOYMENT_PLAYBOOK_3.0.md`.

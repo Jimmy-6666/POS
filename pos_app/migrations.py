@@ -268,6 +268,39 @@ def _grant_manager_settings_permission(db: sqlite3.Connection) -> None:
     )
 
 
+def _add_line_bot_integration_tables(db: sqlite3.Connection) -> None:
+    """Record idempotent bot commands and retained historical cleanup metadata."""
+
+    db.executescript(
+        """CREATE TABLE IF NOT EXISTS line_bot_commands (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            command_id TEXT NOT NULL UNIQUE,
+            payload_sha256 TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('applied','rejected','conflict')),
+            result_json TEXT NOT NULL,
+            source_group_hash TEXT,
+            source_user_hash TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            applied_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_line_bot_commands_created
+        ON line_bot_commands(created_at);
+        CREATE TABLE IF NOT EXISTS line_bot_image_cleanup (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            image_path TEXT NOT NULL UNIQUE,
+            product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+            reason TEXT NOT NULL,
+            delete_after TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            deleted_at TEXT,
+            failure_detail TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_line_bot_image_cleanup_due
+        ON line_bot_image_cleanup(deleted_at,delete_after);"""
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(20, "enable configured negative stock", _enable_configured_negative_stock),
     Migration(21, "add LINE customer identity", _add_line_customer_identity),
@@ -280,6 +313,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(28, "add configurable POS button layout", _add_pos_button_layout),
     Migration(29, "add per-product manual-price flag", _add_product_manual_price_flag),
     Migration(30, "grant manager settings and billing access", _grant_manager_settings_permission),
+    Migration(31, "add LINE Bot command and image-cleanup records", _add_line_bot_integration_tables),
 )
 
 

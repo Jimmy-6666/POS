@@ -118,11 +118,12 @@ class MigrationHistoryTests(unittest.TestCase):
                 (28, "add configurable POS button layout", 1),
                 (29, "add per-product manual-price flag", 1),
                 (30, "grant manager settings and billing access", 1),
+                (31, "add LINE Bot command and image-cleanup records", 1),
             ])
             connection.close()
             create_app({"TESTING": True, "DATABASE": str(database)})
             connection = sqlite3.connect(database)
-            self.assertEqual(connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 12)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 13)
             connection.close()
         finally:
             folder.cleanup()
@@ -192,6 +193,40 @@ class MigrationHistoryTests(unittest.TestCase):
         )
         result = subprocess.run([powershell, "-NoProfile", "-Command", command], cwd=root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_attach_only_desktop_skips_server_only_line_bot_secret(self):
+        powershell = shutil.which("powershell.exe")
+        if not powershell:
+            self.skipTest("Windows PowerShell is unavailable.")
+        root = Path(__file__).resolve().parent.parent
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = Path(folder) / "desktop-runtime"
+            config = runtime / "config"
+            config.mkdir(parents=True)
+            (config / "line-bot-integration.env").write_text(
+                "invalid desktop-only sentinel\n",
+                encoding="utf-8",
+            )
+            command = (
+                ". (Join-Path $env:TEST_INSTALL_ROOT 'production-common.ps1');"
+                "$context=Get-ProductionContext $env:TEST_INSTALL_ROOT $env:TEST_RUNTIME_ROOT 8000;"
+                "Set-ProductionEnvironment $context -DesktopAttachOnly;"
+                "if($env:POS_RUNTIME_ROOT -ne $context.RuntimeRoot){exit 3};"
+                "$serverRejected=$false;"
+                "try{Set-ProductionEnvironment $context}catch{$serverRejected=$true};"
+                "if(-not $serverRejected){exit 4}"
+            )
+            environment = os.environ.copy()
+            environment["TEST_INSTALL_ROOT"] = str(root)
+            environment["TEST_RUNTIME_ROOT"] = str(runtime)
+            result = subprocess.run(
+                [powershell, "-NoProfile", "-Command", command],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

@@ -144,6 +144,14 @@ databases.
   it does not modify any business or audit row. Cashier receives no new
   permission.
 
+- Schema Migration 31 adds `line_bot_commands` and the historical
+  `line_bot_image_cleanup` table. The first records the signed `command_id`,
+  payload fingerprint, sanitized response, and HMAC-derived group/user
+  provenance so retries cannot repeat a product mutation. Product-image
+  maintenance is not available from the LINE Bot, so the historical cleanup
+  table has no active writer or cleanup worker. Neither table rewrites an
+  existing product, audit, sale, stock, or image.
+
 ## Migration rule
 
 For a required schema change:
