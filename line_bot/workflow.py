@@ -9,7 +9,7 @@ import re
 from io import BytesIO
 from typing import Any, Protocol
 
-from .clients import PosRejected, PosUnavailable
+from .clients import LineMessageRejected, PosRejected, PosUnavailable
 from .config import MICROUSD_PER_USD
 from .vision import (
     MAX_GEMINI_INPUT_TOKENS,
@@ -27,6 +27,7 @@ from .vision import (
 
 
 LOG = logging.getLogger(__name__)
+MONTHLY_LIMIT_NOTIFICATION_RETRY_SECONDS = 60 * 60
 
 
 class BarcodeDecoder(Protocol):
@@ -606,17 +607,14 @@ class BotWorkflow:
         data = conversation["data"]
         if action == "cancel":
             self.store.close_flow(group_id, user_id)
-            if state.startswith("VISION_"):
-                self._reply_or_push_text(reply_token, group_id, "ผมยกเลิกรายการเปลี่ยนแปลงแล้วครับ 🌷")
-            else:
-                self.line.push_text(group_id, "ผมยกเลิกรายการเปลี่ยนแปลงแล้วครับ 🌷")
+            self._reply_or_push_text(reply_token, group_id, "ผมยกเลิกรายการเปลี่ยนแปลงแล้วครับ 🌷")
             return
         if state == "EXISTING_CHOICE" and action == "prices":
             self._save_flow(group_id, user_id, conversation, "PRICE_COST", data)
-            self.line.push_text(group_id, "แก้ราคาทุนเป็นเท่าไหร่ดีครับ\n(หากไม่ทราบระบุ 0) 😊")
+            self._reply_or_push_text(reply_token, group_id, "แก้ราคาทุนเป็นเท่าไหร่ดีครับ\n(หากไม่ทราบระบุ 0) 😊")
         elif state == "OFFER_CREATE" and action == "add":
             self._save_flow(group_id, user_id, conversation, "CREATE_NAME", data)
-            self.line.push_text(group_id, "สินค้านี้ชื่ออะไรครับ 😊")
+            self._reply_or_push_text(reply_token, group_id, "สินค้านี้ชื่ออะไรครับ 😊")
         elif state == "VISION_EXISTING_SALE_REVIEW" and action == "sale":
             self._save_flow(group_id, user_id, conversation, "VISION_EXISTING_WAIT_SALE_PRICE", data)
             self._reply_or_push_text(reply_token, group_id, "สินค้านี้ราคาขายเท่าไหร่ครับ 😊")
@@ -639,10 +637,10 @@ class BotWorkflow:
             data.pop("cost_satang", None)
             data.pop("sale_baht", None)
             self._save_flow(group_id, user_id, conversation, "PRICE_COST", data)
-            self.line.push_text(group_id, "แก้ราคาทุนเป็นเท่าไหร่ดีครับ\n(หากไม่ทราบระบุ 0) 😊")
+            self._reply_or_push_text(reply_token, group_id, "แก้ราคาทุนเป็นเท่าไหร่ดีครับ\n(หากไม่ทราบระบุ 0) 😊")
         elif state == "REVIEW_CREATE" and action == "edit":
             self._save_flow(group_id, user_id, conversation, "CREATE_NAME", data)
-            self.line.push_text(group_id, "สินค้านี้ชื่ออะไรครับ 😊")
+            self._reply_or_push_text(reply_token, group_id, "สินค้านี้ชื่ออะไรครับ 😊")
         elif state == "VISION_EXISTING_FINAL_REVIEW" and action == "edit_price":
             data.pop("sale_baht", None)
             self._save_flow(group_id, user_id, conversation, "VISION_EXISTING_WAIT_SALE_PRICE", data)
@@ -702,75 +700,81 @@ class BotWorkflow:
             cost = _cost_satang(text)
             if cost is None:
                 self._save_flow(group_id, user_id, conversation, state, data)
-                self.line.push_text(group_id, "กรุณาระบุราคาทุนเป็นจำนวนบาทและสตางค์ไม่เกิน 2 ตำแหน่งครับ 😊")
+                self._reply_or_push_text(reply_token, group_id, "กรุณาระบุราคาทุนเป็นจำนวนบาทและสตางค์ไม่เกิน 2 ตำแหน่งครับ 😊")
                 return
             data["cost_satang"] = cost
             self._save_flow(group_id, user_id, conversation, "PRICE_SALE", data)
-            self.line.push_text(group_id, "แก้ราคาขายเป็นเท่าไหร่ดีครับ 😊")
+            self._reply_or_push_text(reply_token, group_id, "แก้ราคาขายเป็นเท่าไหร่ดีครับ 😊")
         elif state == "PRICE_SALE":
             sale = _whole_baht(text, positive=True)
             if sale is None:
                 self._save_flow(group_id, user_id, conversation, state, data)
-                self.line.push_text(group_id, "กรุณาระบุราคาขายให้เกิน 0 บาท 😊")
+                self._reply_or_push_text(reply_token, group_id, "กรุณาระบุราคาขายให้เกิน 0 บาท 😊")
                 return
             if data.get("cost_satang", 0) and sale * 100 <= data["cost_satang"]:
                 self._save_flow(group_id, user_id, conversation, state, data)
-                self.line.push_text(
-                    group_id,
+                self._reply_or_push_text(
+                    reply_token, group_id,
                     f"กรุณาระบุราคาขาย ที่มากกว่าราคาทุน {_format_satang(data['cost_satang'])} บาท 😊",
                 )
                 return
             data["sale_baht"] = sale
-            self._review_price(group_id, user_id, conversation, data)
+            self._review_price(group_id, user_id, conversation, data, reply_token=reply_token)
         elif state == "CREATE_NAME":
             name = text.strip()
             if not name or len(name) > 160 or name.startswith("สินค้าไม่ทราบชื่อ ("):
                 self._save_flow(group_id, user_id, conversation, state, data)
-                self.line.push_text(group_id, "กรุณาระบุชื่อสินค้าที่ถูกต้อง ไม่เกิน 160 ตัวอักษรครับ 😊")
+                self._reply_or_push_text(reply_token, group_id, "กรุณาระบุชื่อสินค้าที่ถูกต้อง ไม่เกิน 160 ตัวอักษรครับ 😊")
                 return
             data["name_th"] = name
             self._save_flow(group_id, user_id, conversation, "CREATE_COST", data)
-            self.line.push_text(group_id, "สินค้านี้ต้นทุนเท่าไหร่ครับ\n(หากไม่ทราบระบุ 0) 😊")
+            self._reply_or_push_text(reply_token, group_id, "สินค้านี้ต้นทุนเท่าไหร่ครับ\n(หากไม่ทราบระบุ 0) 😊")
         elif state == "CREATE_COST":
             cost = _cost_satang(text)
             if cost is None:
                 self._save_flow(group_id, user_id, conversation, state, data)
-                self.line.push_text(group_id, "กรุณาระบุต้นทุนเป็นจำนวนบาทและสตางค์ไม่เกิน 2 ตำแหน่งครับ 😊")
+                self._reply_or_push_text(reply_token, group_id, "กรุณาระบุต้นทุนเป็นจำนวนบาทและสตางค์ไม่เกิน 2 ตำแหน่งครับ 😊")
                 return
             data["cost_satang"] = cost
             self._save_flow(group_id, user_id, conversation, "CREATE_SALE", data)
-            self.line.push_text(group_id, "สินค้านี้ราคาขายเท่าไหร่ครับ 😊")
+            self._reply_or_push_text(reply_token, group_id, "สินค้านี้ราคาขายเท่าไหร่ครับ 😊")
         elif state == "CREATE_SALE":
             sale = _whole_baht(text, positive=True)
             if sale is None:
                 self._save_flow(group_id, user_id, conversation, state, data)
-                self.line.push_text(group_id, "กรุณาระบุราคาขายให้เกิน 0 บาท 😊")
+                self._reply_or_push_text(reply_token, group_id, "กรุณาระบุราคาขายให้เกิน 0 บาท 😊")
                 return
             if data.get("cost_satang", 0) and sale * 100 <= data["cost_satang"]:
                 self._save_flow(group_id, user_id, conversation, state, data)
-                self.line.push_text(
-                    group_id,
+                self._reply_or_push_text(
+                    reply_token, group_id,
                     f"กรุณาระบุราคาขาย ที่มากกว่าราคาทุน {_format_satang(data['cost_satang'])} บาท 😊",
                 )
                 return
             data["sale_baht"] = sale
-            self._review_create(group_id, user_id, conversation, data)
+            self._review_create(group_id, user_id, conversation, data, reply_token=reply_token)
 
-    def _review_price(self, group_id: str, user_id: str, conversation: dict, data: dict) -> None:
+    def _review_price(
+        self, group_id: str, user_id: str, conversation: dict, data: dict, *, reply_token: str = ""
+    ) -> None:
         self._save_flow(group_id, user_id, conversation, "REVIEW_PRICE", data)
         product = data["product"]
         self._buttons(
             group_id,
             f"ชื่อสินค้า : {product['name_th']}\nราคาทุน : {_format_satang(data['cost_satang'])} บาท\nราคาขาย : {data['sale_baht']} บาท\nรบกวนยืนยันรายละเอียดให้ผมด้วยครับ 😊",
             [("ยืนยัน", "confirm"), ("แก้ไข", "edit"), ("ยกเลิก", "cancel")],
+            reply_token=reply_token,
         )
 
-    def _review_create(self, group_id: str, user_id: str, conversation: dict, data: dict) -> None:
+    def _review_create(
+        self, group_id: str, user_id: str, conversation: dict, data: dict, *, reply_token: str = ""
+    ) -> None:
         self._save_flow(group_id, user_id, conversation, "REVIEW_CREATE", data)
         self._buttons(
             group_id,
             f"ชื่อสินค้า : {data['name_th']}\nราคาทุน : {_format_satang(data['cost_satang'])} บาท\nราคาขาย : {data['sale_baht']} บาท\nรบกวนยืนยันรายละเอียดสินค้าให้ผมด้วยครับ 😊",
             [("ยืนยัน", "confirm"), ("แก้ไข", "edit"), ("ยกเลิก", "cancel")],
+            reply_token=reply_token,
         )
 
     def _review_vision_existing(
@@ -862,22 +866,57 @@ class BotWorkflow:
             return
         self.store.enqueue_command(command_id, group_id, actor_user_id, command)
         self.store.close_flow(group_id, user_id)
-        # Reply before the bounded POS request so LINE receives a status well
-        # within the 55-second reply window for the user's confirmation event.
-        self._reply_or_push_text(reply_token, group_id, "ผมกำลังทำการเชื่อมต่อกับร้านเพื่อแก้ไขข้อมูลครับ ⏳")
-        self.process_due_commands(limit=1)
+        LOG.info("POS command queued command_id=%s operation=%s", command_id, command["operation"])
+        # A Reply is free under the LINE OA plan and its one-time token is valid
+        # long enough for the bounded POS request.  Return the final outcome in
+        # that Reply instead of spending the monthly Push-message allowance on
+        # a preliminary progress message followed by a result message.
+        self.process_due_commands(limit=1, reply_tokens={command_id: reply_token})
 
-    def process_due_commands(self, limit: int = 10) -> None:
+    def _notify_command_result(self, item: dict[str, Any], outcome: str, text: str, *, reply_token: str = "") -> None:
+        command_id = item["command_id"]
+        if reply_token:
+            try:
+                self.line.reply_text(reply_token, text)
+            except Exception as exc:
+                LOG.warning(
+                    "LINE command notification reply failed; queuing push command_id=%s outcome=%s error=%s",
+                    command_id,
+                    outcome,
+                    exc,
+                )
+            else:
+                LOG.info("LINE command notification delivered via reply command_id=%s outcome=%s", command_id, outcome)
+                return
+        notification_id = f"{command_id}:{outcome}"
+        self.store.enqueue_notification(notification_id, item["group_id"], item["user_id"], text)
+        LOG.info("LINE command notification queued command_id=%s notification_id=%s outcome=%s", command_id, notification_id, outcome)
+
+    @staticmethod
+    def _notification_retry_seconds(exc: Exception, default_seconds: int) -> int:
+        if isinstance(exc, LineMessageRejected) and exc.status_code == 429 and "monthly limit" in str(exc).lower():
+            return MONTHLY_LIMIT_NOTIFICATION_RETRY_SECONDS
+        return default_seconds
+
+    def process_due_commands(self, limit: int = 10, *, reply_tokens: dict[str, str] | None = None) -> None:
+        reply_tokens = reply_tokens or {}
         for item in self.store.claim_due_commands(limit):
+            reply_token = reply_tokens.get(item["command_id"], "")
+            operation = item["command"].get("operation", "unknown")
             try:
                 self.pos.apply(item["command"])
             except PosUnavailable as exc:
                 first_outage = self.store.retry_command(item["command_id"], str(exc), self.retry_seconds)
+                LOG.warning(
+                    "POS command retry scheduled command_id=%s operation=%s attempts=%s error=%s",
+                    item["command_id"], operation, item["attempts"], exc,
+                )
                 if first_outage:
-                    self.line.push_text(
-                        item["group_id"],
+                    self._notify_command_result(
+                        item,
+                        "retrying",
                         "ผมไม่สามารถเชื่อมต่อกับร้านได้ จะลองใหม่อีกครั้งภายหลังครับ 😥",
-                        mention_user_id=item["user_id"],
+                        reply_token=reply_token,
                     )
             except PosRejected as exc:
                 self.store.fail_command(item["command_id"], "POS rejected the command after confirmation.")
@@ -886,22 +925,71 @@ class BotWorkflow:
                     if exc.status_code == 409
                     else "บันทึกไม่สำเร็จครับ กรุณาเริ่มรายการใหม่อีกครั้งครับ 😥"
                 )
-                self.line.push_text(
-                    item["group_id"],
-                    message,
-                    mention_user_id=item["user_id"],
+                LOG.warning(
+                    "POS command rejected command_id=%s operation=%s attempts=%s status_code=%s",
+                    item["command_id"], operation, item["attempts"], exc.status_code,
                 )
+                self._notify_command_result(item, "failed", message, reply_token=reply_token)
             except Exception as exc:
                 # Treat unexpected transport/client failures as retryable, and
                 # retain a bounded failure detail in the durable queue.
                 first_outage = self.store.retry_command(item["command_id"], repr(exc), self.retry_seconds)
+                LOG.exception(
+                    "POS command retry scheduled after unexpected error command_id=%s operation=%s attempts=%s",
+                    item["command_id"], operation, item["attempts"],
+                )
                 if first_outage:
-                    self.line.push_text(item["group_id"], "ผมไม่สามารถเชื่อมต่อกับร้านได้ จะลองใหม่อีกครั้งภายหลังครับ 😥", mention_user_id=item["user_id"])
+                    self._notify_command_result(
+                        item,
+                        "retrying",
+                        "ผมไม่สามารถเชื่อมต่อกับร้านได้ จะลองใหม่อีกครั้งภายหลังครับ 😥",
+                        reply_token=reply_token,
+                    )
             else:
                 self.store.complete_command(item["command_id"])
-                self.line.push_text(
-                    item["group_id"], "ดำเนินการอัพเดตข้อมูลเรียบร้อยแล้วครับ ✅", mention_user_id=item["user_id"],
+                LOG.info("POS command applied command_id=%s operation=%s attempts=%s", item["command_id"], operation, item["attempts"])
+                self._notify_command_result(
+                    item,
+                    "applied",
+                    "ดำเนินการอัพเดตข้อมูลเรียบร้อยแล้วครับ ✅",
+                    reply_token=reply_token,
                 )
+
+    def process_due_notifications(self, limit: int = 10) -> None:
+        """Deliver deferred outcome notices without allowing LINE failures to affect POS state."""
+
+        for item in self.store.claim_due_notifications(limit):
+            try:
+                self.line.push_text(
+                    item["group_id"],
+                    item["text"],
+                    mention_user_id=item["user_id"],
+                    retry_key=item["retry_key"],
+                )
+            except LineMessageRejected as exc:
+                if exc.status_code == 409:
+                    # LINE accepted an earlier request with this retry key.
+                    self.store.complete_notification(item["notification_id"])
+                    LOG.info("LINE notification previously accepted notification_id=%s", item["notification_id"])
+                elif exc.status_code in {400, 401, 403}:
+                    self.store.fail_notification(item["notification_id"], str(exc))
+                    LOG.error("LINE notification rejected permanently notification_id=%s error=%s", item["notification_id"], exc)
+                else:
+                    retry_seconds = self._notification_retry_seconds(exc, self.retry_seconds)
+                    self.store.retry_notification(item["notification_id"], str(exc), retry_seconds)
+                    LOG.warning(
+                        "LINE notification retry scheduled notification_id=%s attempts=%s delay_seconds=%s error=%s",
+                        item["notification_id"], item["attempts"], retry_seconds, exc,
+                    )
+            except Exception as exc:
+                self.store.retry_notification(item["notification_id"], repr(exc), self.retry_seconds)
+                LOG.exception(
+                    "LINE notification retry scheduled after unexpected error notification_id=%s attempts=%s",
+                    item["notification_id"], item["attempts"],
+                )
+            else:
+                self.store.complete_notification(item["notification_id"])
+                LOG.info("LINE notification delivered via push notification_id=%s attempts=%s", item["notification_id"], item["attempts"])
 
     def expire_flows(self) -> None:
         for expired in self.store.expire_flows():

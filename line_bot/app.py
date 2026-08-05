@@ -52,6 +52,7 @@ class BackgroundWorker(threading.Thread):
             else:
                 self.store.finish_event(item["event_key"])
         self.workflow.process_due_commands()
+        self.workflow.process_due_notifications()
 
     def run(self) -> None:
         while not self.stop_event.is_set():

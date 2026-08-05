@@ -49,8 +49,8 @@ class FakeLine:
     def reply_text(self, reply_token, text):
         self.replies.append((reply_token, text))
 
-    def push_text(self, group_id, text, *, mention_user_id=None):
-        self.texts.append((group_id, text, mention_user_id))
+    def push_text(self, group_id, text, *, mention_user_id=None, retry_key=None):
+        self.texts.append((group_id, text, mention_user_id, retry_key))
 
     def push_buttons(self, group_id, text, labels):
         self.buttons.append((group_id, text, labels))

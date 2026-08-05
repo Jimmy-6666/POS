@@ -6,6 +6,7 @@ import json
 import re
 import secrets
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
@@ -126,6 +127,22 @@ class BotStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_pending_commands_due
                 ON pending_commands(status,next_attempt_at);
+                CREATE TABLE IF NOT EXISTS pending_notifications (
+                    notification_id TEXT PRIMARY KEY,
+                    group_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    retry_key TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL CHECK(status IN ('pending','attempting','delivered','failed')),
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    next_attempt_at TEXT NOT NULL,
+                    last_error TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    delivered_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_pending_notifications_due
+                ON pending_notifications(status,next_attempt_at);
                 CREATE TABLE IF NOT EXISTS vision_jobs (
                     job_id TEXT PRIMARY KEY,
                     group_id TEXT NOT NULL,
@@ -533,6 +550,71 @@ class BotStore:
             db.execute(
                 "UPDATE pending_commands SET status='failed',completed_at=?,last_error=? WHERE command_id=?",
                 (iso_now(), _safe_error_detail(error), command_id),
+            )
+
+    def enqueue_notification(self, notification_id: str, group_id: str, user_id: str, text: str) -> None:
+        """Persist one group notification so a LINE delivery failure never loses the outcome."""
+
+        if not notification_id or not group_id or not user_id or not text:
+            raise ValueError("Notification requires an ID, group, user, and text.")
+        now = iso_now()
+        retry_key = str(uuid.uuid5(uuid.NAMESPACE_URL, f"raisanngam-line-bot:{notification_id}"))
+        with self.session() as db:
+            db.execute(
+                """INSERT INTO pending_notifications
+                   (notification_id,group_id,user_id,text,retry_key,status,next_attempt_at,created_at,updated_at)
+                   VALUES(?,?,?,?,?,'pending',?,?,?)
+                   ON CONFLICT(notification_id) DO NOTHING""",
+                (notification_id, group_id, user_id, text, retry_key, now, now, now),
+            )
+
+    def claim_due_notifications(self, limit: int = 10) -> list[dict[str, Any]]:
+        with self.session() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute(
+                """SELECT * FROM pending_notifications
+                   WHERE status='pending' AND next_attempt_at<=?
+                   ORDER BY created_at LIMIT ?""",
+                (iso_now(), limit),
+            ).fetchall()
+            now = iso_now()
+            for row in rows:
+                db.execute(
+                    """UPDATE pending_notifications
+                       SET status='attempting',attempts=attempts+1,updated_at=? WHERE notification_id=?""",
+                    (now, row["notification_id"]),
+                )
+            db.commit()
+            return [dict(row) | {"attempts": int(row["attempts"]) + 1} for row in rows]
+
+    def complete_notification(self, notification_id: str) -> None:
+        now = iso_now()
+        with self.session() as db:
+            db.execute(
+                """UPDATE pending_notifications
+                   SET status='delivered',last_error=NULL,updated_at=?,delivered_at=?
+                   WHERE notification_id=?""",
+                (now, now, notification_id),
+            )
+
+    def retry_notification(self, notification_id: str, error: str, retry_seconds: int) -> None:
+        if retry_seconds <= 0:
+            raise ValueError("Notification retry delay must be positive.")
+        next_attempt = (utc_now() + timedelta(seconds=retry_seconds)).isoformat(timespec="seconds")
+        with self.session() as db:
+            db.execute(
+                """UPDATE pending_notifications
+                   SET status='pending',next_attempt_at=?,last_error=?,updated_at=?
+                   WHERE notification_id=?""",
+                (next_attempt, _safe_error_detail(error), iso_now(), notification_id),
+            )
+
+    def fail_notification(self, notification_id: str, error: str) -> None:
+        with self.session() as db:
+            db.execute(
+                """UPDATE pending_notifications
+                   SET status='failed',last_error=?,updated_at=? WHERE notification_id=?""",
+                (_safe_error_detail(error), iso_now(), notification_id),
             )
 
     def record_vision_image(

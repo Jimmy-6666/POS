@@ -22,7 +22,9 @@ class PosRejected(RuntimeError):
 
 
 class LineMessageRejected(RuntimeError):
-    pass
+    def __init__(self, message: str, *, status_code: int = 0):
+        super().__init__(message)
+        self.status_code = int(status_code)
 
 
 class LineContentRejected(RuntimeError):
@@ -38,11 +40,14 @@ class LineMessagingClient:
     def __init__(self, access_token: str):
         self.access_token = access_token
 
-    def _post(self, path: str, payload: dict) -> None:
+    def _post(self, path: str, payload: dict, *, retry_key: str | None = None) -> None:
+        headers = {"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"}
+        if retry_key:
+            headers["X-Line-Retry-Key"] = retry_key
         request = Request(
             self.endpoint + path,
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         try:
@@ -50,29 +55,40 @@ class LineMessagingClient:
                 pass
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            raise LineMessageRejected(f"LINE Messaging API {exc.code}: {body[:1000]}") from exc
+            raise LineMessageRejected(f"LINE Messaging API {exc.code}: {body[:1000]}", status_code=exc.code) from exc
 
     def reply_text(self, reply_token: str, text: str) -> None:
         if reply_token:
             self._post("/reply", {"replyToken": reply_token, "messages": [{"type": "text", "text": text}]})
 
-    def push_text(self, group_id: str, text: str, *, mention_user_id: str | None = None) -> None:
+    def push_text(
+        self,
+        group_id: str,
+        text: str,
+        *,
+        mention_user_id: str | None = None,
+        retry_key: str | None = None,
+    ) -> None:
         message = {"type": "text", "text": text}
         if mention_user_id:
             mentioned_message = {
                 "type": "textV2",
                 "text": "{user}" + text,
-                "substitution": {"user": {"type": "mention", "mentionee": {"userId": mention_user_id}}},
+                "substitution": {
+                    "user": {"type": "mention", "mentionee": {"type": "user", "userId": mention_user_id}}
+                },
             }
             try:
-                self._post("/push", {"to": group_id, "messages": [mentioned_message]})
+                self._post("/push", {"to": group_id, "messages": [mentioned_message]}, retry_key=retry_key)
                 return
             except LineMessageRejected as exc:
+                if exc.status_code != 400:
+                    raise
                 # A user may not be mentionable even when their webhook event
                 # exposes a user ID. Delivering the business result is more
                 # important than a best-effort mention.
                 LOG.warning("LINE mention was rejected; sending plain group text instead: %s", exc)
-        self._post("/push", {"to": group_id, "messages": [message]})
+        self._post("/push", {"to": group_id, "messages": [message]}, retry_key=retry_key)
 
     @staticmethod
     def _buttons_message(text: str, labels: list[str]) -> dict:

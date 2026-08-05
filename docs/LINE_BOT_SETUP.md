@@ -236,12 +236,28 @@ closes expired flows once per second and sends `ผมยกเลิกรา�
 used in prompts and outcome messages; button labels remain plain Thai text so
 they stay easy to select and identify.
 
-When a staff member confirms a change, the bot immediately uses that message's
-fresh reply token to state that it is connecting to the store. The POS request
-is bounded to 30 seconds, leaving a 55-second response safety window. A genuine
-stale-product conflict asks the staff member to try again, while any other
-permanent validation rejection asks them to start a new flow; a connection
-outage keeps the existing durable five-minute retry behavior. Downloading and reading
+When a staff member confirms a change, the Bot makes the bounded POS request
+immediately and uses that message's fresh reply token for the **final** success,
+conflict, validation-failure, or initial-outage result. It does not send a
+separate “connecting” message first. Reply messages do not count against the
+LINE Official Account monthly message plan, so normal one-second POS updates
+use no Push-message quota. The POS request is bounded to 30 seconds, leaving a
+55-second response safety window.
+
+If the reply token is unavailable (for example, a delayed durable retry), the
+outcome is stored in Bot SQLite's `pending_notifications` outbox and sent as a
+group Push when LINE accepts delivery again. Each deferred Push has a stable
+LINE retry key so transient network failures cannot duplicate it. A 429 monthly
+limit is retained and retried hourly; it never changes the already-recorded POS
+command result. Inspect only secret-free operational diagnostics with:
+
+```bash
+journalctl -u raisanngam-line-bot.service --since '1 hour ago' --no-pager
+```
+
+The journal records opaque command/notification IDs, operation, attempt,
+outcome, and bounded delivery/POS errors. It never logs access tokens, shared
+secrets, image bytes, or full product command payloads. Downloading and reading
 the quoted barcode image is bounded to 10 seconds; a timeout asks for a clear
 barcode image again.
 

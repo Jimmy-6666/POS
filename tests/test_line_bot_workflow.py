@@ -26,8 +26,8 @@ class FakeLine:
     def reply_text(self, reply_token, text):
         self.replies.append((reply_token, text))
 
-    def push_text(self, group_id, text, *, mention_user_id=None):
-        self.texts.append((group_id, text, mention_user_id))
+    def push_text(self, group_id, text, *, mention_user_id=None, retry_key=None):
+        self.texts.append((group_id, text, mention_user_id, retry_key))
 
     def push_buttons(self, group_id, text, actions):
         self.buttons.append((group_id, text, actions))
@@ -116,7 +116,7 @@ class LineBotWorkflowTests(unittest.TestCase):
         self.workflow.handle_event(self.button_event(price_action, user_id=cashier_id))
         self.assertEqual(self.store.conversation(self.group_id, self.user_id)["state"], "PRICE_COST")
         self.assertEqual(
-            self.line.texts[-1][1],
+            self.line.replies[-1][1],
             "แก้ราคาทุนเป็นเท่าไหร่ดีครับ\n(หากไม่ทราบระบุ 0) 😊",
         )
         self.workflow.handle_text_input(self.group_id, cashier_id, "15.50")
@@ -129,8 +129,8 @@ class LineBotWorkflowTests(unittest.TestCase):
         self.assertEqual((command["cost_satang"], command["sale_baht"]), (1550, 25))
         self.assertEqual(command["source"]["line_user_id"], cashier_id)
         self.assertIsNone(self.store.conversation(self.group_id, self.user_id))
-        self.assertEqual(self.line.replies[-1][1], "ผมกำลังทำการเชื่อมต่อกับร้านเพื่อแก้ไขข้อมูลครับ ⏳")
-        self.assertEqual(self.line.texts[-1][2], cashier_id)
+        self.assertEqual(self.line.replies[-1][1], "ดำเนินการอัพเดตข้อมูลเรียบร้อยแล้วครับ ✅")
+        self.assertFalse(any("ดำเนินการอัพเดตข้อมูลเรียบร้อยแล้วครับ" in text for _, text, *_ in self.line.texts))
 
     def test_group_member_can_quote_another_members_image_and_share_the_flow(self):
         cashier_id = "U-test-cashier"
@@ -190,7 +190,7 @@ class LineBotWorkflowTests(unittest.TestCase):
         self.workflow.handle_text_input(self.group_id, self.user_id, "35")
         self.assertNotIn("ต้องการเพิ่มรูปไหมครับ", self.line.buttons[-1][1])
         self.workflow.handle_event(self.button_event(self.current_action("ยืนยัน")))
-        self.assertEqual(self.line.replies[-1][1], "ผมกำลังทำการเชื่อมต่อกับร้านเพื่อแก้ไขข้อมูลครับ ⏳")
+        self.assertEqual(self.line.replies[-1][1], "ดำเนินการอัพเดตข้อมูลเรียบร้อยแล้วครับ ✅")
         command = self.pos.applied[0]
         self.assertEqual(command["operation"], "create_or_complete")
         self.assertEqual(command["name_th"], "ชื่อที่ถูกต้อง")
@@ -213,7 +213,9 @@ class LineBotWorkflowTests(unittest.TestCase):
         with self.store.session() as db:
             self.assertEqual(db.execute("SELECT status FROM pending_commands").fetchone()[0], "applied")
         self.assertEqual(len(self.pos.applied), 1)
+        self.workflow.process_due_notifications()
         self.assertIn("ดำเนินการอัพเดตข้อมูลเรียบร้อยแล้วครับ", self.line.texts[-1][1])
+        self.assertIsNotNone(self.line.texts[-1][3])
 
     def test_confirm_rejection_tells_user_to_retry(self):
         self.pos.rejected = True
@@ -223,9 +225,8 @@ class LineBotWorkflowTests(unittest.TestCase):
         self.workflow.handle_text_input(self.group_id, self.user_id, "0")
         self.workflow.handle_text_input(self.group_id, self.user_id, "12")
         self.workflow.handle_event(self.button_event(self.current_action("ยืนยัน")))
-        self.assertEqual(self.line.replies[-1][1], "ผมกำลังทำการเชื่อมต่อกับร้านเพื่อแก้ไขข้อมูลครับ ⏳")
-        self.assertIn("บันทึกไม่สำเร็จครับ", self.line.texts[-1][1])
-        self.assertIn("กรุณาลองใหม่อีกครั้ง", self.line.texts[-1][1])
+        self.assertIn("บันทึกไม่สำเร็จครับ", self.line.replies[-1][1])
+        self.assertIn("กรุณาลองใหม่อีกครั้ง", self.line.replies[-1][1])
 
     def test_non_conflict_rejection_does_not_claim_the_product_was_changed(self):
         self.pos.rejected = True
@@ -237,7 +238,7 @@ class LineBotWorkflowTests(unittest.TestCase):
         self.workflow.handle_text_input(self.group_id, self.user_id, "12")
         self.workflow.handle_event(self.button_event(self.current_action("ยืนยัน")))
         self.assertEqual(
-            self.line.texts[-1][1],
+            self.line.replies[-1][1],
             "บันทึกไม่สำเร็จครับ กรุณาเริ่มรายการใหม่อีกครั้งครับ 😥",
         )
 
@@ -295,6 +296,26 @@ class LineBotWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(self.line.texts[-1][2], self.user_id)
 
+    def test_monthly_limit_keeps_a_deferred_outcome_notification_for_retry(self):
+        class MonthlyLimitLine(FakeLine):
+            def push_text(self, group_id, text, *, mention_user_id=None, retry_key=None):
+                raise LineMessageRejected(
+                    'LINE Messaging API 429: {"message":"You have reached your monthly limit."}',
+                    status_code=429,
+                )
+
+        workflow = BotWorkflow(self.store, MonthlyLimitLine(), self.pos, FakeDecoder(), retry_seconds=300)
+        self.store.enqueue_notification("command-1:applied", self.group_id, self.user_id, "บันทึกสำเร็จ")
+        with self.assertLogs("line_bot.workflow", level="WARNING") as logs:
+            workflow.process_due_notifications()
+        self.assertIn("delay_seconds=3600", "\n".join(logs.output))
+        with self.store.session() as db:
+            notification = db.execute(
+                "SELECT status,last_error FROM pending_notifications WHERE notification_id='command-1:applied'"
+            ).fetchone()
+        self.assertEqual(notification["status"], "pending")
+        self.assertIn("monthly limit", notification["last_error"])
+
     def test_buttons_send_visible_message_actions(self):
         class CapturingLineClient(LineMessagingClient):
             def __init__(self):
@@ -321,11 +342,11 @@ class LineBotWorkflowTests(unittest.TestCase):
                 super().__init__("line-access-token-for-tests")
                 self.sent = []
 
-            def _post(self, path, payload):
+            def _post(self, path, payload, *, retry_key=None):
                 self.sent.append((path, payload))
                 message_type = payload["messages"][0]["type"]
                 if message_type == "textV2":
-                    raise LineMessageRejected("LINE Messaging API 400: mention rejected")
+                    raise LineMessageRejected("LINE Messaging API 400: mention rejected", status_code=400)
 
         client = FallbackLineClient()
         with self.assertLogs("line_bot.clients", level="WARNING"):
@@ -334,6 +355,22 @@ class LineBotWorkflowTests(unittest.TestCase):
             [payload["messages"][0]["type"] for _, payload in client.sent],
             ["textV2", "text"],
         )
+
+    def test_push_mention_uses_the_current_line_message_shape_and_retry_key(self):
+        class CapturingLineClient(LineMessagingClient):
+            def __init__(self):
+                super().__init__("line-access-token-for-tests")
+                self.sent = []
+
+            def _post(self, path, payload, *, retry_key=None):
+                self.sent.append((path, payload, retry_key))
+
+        client = CapturingLineClient()
+        client.push_text(self.group_id, "บันทึกสำเร็จ", mention_user_id=self.user_id, retry_key="retry-key-123")
+        _, payload, retry_key = client.sent[0]
+        mentionee = payload["messages"][0]["substitution"]["user"]["mentionee"]
+        self.assertEqual(mentionee, {"type": "user", "userId": self.user_id})
+        self.assertEqual(retry_key, "retry-key-123")
 
     def test_zxing_decoder_reads_a_linear_barcode_and_rejects_qr_code(self):
         from io import BytesIO
