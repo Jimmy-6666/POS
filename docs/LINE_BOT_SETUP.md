@@ -164,6 +164,35 @@ history.
 When an existing barcode is found, the first choice message shows the current
 Thai product name, cost, and selling price before offering price maintenance.
 
+### Manual barcode commands
+
+Allowed-group members can perform a read-only lookup without starting a flow:
+
+```text
+/check 1100000
+```
+
+If the barcode exists, the Bot replies once with its product name, barcode,
+and current selling price. If it does not exist, the Bot reports that once and
+does not start a conversation or offer another action.
+
+An allowed-group member can prepare a new product or complete a Placeholder
+without sending images:
+
+```text
+/bot 1100000|Singha Beer|80
+```
+
+The three fields are barcode, product name, and positive whole-baht selling
+price. A pipe is the delimiter so product names may contain spaces. The Bot
+performs the signed POS lookup first, sets cost to zero, and then shows the
+same shared confirmation buttons used by the normal create flow. Any member
+of the group may confirm or cancel, and the actual confirmer remains in the
+signed audit source. A named existing product is reported but never overwritten
+by `/bot`; use the existing maintenance flow instead. Neither manual command
+calls Gemini, stores an image, or consumes Push quota while its Reply token is
+valid.
+
 ### Vision Product Group behavior
 
 A group in `LINE_BOT_VISION_PRODUCT_GROUP_IDS` receives exactly two product

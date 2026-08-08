@@ -1,3 +1,21 @@
+# Release 3.2.1 - VPS LINE Bot manual commands 2026-08-08
+
+- Added `/check barcode` for a one-shot signed POS lookup that returns product
+  name, barcode, and selling price, or reports that the barcode is absent,
+  without creating a conversation or follow-up action.
+- Added `/bot barcode|name|price` for image-free creation or Placeholder
+  completion. Pipe delimiters preserve spaces in names; the selling price must
+  be positive whole baht and cost is zero.
+- Reused the existing group-shared confirmation, actual-confirmer audit,
+  idempotent command queue, final Reply outcome, and delayed-notification
+  behavior. Existing named products are reported and never overwritten.
+- Both commands perform barcode/POS lookup first and never call Gemini. This
+  is a VPS LINE Bot-only release: `pos_app` remains 3.2.0 and no POS schema,
+  migration, Windows runtime, or business data is changed.
+- Focused LINE Bot/integration/Vision/budget/release regression passed 60/60.
+  The full suite ran 267 tests: 266 passed and one existing filesystem-link
+  capability test was skipped.
+
 # Release 3.2.0 - cumulative POS and LINE Bot source 2026-08-06
 
 - Combined the complete POS `v3.1.8` receipt implementation with the complete

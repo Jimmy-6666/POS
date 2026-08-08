@@ -68,6 +68,8 @@ def _whole_baht(value: str, *, positive: bool = False) -> int | None:
 
 
 _COST_BAHT_RE = re.compile(r"^(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,2})?$")
+_BARCODE_RE = re.compile(r"^[^\x00-\x1f]{1,128}$")
+_CHAT_COMMAND_RE = re.compile(r"^/(bot|check)(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
 
 
 def _cost_satang(value: str) -> int | None:
@@ -651,6 +653,21 @@ class BotWorkflow:
             self._reply_or_push_text(reply_token, group_id, "สินค้านี้ราคาขายเท่าไหร่ครับ 😊")
 
     def handle_text_input(self, group_id: str, user_id: str, text: str, *, reply_token: str = "") -> None:
+        command_match = _CHAT_COMMAND_RE.fullmatch(str(text or "").strip())
+        if command_match:
+            command_name = command_match.group(1).lower()
+            payload = str(command_match.group(2) or "").strip()
+            if command_name == "bot":
+                self.handle_manual_product_command(
+                    group_id,
+                    user_id,
+                    payload,
+                    reply_token=reply_token,
+                )
+            else:
+                self.handle_product_check(group_id, payload, reply_token=reply_token)
+            return
+
         actor_user_id = user_id
         conversation = self.store.conversation(group_id, user_id)
         if not conversation:
@@ -754,6 +771,150 @@ class BotWorkflow:
             data["sale_baht"] = sale
             self._review_create(group_id, user_id, conversation, data, reply_token=reply_token)
 
+    def handle_manual_product_command(
+        self,
+        group_id: str,
+        user_id: str,
+        payload: str,
+        *,
+        reply_token: str = "",
+    ) -> None:
+        usage = (
+            "รูปแบบคำสั่งไม่ถูกต้องครับ\n"
+            "ใช้: /bot บาร์โค้ด|ชื่อสินค้า|ราคาขาย\n"
+            "ตัวอย่าง: /bot 1100000|Singha Beer|80"
+        )
+        parts = [part.strip() for part in str(payload or "").split("|")]
+        if len(parts) != 3:
+            self._reply_or_push_text(reply_token, group_id, usage)
+            return
+        barcode, name, raw_sale = parts
+        sale = _whole_baht(raw_sale, positive=True)
+        if (
+            not _BARCODE_RE.fullmatch(barcode)
+            or not name
+            or len(name) > 160
+            or name.startswith("สินค้าไม่ทราบชื่อ (")
+            or sale is None
+        ):
+            self._reply_or_push_text(reply_token, group_id, usage)
+            return
+
+        if self.store.group_conversation(group_id):
+            self._reply_or_push_text(
+                reply_token,
+                group_id,
+                "มีรายการแก้ไขสินค้าในกลุ่มกำลังดำเนินการอยู่ครับ กรุณายืนยันหรือยกเลิกก่อนเริ่มรายการใหม่ 😊",
+            )
+            return
+
+        try:
+            result = self.pos.lookup(barcode)
+        except PosUnavailable:
+            self._reply_or_push_text(
+                reply_token,
+                group_id,
+                "ผมยังเชื่อมต่อกับร้านไม่ได้ครับ กรุณาลองใช้คำสั่งอีกครั้งภายหลังครับ 😥",
+            )
+            return
+        except PosRejected:
+            self._reply_or_push_text(
+                reply_token,
+                group_id,
+                "ผมไม่สามารถตรวจสอบข้อมูลสินค้าจากร้านได้ครับ กรุณาลองใหม่อีกครั้งครับ 😥",
+            )
+            return
+
+        product = result.get("product")
+        normalized_product = None
+        if product:
+            try:
+                normalized_product = _flow_data_product(product)
+            except (KeyError, TypeError, ValueError):
+                LOG.exception("POS returned an invalid product summary for /bot")
+                self._reply_or_push_text(
+                    reply_token,
+                    group_id,
+                    "ผมไม่สามารถตรวจสอบข้อมูลสินค้าจากร้านได้ครับ กรุณาลองใหม่อีกครั้งครับ 😥",
+                )
+                return
+        if product and not normalized_product["is_placeholder"]:
+            self._reply_or_push_text(
+                reply_token,
+                group_id,
+                f"มีสินค้านี้ในระบบแล้วครับ จึงไม่ได้สร้างรายการใหม่\n"
+                f"ชื่อสินค้า : {normalized_product['name_th']}\n"
+                f"บาร์โค้ด : {barcode}\n"
+                f"ราคาขาย : {normalized_product['sale_baht']} บาท",
+            )
+            return
+
+        data = {
+            "barcode": barcode,
+            "name_th": name,
+            "cost_satang": 0,
+            "sale_baht": sale,
+        }
+        if normalized_product:
+            data["product"] = normalized_product
+        flow_id = secrets.token_urlsafe(12)
+        self.store.start_flow(group_id, user_id, flow_id, "REVIEW_CREATE", data)
+        conversation = self.store.conversation(group_id, user_id)
+        self._review_create(group_id, user_id, conversation, data, reply_token=reply_token)
+
+    def handle_product_check(self, group_id: str, payload: str, *, reply_token: str = "") -> None:
+        barcode = str(payload or "").strip()
+        if not _BARCODE_RE.fullmatch(barcode):
+            self._reply_or_push_text(
+                reply_token,
+                group_id,
+                "รูปแบบคำสั่งไม่ถูกต้องครับ\nใช้: /check บาร์โค้ด\nตัวอย่าง: /check 1100000",
+            )
+            return
+        try:
+            result = self.pos.lookup(barcode)
+        except PosUnavailable:
+            self._reply_or_push_text(
+                reply_token,
+                group_id,
+                "ผมยังเชื่อมต่อกับร้านไม่ได้ครับ กรุณาลองใช้คำสั่งอีกครั้งภายหลังครับ 😥",
+            )
+            return
+        except PosRejected:
+            self._reply_or_push_text(
+                reply_token,
+                group_id,
+                "ผมไม่สามารถตรวจสอบข้อมูลสินค้าจากร้านได้ครับ กรุณาลองใหม่อีกครั้งครับ 😥",
+            )
+            return
+
+        product = result.get("product")
+        if not product:
+            self._reply_or_push_text(
+                reply_token,
+                group_id,
+                f"ไม่พบสินค้าบาร์โค้ด {barcode} ในระบบครับ",
+            )
+            return
+        try:
+            normalized_product = _flow_data_product(product)
+        except (KeyError, TypeError, ValueError):
+            LOG.exception("POS returned an invalid product summary for /check")
+            self._reply_or_push_text(
+                reply_token,
+                group_id,
+                "ผมไม่สามารถตรวจสอบข้อมูลสินค้าจากร้านได้ครับ กรุณาลองใหม่อีกครั้งครับ 😥",
+            )
+            return
+        self._reply_or_push_text(
+            reply_token,
+            group_id,
+            f"พบสินค้าในระบบแล้วครับ 😊\n"
+            f"ชื่อสินค้า : {normalized_product['name_th']}\n"
+            f"บาร์โค้ด : {barcode}\n"
+            f"ราคาขาย : {normalized_product['sale_baht']} บาท",
+        )
+
     def _review_price(
         self, group_id: str, user_id: str, conversation: dict, data: dict, *, reply_token: str = ""
     ) -> None:
@@ -772,7 +933,7 @@ class BotWorkflow:
         self._save_flow(group_id, user_id, conversation, "REVIEW_CREATE", data)
         self._buttons(
             group_id,
-            f"ชื่อสินค้า : {data['name_th']}\nราคาทุน : {_format_satang(data['cost_satang'])} บาท\nราคาขาย : {data['sale_baht']} บาท\nรบกวนยืนยันรายละเอียดสินค้าให้ผมด้วยครับ 😊",
+            f"ชื่อสินค้า : {data['name_th']}\nบาร์โค้ด : {data['barcode']}\nราคาทุน : {_format_satang(data['cost_satang'])} บาท\nราคาขาย : {data['sale_baht']} บาท\nรบกวนยืนยันรายละเอียดสินค้าให้ผมด้วยครับ 😊",
             [("ยืนยัน", "confirm"), ("แก้ไข", "edit"), ("ยกเลิก", "cancel")],
             reply_token=reply_token,
         )

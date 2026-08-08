@@ -54,6 +54,12 @@ and prints 80 mm receipts through the browser.
   implementation, including Migration 31 and the signed integration boundary.
   Runtime/launcher identity is 3.2.0. Publishing the Git source does not itself
   redeploy either the Windows POS or the VPS service.
+- Release 3.2.1 is a VPS LINE Bot-only update on the 3.2.0 source baseline.
+  Allowed-group members may use `/check barcode` for one-shot signed lookup or
+  `/bot barcode|name|price` to prepare an unknown/Placeholder product and enter
+  the existing group-shared confirmation path. Named products are never
+  overwritten by the manual command. Neither command calls Gemini. The
+  Windows `pos_app` source and visible 3.2.0 identity are unchanged.
 - Customer ordering is integrated at `/order`; staff fulfilment is integrated
   at `/online-orders`. Products default to online-enabled. The Release 3.1.4
   Production verification snapshot contains 818 products (817 active), 211
@@ -80,6 +86,11 @@ production-ready without barcode and price approval.
 - Keep assets local and the project movable to another Windows PC.
 
 ## Current health
+
+On 2026-08-08, the Release 3.2.1 deployment candidate passed 60/60 focused
+LINE Bot, signed integration, Vision, Gemini-budget, and release regressions.
+The full suite ran 267 tests with 266 passed and one existing filesystem-link
+capability skip. No `pos_app` file, POS schema, or migration is changed.
 
 On 2026-08-06, the cumulative Release 3.2.0 source passed 73/73 focused
 POS-receipt, LINE Bot, Migration 31, runtime, and release-identity tests. The
