@@ -56,8 +56,10 @@ class FakePos:
         self.rejected = False
         self.rejected_status = 409
         self.cleaned = 0
+        self.lookups = []
 
     def lookup(self, barcode):
+        self.lookups.append(barcode)
         return {"barcode": barcode, "product": self.product}
 
     def apply(self, command):
@@ -96,11 +98,106 @@ class LineBotWorkflowTests(unittest.TestCase):
                 "source": {"type": "group", "groupId": self.group_id, "userId": user_id or self.user_id},
                 "message": {"type": "text", "id": f"button-{text}", "text": text}}
 
+    def text_event(self, text, *, user_id=None, reply_token="reply-text"):
+        return {"type": "message", "replyToken": reply_token,
+                "source": {"type": "group", "groupId": self.group_id, "userId": user_id or self.user_id},
+                "message": {"type": "text", "id": "text-command", "text": text}}
+
     def current_action(self, name):
         for label in self.line.buttons[-1][2]:
             if label == name:
                 return label
         self.fail(f"Missing action {name}")
+
+    def test_manual_bot_command_creates_group_shared_confirmation_and_records_actual_confirmer(self):
+        self.pos.product = None
+        self.workflow.handle_event(self.text_event("/bot 1100000|Singha Beer|80"))
+
+        conversation = self.store.conversation(self.group_id, self.user_id)
+        self.assertEqual(conversation["state"], "REVIEW_CREATE")
+        self.assertEqual(
+            conversation["data"],
+            {"barcode": "1100000", "name_th": "Singha Beer", "cost_satang": 0, "sale_baht": 80},
+        )
+        self.assertEqual(self.line.button_reply_tokens, ["reply-text"])
+        self.assertIn("บาร์โค้ด : 1100000", self.line.buttons[-1][1])
+        self.assertIn("ราคาขาย : 80 บาท", self.line.buttons[-1][1])
+
+        cashier_id = "U-test-cashier"
+        self.workflow.handle_event(self.button_event(self.current_action("ยืนยัน"), user_id=cashier_id))
+        self.assertEqual(len(self.pos.applied), 1)
+        command = self.pos.applied[0]
+        self.assertEqual(command["operation"], "create_or_complete")
+        self.assertEqual(command["barcode"], "1100000")
+        self.assertEqual(command["name_th"], "Singha Beer")
+        self.assertEqual(command["cost_satang"], 0)
+        self.assertEqual(command["sale_baht"], 80)
+        self.assertEqual(command["source"]["line_user_id"], cashier_id)
+        self.assertIsNone(self.store.group_conversation(self.group_id))
+        self.assertEqual(self.line.replies[-1][1], "ดำเนินการอัพเดตข้อมูลเรียบร้อยแล้วครับ ✅")
+
+    def test_manual_bot_command_completes_placeholder_with_revision_protection(self):
+        self.pos.product["is_placeholder"] = True
+        self.pos.product["name_th"] = "สินค้าไม่ทราบชื่อ (1100000)"
+        self.workflow.handle_event(self.text_event("/bot 1100000|Singha Beer|80"))
+        self.workflow.handle_event(self.button_event(self.current_action("ยืนยัน")))
+
+        command = self.pos.applied[0]
+        self.assertEqual(command["operation"], "create_or_complete")
+        self.assertEqual(command["product_uuid"], "product-uuid-1")
+        self.assertEqual(command["expected_revision"], "revision-1")
+
+    def test_manual_bot_command_does_not_overwrite_a_named_product(self):
+        self.workflow.handle_event(self.text_event("/bot BOT-001|ชื่อใหม่|80"))
+
+        self.assertEqual(self.pos.lookups, ["BOT-001"])
+        self.assertIsNone(self.store.group_conversation(self.group_id))
+        self.assertEqual(self.line.buttons, [])
+        self.assertIn("มีสินค้านี้ในระบบแล้ว", self.line.replies[-1][1])
+        self.assertIn("ชื่อสินค้า : สินค้าทดสอบ", self.line.replies[-1][1])
+        self.assertIn("ราคาขาย : 20 บาท", self.line.replies[-1][1])
+
+    def test_manual_bot_command_rejects_invalid_format_without_pos_lookup(self):
+        self.workflow.handle_event(self.text_event("/bot 1100000|Singha Beer|80.50"))
+
+        self.assertEqual(self.pos.lookups, [])
+        self.assertIsNone(self.store.group_conversation(self.group_id))
+        self.assertIn("ใช้: /bot บาร์โค้ด|ชื่อสินค้า|ราคาขาย", self.line.replies[-1][1])
+
+    def test_manual_bot_command_does_not_replace_an_active_group_flow(self):
+        self.pos.product = None
+        self.workflow.handle_event(self.text_event("/bot 1100000|Singha Beer|80"))
+        self.workflow.handle_event(
+            self.text_event("/bot 2200000|Another Product|90", user_id="U-other", reply_token="reply-other")
+        )
+
+        conversation = self.store.group_conversation(self.group_id)
+        self.assertEqual(conversation["data"]["barcode"], "1100000")
+        self.assertEqual(self.pos.lookups, ["1100000"])
+        self.assertIn("กำลังดำเนินการอยู่", self.line.replies[-1][1])
+
+    def test_check_command_returns_one_existing_product_reply_without_starting_a_flow(self):
+        self.workflow.handle_event(self.text_event("/check BOT-001"))
+
+        self.assertEqual(self.pos.lookups, ["BOT-001"])
+        self.assertEqual(len(self.line.replies), 1)
+        self.assertEqual(self.line.texts, [])
+        self.assertEqual(self.line.buttons, [])
+        self.assertIsNone(self.store.group_conversation(self.group_id))
+        self.assertEqual(
+            self.line.replies[0][1],
+            "พบสินค้าในระบบแล้วครับ 😊\nชื่อสินค้า : สินค้าทดสอบ\nบาร์โค้ด : BOT-001\nราคาขาย : 20 บาท",
+        )
+
+    def test_check_command_reports_missing_product_once_without_starting_a_flow(self):
+        self.pos.product = None
+        self.workflow.handle_event(self.text_event("/check 1100000"))
+
+        self.assertEqual(self.pos.lookups, ["1100000"])
+        self.assertEqual(self.line.replies, [("reply-text", "ไม่พบสินค้าบาร์โค้ด 1100000 ในระบบครับ")])
+        self.assertEqual(self.line.texts, [])
+        self.assertEqual(self.line.buttons, [])
+        self.assertIsNone(self.store.group_conversation(self.group_id))
 
     def test_existing_product_price_flow_is_group_shared_and_records_actual_confirmer(self):
         self.workflow.handle_event(self.image_event())
