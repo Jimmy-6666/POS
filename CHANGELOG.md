@@ -15,6 +15,10 @@
 - Focused LINE Bot/integration/Vision/budget/release regression passed 60/60.
   The full suite ran 267 tests: 266 passed and one existing filesystem-link
   capability test was skipped.
+- Deployed atomically to the separate Live VPS LINE Bot on 2026-08-08 after
+  source/config/online-SQLite rollback backups and 7/7 release-specific VPS
+  tests. Local/public health, localhost-only port 8010, service status,
+  warning journal, and both live/backup Bot SQLite quick checks passed.
 
 # Release 3.2.0 - cumulative POS and LINE Bot source 2026-08-06
 

@@ -1,6 +1,6 @@
 # Release 3.2.1 — VPS LINE Bot manual commands
 
-**Status:** Verified deployment candidate for the separate VPS LINE Bot service.
+**Status:** Deployed to the separate Live VPS LINE Bot service on 2026-08-08.
 
 ## Scope
 
@@ -33,3 +33,12 @@ The visible Windows POS identity remains 3.2.0.
 - Full suite: 267 tests run, 266 passed and one existing filesystem-link
   capability test skipped; no failures.
 - `git diff --check` passed and the release changes no `pos_app` source file.
+- The seven release-specific `/bot` and `/check` tests passed in the Production
+  VPS venv before the switch. The venv deliberately has no QR generator test
+  utility; runtime decoding remains restricted to linear barcode formats and
+  continues to reject QR/2D formats.
+- Source, protected configuration, and an online Bot-SQLite backup were taken
+  before the atomic release-symlink switch. Local and public health returned
+  `ok`, port 8010 remained localhost-only, the service stayed active with no
+  warning journal entries, and both live and backup Bot databases passed
+  `PRAGMA quick_check` after deployment.
